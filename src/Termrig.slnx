@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Termrig.App/Termrig.App.csproj" />
+  <Project Path="Termrig.Core/Termrig.Core.csproj" />
+  <Project Path="Test.Xunit/Test.Xunit.csproj" />
+</Solution>

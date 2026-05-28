@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Termrig.App.Views.TerminalTabEditorWindow"
+        Title="Tab settings"
+        Width="560"
+        Height="680"
+        MinWidth="520"
+        MinHeight="640">
+    <Grid RowDefinitions="*,Auto" Margin="18">
+        <StackPanel Grid.Row="0" Spacing="12">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Tab name" FontWeight="SemiBold"/>
+                <TextBox x:Name="NameBox"/>
+            </StackPanel>
+            <StackPanel Spacing="6">
+                <TextBlock Text="Terminal type" FontWeight="SemiBold"/>
+                <ComboBox x:Name="ShellCombo"/>
+            </StackPanel>
+            <StackPanel Spacing="6">
+                <TextBlock Text="Starting directory" FontWeight="SemiBold"/>
+                <TextBox x:Name="DirectoryBox" PlaceholderText="Leave empty to use the current directory"/>
+            </StackPanel>
+            <StackPanel Spacing="6">
+                <TextBlock Text="Startup script" FontWeight="SemiBold"/>
+                <TextBox x:Name="StartupScriptBox" AcceptsReturn="True" MinHeight="120"/>
+            </StackPanel>
+            <StackPanel Spacing="6">
+                <TextBlock Text="Color override" FontWeight="SemiBold"/>
+                <ComboBox x:Name="ColorOverrideCombo"/>
+            </StackPanel>
+            <Grid ColumnDefinitions="*,120" ColumnSpacing="12">
+                <StackPanel Grid.Column="0" Spacing="6">
+                    <TextBlock Text="Font family" FontWeight="SemiBold"/>
+                    <TextBox x:Name="FontFamilyBox"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="6">
+                    <TextBlock Text="Font size" FontWeight="SemiBold"/>
+                    <NumericUpDown x:Name="FontSizeBox" Minimum="8" Maximum="36" Increment="1"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button x:Name="CancelButton" Content="Cancel" MinWidth="92"/>
+            <Button x:Name="SaveButton" Content="Save" MinWidth="92"/>
+        </StackPanel>
+    </Grid>
+</Window>

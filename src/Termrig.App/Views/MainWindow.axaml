@@ -1,0 +1,69 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Termrig.App.Views.MainWindow"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Termrig"
+        Width="1100"
+        Height="720"
+        MinWidth="900"
+        MinHeight="600">
+    <Grid RowDefinitions="Auto,*">
+        <Border Grid.Row="0" Background="#151B22" Padding="18,14">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Text="Termrig" Foreground="#FFFFFF" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button x:Name="OpenProfileButton" Content="Open" MinWidth="92"/>
+                    <Button x:Name="SaveProfileButton" Content="Save" MinWidth="92"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="280,*">
+            <Border Grid.Column="0" BorderBrush="#D7DEE8" BorderThickness="0,0,1,0" Padding="14">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Spacing="8">
+                        <Button x:Name="NewProfileButton" Content="New profile"/>
+                        <Button x:Name="DeleteProfileButton" Content="Delete profile"/>
+                    </StackPanel>
+                    <ListBox x:Name="ProfileList" Margin="0,14,0,0"/>
+                </DockPanel>
+            </Border>
+
+            <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="18">
+                <Grid Grid.Row="0" ColumnDefinitions="*,240,140,140" ColumnSpacing="16">
+                    <StackPanel Grid.Column="0" Spacing="6">
+                        <TextBlock Text="Profile name" FontWeight="SemiBold"/>
+                        <TextBox x:Name="ProfileNameBox"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="6">
+                        <TextBlock Text="Global color scheme" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="GlobalSchemeCombo"/>
+                        <TextBox x:Name="SchemeNameBox" PlaceholderText="Scheme name"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="6">
+                        <TextBlock Text="Background" FontWeight="SemiBold"/>
+                        <TextBox x:Name="SchemeBackgroundBox"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="3" Spacing="6">
+                        <TextBlock Text="Foreground" FontWeight="SemiBold"/>
+                        <TextBox x:Name="SchemeForegroundBox"/>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,22,0,0">
+                    <DockPanel Grid.Row="0">
+                        <TextBlock DockPanel.Dock="Left" Text="Tabs" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="AddTabButton" Content="Add tab"/>
+                            <Button x:Name="EditTabButton" Content="Edit tab"/>
+                            <Button x:Name="DeleteTabButton" Content="Delete tab"/>
+                            <Button x:Name="MoveTabUpButton" Content="Move up"/>
+                            <Button x:Name="MoveTabDownButton" Content="Move down"/>
+                        </StackPanel>
+                    </DockPanel>
+                    <ListBox x:Name="TabsList" Grid.Row="1" Margin="0,12,0,0"/>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
