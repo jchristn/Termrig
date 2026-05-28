@@ -20,9 +20,9 @@ namespace Termrig.App.Models
         public TerminalControl Terminal { get; set; } = new TerminalControl();
 
         /// <summary>
-        /// Tab item displaying the terminal.
+        /// Header control representing the terminal tab.
         /// </summary>
-        public TabItem TabItem { get; set; } = new TabItem();
+        public Control Header { get; set; } = new Border();
 
         /// <summary>
         /// Whether this runtime tab is already part of the saved profile.
@@ -33,5 +33,15 @@ namespace Termrig.App.Models
         /// Whether the terminal process is being closed by Termrig.
         /// </summary>
         public bool IsClosingByTermrig { get; set; } = false;
+
+        /// <summary>
+        /// Launch plan for the terminal process.
+        /// </summary>
+        public ShellLaunchPlan LaunchPlan { get; set; } = new ShellLaunchPlan { Executable = "cmd.exe" };
+
+        /// <summary>
+        /// Whether launch has been requested for this tab.
+        /// </summary>
+        public bool IsLaunchRequested { get; set; } = false;
     }
 }

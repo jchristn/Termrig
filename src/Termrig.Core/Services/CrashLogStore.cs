@@ -7,7 +7,7 @@ namespace Termrig.Core.Services
     using System.Threading.Tasks;
 
     /// <summary>
-    /// Stores application and terminal crash logs under ~/.termlog/crashes.
+    /// Stores application and terminal crash logs under ~/.termrig/crashes.
     /// </summary>
     public class CrashLogStore
     {
@@ -37,7 +37,7 @@ namespace Termrig.Core.Services
         /// <summary>
         /// Instantiate the crash log store.
         /// </summary>
-        /// <param name="directoryPath">Optional crash log directory. Defaults to ~/.termlog/crashes.</param>
+        /// <param name="directoryPath">Optional crash log directory. Defaults to ~/.termrig/crashes.</param>
         public CrashLogStore(string? directoryPath = null)
         {
             _DirectoryPath = ResolveDirectoryPath(directoryPath);
@@ -146,7 +146,7 @@ namespace Termrig.Core.Services
 
             string? home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             if (String.IsNullOrWhiteSpace(home)) throw new InvalidOperationException("Unable to resolve the current user's home directory.");
-            return Path.Combine(home, Constants.CrashLogDirectoryName, Constants.CrashLogSubdirectoryName);
+            return Path.Combine(home, Constants.ApplicationDirectoryName, Constants.CrashLogSubdirectoryName);
         }
 
         #endregion

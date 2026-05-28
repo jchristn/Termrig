@@ -57,13 +57,14 @@ namespace Termrig.Core.Services
             ShellLaunchPlan plan = new ShellLaunchPlan
             {
                 Executable = descriptor.Executable,
-                StartingDirectory = NormalizeDirectoryPath(tab.StartingDirectory)
+                StartingDirectory = NormalizeDirectoryPath(tab.StartingDirectory),
+                StartupCommands = GetStartupScriptCommands(tab.StartupScript)
             };
 
             if (tab.Shell == ShellType.Cmd)
             {
-                plan.Arguments.Add(String.IsNullOrWhiteSpace(tab.StartupScript) ? "/K" : "/K");
-                if (!String.IsNullOrWhiteSpace(tab.StartupScript)) plan.Arguments.Add(tab.StartupScript);
+                plan.Arguments.Add("/D");
+                plan.Arguments.Add("/K");
             }
             else if (tab.Shell == ShellType.PowerShell)
             {
@@ -72,23 +73,10 @@ namespace Termrig.Core.Services
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) plan.Arguments.Add("-ExecutionPolicy");
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) plan.Arguments.Add("Bypass");
                 plan.Arguments.Add("-NoExit");
-                if (!String.IsNullOrWhiteSpace(tab.StartupScript))
-                {
-                    plan.Arguments.Add("-Command");
-                    plan.Arguments.Add("& { " + tab.StartupScript + " }");
-                }
             }
             else if (tab.Shell == ShellType.Bash)
             {
-                if (!String.IsNullOrWhiteSpace(tab.StartupScript))
-                {
-                    plan.Arguments.Add("-lc");
-                    plan.Arguments.Add(tab.StartupScript + "; exec bash -i");
-                }
-                else
-                {
-                    plan.Arguments.Add("-i");
-                }
+                plan.Arguments.Add("-i");
             }
 
             return plan;
@@ -169,6 +157,16 @@ namespace Termrig.Core.Services
             }
 
             return null;
+        }
+
+        private static List<string> GetStartupScriptCommands(string startupScript)
+        {
+            if (String.IsNullOrWhiteSpace(startupScript)) return new List<string>();
+            return startupScript
+                .Split(new string[] { "\r\n", "\n", "\r" }, StringSplitOptions.None)
+                .Select(item => item.Trim())
+                .Where(item => !String.IsNullOrWhiteSpace(item))
+                .ToList();
         }
 
         private static string? ResolveUnixExecutable(string executable)

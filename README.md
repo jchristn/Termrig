@@ -66,7 +66,7 @@ You can manually edit these JSON files while Termrig is closed. If Termrig is op
 
 ## Crash Logs
 
-Termrig writes application and terminal tab crash logs under `~/.termlog/crashes/`.
+Termrig writes application and terminal tab crash logs under `~/.termrig/crashes/`.
 
 Crash log filenames use this format:
 
@@ -79,13 +79,13 @@ To retrieve crash logs:
 Windows PowerShell:
 
 ```powershell
-Get-ChildItem "$env:USERPROFILE\.termlog\crashes"
+Get-ChildItem "$env:USERPROFILE\.termrig\crashes"
 ```
 
 Mac/Linux:
 
 ```sh
-ls -la ~/.termlog/crashes/
+ls -la ~/.termrig/crashes/
 ```
 
 Include the relevant `.log` file when filing a bug report.

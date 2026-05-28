@@ -32,6 +32,11 @@ namespace Termrig.Core.Models
         public List<string> Arguments { get; set; } = new List<string>();
 
         /// <summary>
+        /// Startup commands to send to the interactive terminal after launch.
+        /// </summary>
+        public List<string> StartupCommands { get; set; } = new List<string>();
+
+        /// <summary>
         /// Working directory.
         /// </summary>
         public string? StartingDirectory { get; set; } = null;

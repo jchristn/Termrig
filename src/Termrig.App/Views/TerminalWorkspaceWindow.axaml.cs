@@ -9,7 +9,9 @@ namespace Termrig.App.Views
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Reflection;
     using System.Threading;
+    using System.Threading.Tasks;
     using Termrig.App.Models;
     using Termrig.Core;
     using Termrig.Core.Models;
@@ -28,6 +30,12 @@ namespace Termrig.App.Views
         private readonly CrashLogStore _CrashLogStore = new CrashLogStore();
         private readonly List<ColorScheme> _ColorSchemes;
         private readonly List<TerminalSession> _Sessions = new List<TerminalSession>();
+        private TerminalSession? _SelectedSession = null;
+        private static readonly FieldInfo? _TerminalViewField = typeof(TerminalControl).GetField("_terminalView", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo? _PtyConnectionField = typeof(TerminalView).GetField("_ptyConnection", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo? _ProcessCancellationField = typeof(TerminalView).GetField("_processCts", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly MethodInfo? _SendToPtyMethod = typeof(TerminalView).GetMethod("SendToPtyAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+        private bool _IsClosingWorkspace = false;
 
         #endregion
 
@@ -77,20 +85,38 @@ namespace Termrig.App.Views
             AddTabButton.Click += OnAddTabClicked;
             EditTabButton.Click += OnEditTabClicked;
             SaveProfileButton.Click += OnSaveProfileClicked;
-            TerminalTabs.SelectionChanged += OnTerminalTabSelectionChanged;
-            AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+            AddHandler(KeyDownEvent, OnWindowPreviewKeyDown, RoutingStrategies.Tunnel, true);
+            AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Bubble, true);
+            Opened += OnWorkspaceOpened;
             Closing += OnWindowClosing;
         }
 
         private void LaunchProfile()
         {
+            bool isFirstTab = true;
             foreach (TerminalTabProfile tab in _Profile.Tabs)
             {
-                AddTerminalTab(tab, true);
+                AddTerminalTab(tab, true, isFirstTab);
+                isFirstTab = false;
             }
         }
 
-        private void AddTerminalTab(TerminalTabProfile tab, bool isProfileMember)
+        private void OnWorkspaceOpened(object? sender, EventArgs e)
+        {
+            _ = LaunchAllSessionsAsync();
+        }
+
+        private async Task LaunchAllSessionsAsync()
+        {
+            foreach (TerminalSession session in _Sessions.ToList())
+            {
+                await LaunchTerminalAsync(session, session.LaunchPlan).ConfigureAwait(true);
+            }
+
+            FocusSelectedTerminal();
+        }
+
+        private void AddTerminalTab(TerminalTabProfile tab, bool isProfileMember, bool selectTab = true)
         {
             ShellLaunchPlan plan = _ShellCatalog.BuildLaunchPlan(tab);
             ColorScheme scheme = tab.ColorSchemeOverride ?? _Profile.GlobalColorScheme;
@@ -100,42 +126,62 @@ namespace Termrig.App.Views
                 BufferSize = 2000,
                 Background = Brush.Parse(scheme.Background),
                 Foreground = Brush.Parse(scheme.Foreground),
-                Focusable = true
+                Focusable = true,
+                IsHitTestVisible = false,
+                Opacity = 0,
+                Process = String.Empty
             };
-            terminal.PointerPressed += OnTerminalPointerPressed;
             ApplyTerminalAppearance(terminal, _Profile, tab, scheme);
 
             TerminalSession session = new TerminalSession
             {
                 TabProfile = tab,
                 Terminal = terminal,
-                IsProfileMember = isProfileMember
+                IsProfileMember = isProfileMember,
+                LaunchPlan = plan
             };
 
-            TabItem item = new TabItem
-            {
-                Header = BuildTabHeader(session),
-                Content = terminal
-            };
-
-            session.TabItem = item;
+            session.Header = BuildTabHeader(session);
             terminal.ProcessExited += OnTerminalProcessExited;
             _Sessions.Add(session);
-            TerminalTabs.Items.Add(item);
-            TerminalTabs.SelectedItem = item;
+            TerminalTabHeaders.Children.Add(session.Header);
+            TerminalSurface.Children.Add(terminal);
+            if (selectTab || _SelectedSession == null)
+            {
+                SelectSession(session);
+            }
+        }
+
+        private async Task LaunchTerminalAsync(TerminalSession session, ShellLaunchPlan plan)
+        {
+            if (session.IsLaunchRequested) return;
+            session.IsLaunchRequested = true;
+
             try
             {
-                terminal.LaunchProcess(plan.StartingDirectory, plan.Executable, plan.Arguments.ToArray());
-                FocusTerminal(session);
+                await session.Terminal.LaunchProcess(plan.StartingDirectory, plan.Executable, plan.Arguments.ToArray()).ConfigureAwait(true);
+                if (session.IsClosingByTermrig) return;
+                await RunStartupCommandsAsync(session, plan.StartupCommands).ConfigureAwait(true);
+                if (_SelectedSession == session)
+                {
+                    FocusTerminal(session);
+                }
             }
             catch (Exception exception)
             {
-                TerminalTabs.Items.Remove(item);
+                bool wasSelected = _SelectedSession == session;
+                TerminalTabHeaders.Children.Remove(session.Header);
+                TerminalSurface.Children.Remove(session.Terminal);
                 _Sessions.Remove(session);
-                terminal.ProcessExited -= OnTerminalProcessExited;
-                terminal.PointerPressed -= OnTerminalPointerPressed;
-                WriteTerminalCrashLog(tab, "Terminal launch failed.", BuildLaunchFailureDetails(tab, plan, exception));
-                ShowTerminalLaunchError(tab, plan, exception);
+                session.Terminal.ProcessExited -= OnTerminalProcessExited;
+                if (wasSelected)
+                {
+                    _SelectedSession = null;
+                    if (_Sessions.Count > 0) SelectSession(_Sessions[0]);
+                }
+
+                WriteTerminalCrashLog(session.TabProfile, "Terminal launch failed.", BuildLaunchFailureDetails(session.TabProfile, plan, exception));
+                ShowTerminalLaunchError(session.TabProfile, plan, exception);
             }
         }
 
@@ -155,7 +201,7 @@ namespace Termrig.App.Views
 
         private async void OnEditTabClicked(object? sender, RoutedEventArgs e)
         {
-            Int32 index = TerminalTabs.SelectedIndex;
+            Int32 index = _SelectedSession == null ? -1 : _Sessions.IndexOf(_SelectedSession);
             if (index < 0 || index >= _Sessions.Count) return;
 
             TerminalSession session = _Sessions[index];
@@ -171,7 +217,7 @@ namespace Termrig.App.Views
 
             session.TabProfile = updated;
             ApplyTerminalAppearance(session.Terminal, _Profile, updated, updated.ColorSchemeOverride ?? _Profile.GlobalColorScheme);
-            session.TabItem.Header = BuildTabHeader(session);
+            ReplaceTabHeader(session);
         }
 
         private void CaptureCurrentDirectories()
@@ -187,11 +233,17 @@ namespace Termrig.App.Views
 
         private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
         {
-            foreach (TerminalSession session in _Sessions)
+            if (_IsClosingWorkspace) return;
+            _IsClosingWorkspace = true;
+
+            foreach (TerminalSession session in _Sessions.ToList())
             {
                 session.IsClosingByTermrig = true;
-                session.Terminal.Kill();
+                session.Terminal.ProcessExited -= OnTerminalProcessExited;
+                QueueTerminalKill(session);
             }
+
+            _Sessions.Clear();
         }
 
         private void OnTerminalProcessExited(object? sender, ProcessExitedEventArgs e)
@@ -223,15 +275,43 @@ namespace Termrig.App.Views
             CloseSelectedTab();
         }
 
-        private void OnTerminalTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
+        private async void OnWindowPreviewKeyDown(object? sender, KeyEventArgs e)
         {
-            FocusSelectedTerminal();
-        }
+            TerminalSession? session = GetSelectedSession();
+            if (session == null) return;
 
-        private void OnTerminalPointerPressed(object? sender, PointerPressedEventArgs e)
-        {
-            if (!(sender is TerminalControl terminal)) return;
-            terminal.Focus();
+            if (e.Key == Key.V && (e.KeyModifiers & KeyModifiers.Control) == KeyModifiers.Control)
+            {
+                e.Handled = true;
+                await PasteIntoTerminalAsync(session.Terminal).ConfigureAwait(true);
+                return;
+            }
+
+            bool hasSelection = session.Terminal.Terminal.Selection.HasSelection;
+            if (!hasSelection) return;
+
+            if (e.Key == Key.LeftCtrl || e.Key == Key.RightCtrl)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key != Key.C) return;
+            if ((e.KeyModifiers & KeyModifiers.Control) != KeyModifiers.Control) return;
+
+            string selectedText = session.Terminal.Terminal.Selection.GetSelectionText();
+            if (String.IsNullOrEmpty(selectedText)) return;
+
+            e.Handled = true;
+            TopLevel? topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel?.Clipboard != null)
+            {
+                DataTransfer data = new DataTransfer();
+                data.Add(DataTransferItem.CreateText(selectedText));
+                await topLevel.Clipboard.SetDataAsync(data).ConfigureAwait(true);
+            }
+
+            session.Terminal.Terminal.Selection.ClearSelection();
         }
 
         private Control BuildTabHeader(TerminalSession session)
@@ -245,6 +325,8 @@ namespace Termrig.App.Views
                 Background = Brush.Parse("#121820"),
                 MinHeight = 22
             };
+            container.Tag = session;
+            container.PointerPressed += OnTabHeaderPointerPressed;
 
             StackPanel panel = new StackPanel
             {
@@ -306,11 +388,18 @@ namespace Termrig.App.Views
             if (String.IsNullOrWhiteSpace(name)) return;
 
             session.TabProfile.Name = name;
-            session.TabItem.Header = BuildTabHeader(session);
+            ReplaceTabHeader(session);
             if (session.IsProfileMember)
             {
                 await _ProfileStore.UpsertAsync(_Profile, CancellationToken.None).ConfigureAwait(true);
             }
+        }
+
+        private void OnTabHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (!(sender is Control control)) return;
+            if (!(control.Tag is TerminalSession session)) return;
+            SelectSession(session);
         }
 
         private void OnUnsavedTabMenuClicked(object? sender, RoutedEventArgs e)
@@ -339,7 +428,7 @@ namespace Termrig.App.Views
             CaptureSessionDirectory(session);
             _Profile.Tabs.Add(session.TabProfile);
             session.IsProfileMember = true;
-            session.TabItem.Header = BuildTabHeader(session);
+            ReplaceTabHeader(session);
             await _ProfileStore.UpsertAsync(_Profile, CancellationToken.None).ConfigureAwait(true);
         }
 
@@ -353,31 +442,91 @@ namespace Termrig.App.Views
 
         private void CloseSelectedTab()
         {
-            Int32 index = TerminalTabs.SelectedIndex;
-            if (index < 0 || index >= _Sessions.Count) return;
-            CloseSession(_Sessions[index]);
+            TerminalSession? session = GetSelectedSession();
+            if (session == null) return;
+            CloseSession(session);
         }
 
         private void CloseSession(TerminalSession session)
         {
+            if (_IsClosingWorkspace) return;
+            int removedIndex = _Sessions.IndexOf(session);
             session.IsClosingByTermrig = true;
             session.Terminal.ProcessExited -= OnTerminalProcessExited;
-            session.Terminal.PointerPressed -= OnTerminalPointerPressed;
-            session.Terminal.Kill();
+
             _Sessions.Remove(session);
-            TerminalTabs.Items.Remove(session.TabItem);
+            TerminalTabHeaders.Children.Remove(session.Header);
+            TerminalSurface.Children.Remove(session.Terminal);
+            QueueTerminalKill(session);
 
             if (_Sessions.Count < 1)
             {
                 Close();
+                return;
             }
+
+            if (_SelectedSession == session)
+            {
+                int nextIndex = Math.Clamp(removedIndex, 0, _Sessions.Count - 1);
+                SelectSession(_Sessions[nextIndex]);
+            }
+            else
+            {
+                UpdateTabHeaderStates();
+            }
+        }
+
+        private void SelectSession(TerminalSession session)
+        {
+            if (!_Sessions.Contains(session)) return;
+            _SelectedSession = session;
+
+            foreach (TerminalSession item in _Sessions)
+            {
+                bool selected = item == session;
+                item.Terminal.Opacity = selected ? 1 : 0;
+                item.Terminal.IsHitTestVisible = selected;
+                item.Terminal.SetValue(Panel.ZIndexProperty, selected ? 1 : 0);
+            }
+
+            UpdateTabHeaderStates();
+            FocusTerminal(session);
         }
 
         private void FocusSelectedTerminal()
         {
-            Int32 index = TerminalTabs.SelectedIndex;
-            if (index < 0 || index >= _Sessions.Count) return;
-            FocusTerminal(_Sessions[index]);
+            TerminalSession? session = GetSelectedSession();
+            if (session == null) return;
+            FocusTerminal(session);
+        }
+
+        private TerminalSession? GetSelectedSession()
+        {
+            return _SelectedSession;
+        }
+
+        private void ReplaceTabHeader(TerminalSession session)
+        {
+            int index = _Sessions.IndexOf(session);
+            if (index < 0) return;
+
+            TerminalTabHeaders.Children.Remove(session.Header);
+            session.Header = BuildTabHeader(session);
+            TerminalTabHeaders.Children.Insert(index, session.Header);
+            UpdateTabHeaderStates();
+        }
+
+        private void UpdateTabHeaderStates()
+        {
+            foreach (TerminalSession session in _Sessions)
+            {
+                if (session.Header is Border border)
+                {
+                    bool selected = session == _SelectedSession;
+                    border.Background = Brush.Parse(selected ? "#1F6FEB" : "#121820");
+                    border.BorderBrush = Brush.Parse(selected ? "#58A6FF" : "#35424F");
+                }
+            }
         }
 
         private static void FocusTerminal(TerminalSession session)
@@ -386,6 +535,74 @@ namespace Termrig.App.Views
             {
                 session.Terminal.Focus();
             }, DispatcherPriority.Input);
+        }
+
+        private static async Task PasteIntoTerminalAsync(TerminalControl terminal)
+        {
+            if (_TerminalViewField?.GetValue(terminal) is TerminalView terminalView)
+            {
+                await terminalView.PasteAsync().ConfigureAwait(true);
+            }
+        }
+
+        private async Task RunStartupCommandsAsync(TerminalSession session, List<string> startupCommands)
+        {
+            if (startupCommands.Count < 1) return;
+
+            try
+            {
+                await Task.Delay(250).ConfigureAwait(true);
+                foreach (string command in startupCommands)
+                {
+                    if (session.IsClosingByTermrig) return;
+                    await SendToTerminalAsync(session.Terminal, command + "\r").ConfigureAwait(true);
+                    await Task.Delay(50).ConfigureAwait(true);
+                }
+            }
+            catch (Exception exception)
+            {
+                WriteTerminalCrashLog(session.TabProfile, "Terminal startup script failed.", exception.ToString());
+            }
+        }
+
+        private static async Task SendToTerminalAsync(TerminalControl terminal, string text)
+        {
+            if (_TerminalViewField?.GetValue(terminal) is TerminalView terminalView)
+            {
+                if (_SendToPtyMethod?.Invoke(terminalView, new object[] { text, CancellationToken.None }) is Task task)
+                {
+                    await task.ConfigureAwait(true);
+                }
+            }
+        }
+
+        private void QueueTerminalKill(TerminalSession session)
+        {
+            _ = Task.Run(delegate
+            {
+                try
+                {
+                    KillTerminalProcess(session.Terminal);
+                }
+                catch (Exception exception)
+                {
+                    WriteTerminalCrashLog(session.TabProfile, "Terminal close failed.", exception.ToString());
+                }
+            });
+        }
+
+        private static void KillTerminalProcess(TerminalControl terminal)
+        {
+            if (!(_TerminalViewField?.GetValue(terminal) is TerminalView terminalView)) return;
+
+            if (_ProcessCancellationField?.GetValue(terminalView) is CancellationTokenSource cancellation)
+            {
+                cancellation.Cancel();
+            }
+
+            object? ptyConnection = _PtyConnectionField?.GetValue(terminalView);
+            MethodInfo? killMethod = ptyConnection?.GetType().GetMethod("Kill", BindingFlags.Instance | BindingFlags.Public);
+            killMethod?.Invoke(ptyConnection, Array.Empty<object>());
         }
 
         private void CaptureSessionDirectory(TerminalSession session)

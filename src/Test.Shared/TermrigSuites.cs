@@ -138,9 +138,9 @@ namespace Test.Shared
 
                     new TestCaseDescriptor(
                         suiteId: "ShellCatalog",
-                        caseId: "StartupScriptCreatesLaunchArguments",
-                        displayName: "Startup scripts create launch arguments",
-                        executeAsync: StartupScriptCreatesLaunchArgumentsAsync),
+                        caseId: "StartupScriptCreatesStartupCommands",
+                        displayName: "Startup scripts create startup commands",
+                        executeAsync: StartupScriptCreatesStartupCommandsAsync),
 
                     new TestCaseDescriptor(
                         suiteId: "ShellCatalog",
@@ -162,15 +162,27 @@ namespace Test.Shared
 
                     new TestCaseDescriptor(
                         suiteId: "ShellCatalog",
+                        caseId: "CmdLaunchUsesInteractiveArguments",
+                        displayName: "cmd.exe launch uses interactive arguments",
+                        executeAsync: CmdLaunchUsesInteractiveArgumentsAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
+                        caseId: "MultilineStartupScriptsRunEachLine",
+                        displayName: "Multiline startup scripts run each line",
+                        executeAsync: MultilineStartupScriptsRunEachLineAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
                         caseId: "PowerShellLaunchUsesNoProfile",
                         displayName: "PowerShell launches without profile scripts",
                         executeAsync: PowerShellLaunchUsesNoProfileAsync),
 
                     new TestCaseDescriptor(
                         suiteId: "ShellCatalog",
-                        caseId: "PowerShellStartupScriptUsesScriptBlock",
-                        displayName: "PowerShell startup scripts use a script block",
-                        executeAsync: PowerShellStartupScriptUsesScriptBlockAsync),
+                        caseId: "PowerShellStartupScriptsStayOutOfLaunchArguments",
+                        displayName: "PowerShell startup scripts stay out of launch arguments",
+                        executeAsync: PowerShellStartupScriptsStayOutOfLaunchArgumentsAsync),
 
                     new TestCaseDescriptor(
                         suiteId: "ShellCatalog",
@@ -189,7 +201,7 @@ namespace Test.Shared
         private static Task CreatesCrashDirectoryAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"), ".termlog", "crashes");
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"), ".termrig", "crashes");
             try
             {
                 CrashLogStore store = new CrashLogStore(directory);
@@ -209,7 +221,7 @@ namespace Test.Shared
 
         private static async Task WritesFormattedCrashLogAsync(CancellationToken token)
         {
-            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"), ".termlog", "crashes");
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"), ".termrig", "crashes");
             try
             {
                 CrashLogStore store = new CrashLogStore(directory);
@@ -424,7 +436,7 @@ namespace Test.Shared
             return Task.CompletedTask;
         }
 
-        private static Task StartupScriptCreatesLaunchArgumentsAsync(CancellationToken token)
+        private static Task StartupScriptCreatesStartupCommandsAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             ShellCatalog catalog = new ShellCatalog();
@@ -440,10 +452,8 @@ namespace Test.Shared
             ShellLaunchPlan plan = catalog.BuildLaunchPlan(tab);
 
             AssertEqual(descriptor.Executable, plan.Executable, "Executable mismatch.");
-            if (!plan.Arguments.Exists(item => item.Contains("echo ready", StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidOperationException("Expected startup script in launch arguments.");
-            }
+            AssertEqual(1, plan.StartupCommands.Count, "Expected one startup command.");
+            AssertEqual("echo ready", plan.StartupCommands[0], "Startup command mismatch.");
 
             return Task.CompletedTask;
         }
@@ -530,6 +540,50 @@ namespace Test.Shared
             return Task.CompletedTask;
         }
 
+        private static Task CmdLaunchUsesInteractiveArgumentsAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!OperatingSystem.IsWindows()) return Task.CompletedTask;
+
+            ShellCatalog catalog = new ShellCatalog();
+            ShellLaunchPlan plan = catalog.BuildLaunchPlan(new TerminalTabProfile
+            {
+                Name = "cmd.exe",
+                Shell = ShellType.Cmd,
+                StartingDirectory = Environment.CurrentDirectory,
+                StartupScript = "dir"
+            });
+
+            AssertEqual(2, plan.Arguments.Count, "Expected two cmd.exe launch arguments.");
+            AssertEqual("/D", plan.Arguments[0], "Expected cmd.exe autorun suppression argument.");
+            AssertEqual("/K", plan.Arguments[1], "Expected cmd.exe interactive keep-open argument.");
+            AssertEqual(1, plan.StartupCommands.Count, "Expected cmd.exe startup command to be sent through the PTY.");
+            AssertEqual("dir", plan.StartupCommands[0], "cmd.exe startup command mismatch.");
+            return Task.CompletedTask;
+        }
+
+        private static Task MultilineStartupScriptsRunEachLineAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            ShellCatalog catalog = new ShellCatalog();
+            foreach (ShellDescriptor descriptor in catalog.GetSupportedShells())
+            {
+                ShellLaunchPlan plan = catalog.BuildLaunchPlan(new TerminalTabProfile
+                {
+                    Name = "Test",
+                    Shell = descriptor.Shell,
+                    StartingDirectory = Environment.CurrentDirectory,
+                    StartupScript = "first command" + Environment.NewLine + Environment.NewLine + "second command"
+                });
+
+                AssertEqual(2, plan.StartupCommands.Count, "Expected two startup commands for " + descriptor.Shell + ".");
+                AssertEqual("first command", plan.StartupCommands[0], "First startup command mismatch for " + descriptor.Shell + ".");
+                AssertEqual("second command", plan.StartupCommands[1], "Second startup command mismatch for " + descriptor.Shell + ".");
+            }
+
+            return Task.CompletedTask;
+        }
+
         private static Task PowerShellLaunchUsesNoProfileAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
@@ -551,7 +605,7 @@ namespace Test.Shared
             return Task.CompletedTask;
         }
 
-        private static Task PowerShellStartupScriptUsesScriptBlockAsync(CancellationToken token)
+        private static Task PowerShellStartupScriptsStayOutOfLaunchArgumentsAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             if (!OperatingSystem.IsWindows()) return Task.CompletedTask;
@@ -562,24 +616,16 @@ namespace Test.Shared
                 Name = "PowerShell",
                 Shell = ShellType.PowerShell,
                 StartingDirectory = Environment.CurrentDirectory,
-                StartupScript = "codex --yolo"
+                StartupScript = "Write-Host ready"
             });
 
-            if (!plan.Arguments.Exists(item => item.Equals("-Command", StringComparison.OrdinalIgnoreCase)))
+            if (plan.Arguments.Exists(item => item.Equals("-Command", StringComparison.OrdinalIgnoreCase)))
             {
-                throw new InvalidOperationException("Expected PowerShell launch arguments to include -Command.");
+                throw new InvalidOperationException("PowerShell startup commands should be sent through the PTY, not launched with -Command.");
             }
 
-            if (!plan.Arguments.Exists(item => item.Contains("codex --yolo", StringComparison.Ordinal)))
-            {
-                throw new InvalidOperationException("Expected startup command to be preserved.");
-            }
-
-            if (!plan.Arguments.Exists(item => item.StartsWith("& {", StringComparison.Ordinal)))
-            {
-                throw new InvalidOperationException("Expected startup command to be wrapped in a script block.");
-            }
-
+            AssertEqual(1, plan.StartupCommands.Count, "Expected one PowerShell startup command.");
+            AssertEqual("Write-Host ready", plan.StartupCommands[0], "PowerShell startup command mismatch.");
             return Task.CompletedTask;
         }
 

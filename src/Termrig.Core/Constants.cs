@@ -11,11 +11,6 @@ namespace Termrig.Core
         public const string ApplicationDirectoryName = ".termrig";
 
         /// <summary>
-        /// Crash log data directory name created under the user's home directory.
-        /// </summary>
-        public const string CrashLogDirectoryName = ".termlog";
-
-        /// <summary>
         /// Crash log subdirectory name.
         /// </summary>
         public const string CrashLogSubdirectoryName = "crashes";
