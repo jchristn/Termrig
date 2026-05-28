@@ -13,32 +13,31 @@ Termrig is a desktop profile manager, allowing you to create profiles consisting
 Windows:
 
 ```powershell
+git clone https://github.com/jchristn/Termrig
+cd Termrig
 go.bat
 ```
 
 Mac/Linux:
 
 ```sh
-chmod +x go.sh && go.sh
+git clone https://github.com/jchristn/Termrig
+cd Termrig
+chmod +x go.sh && ./go.sh
 ```
-
-If your shell does not resolve scripts from the current directory, run `chmod +x go.sh && ./go.sh`.
 
 ## Features
 
-- Create reusable terminal profiles made up of multiple tabs.
-- Open a profile as a tabbed terminal workspace, with each tab launched into a real PTY-backed terminal session.
-- Windows shell support for `cmd.exe` and PowerShell.
-- macOS/Linux shell support for `bash`.
-- Configure each tab with a name, shell, starting directory, startup script, font override, and optional color scheme override.
-- Manage profiles from the main window: create, delete, rename, save, reorder tabs, and apply profile-wide defaults.
-- Save profile changes directly from the workspace window.
-- Add transient workspace tabs and optionally add them back to the active profile.
-- Rename workspace tabs from the tab strip.
-- Close live workspace tabs without removing them from the saved profile.
-- Manage global color schemes, including adding custom schemes and resetting to built-in defaults.
-- Apply profile-wide fonts and color schemes, with tab-level overrides when needed.
-- Store profiles and color schemes as JSON under `~/.termrig/`.
+- Multi-tab terminal profiles for saving and reopening complete workspaces.
+- PTY-backed tabbed terminal workspace.
+- Cross-platform shell support for PowerShell, `cmd.exe`, and `bash`.
+- Per-tab configuration for shell type, name, starting directory, startup script, font, and color scheme.
+- Profile management for creating, renaming, deleting, saving, and opening profiles.
+- Tab management for adding, editing, closing, renaming, and reordering tabs.
+- Profile-wide and tab-level font settings.
+- Global color scheme management with custom schemes and built-in defaults.
+- Workspace-level profile saving.
+- Local JSON-backed configuration under `~/.termrig/`.
 
 ## Benefits
 

@@ -7,6 +7,7 @@ namespace Termrig.App.Views
     using Avalonia.VisualTree;
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Linq;
     using System.Threading;
     using Termrig.Core.Enums;
@@ -23,6 +24,7 @@ namespace Termrig.App.Views
         private readonly ProfileStore _ProfileStore = new ProfileStore();
         private readonly ColorSchemeStore _ColorSchemeStore = new ColorSchemeStore();
         private readonly ShellCatalog _ShellCatalog = new ShellCatalog();
+        private const string RepositoryUrl = "https://github.com/jchristn/Termrig";
         private readonly List<string> _FontFamilies = new List<string>
         {
             "Default terminal font",
@@ -65,6 +67,7 @@ namespace Termrig.App.Views
             DeleteProfileButton.Click += OnDeleteProfileClicked;
             SaveProfileButton.Click += OnSaveProfileClicked;
             OpenProfileButton.Click += OnOpenProfileClicked;
+            GitHubButton.Click += OnGitHubClicked;
             AddSchemeButton.Click += OnAddSchemeClicked;
             EditSchemeButton.Click += OnEditSchemeClicked;
             DeleteSchemeButton.Click += OnDeleteSchemeClicked;
@@ -211,6 +214,17 @@ namespace Termrig.App.Views
             if (_SelectedProfile == null) return;
             TerminalWorkspaceWindow window = new TerminalWorkspaceWindow(_SelectedProfile, _ProfileStore, _ShellCatalog, _ColorSchemes);
             window.Show();
+        }
+
+        private void OnGitHubClicked(object? sender, RoutedEventArgs e)
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = RepositoryUrl,
+                UseShellExecute = true
+            };
+            Process? process = Process.Start(startInfo);
+            process?.Dispose();
         }
 
         private async void OnAddSchemeClicked(object? sender, RoutedEventArgs e)
