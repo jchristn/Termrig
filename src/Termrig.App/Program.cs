@@ -4,6 +4,7 @@ namespace Termrig.App
     using System;
     using System.Diagnostics;
     using System.Linq;
+    using Termrig.App.Services;
 
     /// <summary>
     /// Application entry point.
@@ -12,7 +13,7 @@ namespace Termrig.App
     {
         #region Private-Members
 
-        private const string DetachedChildArgument = "--termrig-detached-child";
+        internal const string DetachedChildArgument = "--termrig-detached-child";
         private const string ForegroundEnvironmentVariable = "TERMRIG_FOREGROUND";
 
         #endregion
@@ -26,6 +27,17 @@ namespace Termrig.App
         [STAThread]
         public static void Main(string[] args)
         {
+            if (CommandLineCommand.TryParse(args, out CommandLineCommand? command) &&
+                command != null &&
+                !args.Contains(DetachedChildArgument))
+            {
+                bool sent = TermrigCommandClient.TrySendAsync(command).GetAwaiter().GetResult();
+                if (sent || String.Equals(command.Verb, "close", StringComparison.Ordinal))
+                {
+                    return;
+                }
+            }
+
             if (ShouldDetach(args))
             {
                 StartDetachedChild(args);

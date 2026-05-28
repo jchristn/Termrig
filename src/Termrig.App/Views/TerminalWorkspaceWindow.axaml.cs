@@ -39,6 +39,21 @@ namespace Termrig.App.Views
 
         #endregion
 
+        #region Public-Members
+
+        /// <summary>
+        /// Profile name for this workspace.
+        /// </summary>
+        public string ProfileName
+        {
+            get
+            {
+                return _Profile.Name;
+            }
+        }
+
+        #endregion
+
         #region Constructors-and-Factories
 
         /// <summary>

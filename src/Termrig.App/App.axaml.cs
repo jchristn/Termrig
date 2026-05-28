@@ -4,8 +4,10 @@ namespace Termrig.App
     using Avalonia.Controls;
     using Avalonia.Controls.ApplicationLifetimes;
     using Avalonia.Markup.Xaml;
+    using Avalonia.Threading;
     using System;
     using System.Threading.Tasks;
+    using Termrig.App.Services;
     using Termrig.Core.Services;
     using Termrig.App.Views;
 
@@ -17,6 +19,8 @@ namespace Termrig.App
         #region Private-Members
 
         private readonly CrashLogStore _CrashLogStore = new CrashLogStore();
+        private TermrigCommandServer? _CommandServer = null;
+        private MainWindow? _MainWindow = null;
 
         #endregion
 
@@ -36,17 +40,28 @@ namespace Termrig.App
         {
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
+                CommandLineCommand.TryParse(desktop.Args ?? Array.Empty<string>(), out CommandLineCommand? startupCommand);
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 SplashWindow? splash = null;
                 splash = new SplashWindow(delegate
                 {
                     MainWindow main = new MainWindow();
+                    _MainWindow = main;
                     desktop.MainWindow = main;
                     desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
                     main.Show();
                     splash?.Close();
+                    StartCommandServer();
+                    if (startupCommand != null && String.Equals(startupCommand.Verb, "open", StringComparison.Ordinal))
+                    {
+                        _ = main.OpenProfileByNameAsync(startupCommand.ProfileName);
+                    }
                 });
                 desktop.MainWindow = splash;
+                desktop.Exit += delegate
+                {
+                    _CommandServer?.Dispose();
+                };
             }
 
             base.OnFrameworkInitializationCompleted();
@@ -56,6 +71,32 @@ namespace Termrig.App
         {
             AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
             TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+        }
+
+        private void StartCommandServer()
+        {
+            if (_CommandServer != null) return;
+            _CommandServer = new TermrigCommandServer(HandleCommandAsync);
+            _CommandServer.Start();
+        }
+
+        private Task<bool> HandleCommandAsync(CommandLineCommand command)
+        {
+            return Dispatcher.UIThread.InvokeAsync(async delegate
+            {
+                if (_MainWindow == null) return false;
+                if (String.Equals(command.Verb, "open", StringComparison.Ordinal))
+                {
+                    return await _MainWindow.OpenProfileByNameAsync(command.ProfileName).ConfigureAwait(true);
+                }
+
+                if (String.Equals(command.Verb, "close", StringComparison.Ordinal))
+                {
+                    return _MainWindow.CloseProfileWorkspaces(command.ProfileName);
+                }
+
+                return false;
+            });
         }
 
         private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)

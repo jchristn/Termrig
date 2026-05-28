@@ -10,6 +10,7 @@ namespace Termrig.App.Views
     using System.Diagnostics;
     using System.Linq;
     using System.Threading;
+    using System.Threading.Tasks;
     using Termrig.Core.Enums;
     using Termrig.Core.Models;
     using Termrig.Core.Services;
@@ -41,6 +42,8 @@ namespace Termrig.App.Views
         private List<ColorScheme> _ColorSchemes = ColorSchemeCatalog.GetSchemes();
         private List<TerminalProfile> _Profiles = new List<TerminalProfile>();
         private TerminalProfile? _SelectedProfile = null;
+        private readonly List<TerminalWorkspaceWindow> _WorkspaceWindows = new List<TerminalWorkspaceWindow>();
+        private readonly TaskCompletionSource<bool> _ProfilesLoaded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         #endregion
 
@@ -92,18 +95,27 @@ namespace Termrig.App.Views
 
         private async void LoadProfilesAsync()
         {
-            _ColorSchemes = await _ColorSchemeStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
-            RefreshColorSchemeList(null);
-
-            _Profiles = await _ProfileStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
-            if (!_Profiles.Any())
+            try
             {
-                _Profiles.Add(CreateDefaultProfile());
-                await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
-            }
+                _ColorSchemes = await _ColorSchemeStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+                RefreshColorSchemeList(null);
 
-            RefreshProfiles();
-            ProfileList.SelectedIndex = 0;
+                _Profiles = await _ProfileStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+                if (!_Profiles.Any())
+                {
+                    _Profiles.Add(CreateDefaultProfile());
+                    await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+                }
+
+                RefreshProfiles();
+                ProfileList.SelectedIndex = 0;
+                _ProfilesLoaded.TrySetResult(true);
+            }
+            catch (Exception exception)
+            {
+                _ProfilesLoaded.TrySetException(exception);
+                throw;
+            }
         }
 
         private static TerminalProfile CreateDefaultProfile()
@@ -214,7 +226,54 @@ namespace Termrig.App.Views
         {
             ApplyEditorToProfile();
             if (_SelectedProfile == null) return;
-            TerminalWorkspaceWindow window = new TerminalWorkspaceWindow(_SelectedProfile, _ProfileStore, _ShellCatalog, _ColorSchemes);
+            OpenWorkspace(_SelectedProfile);
+        }
+
+        /// <summary>
+        /// Open a profile workspace by profile name.
+        /// </summary>
+        /// <param name="profileName">Profile name.</param>
+        /// <returns>True if the profile was found and opened.</returns>
+        public async Task<bool> OpenProfileByNameAsync(string profileName)
+        {
+            if (String.IsNullOrWhiteSpace(profileName)) return false;
+            await _ProfilesLoaded.Task.ConfigureAwait(true);
+
+            TerminalProfile? profile = _Profiles.FirstOrDefault(item => item.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
+            if (profile == null) return false;
+
+            OpenWorkspace(profile);
+            return true;
+        }
+
+        /// <summary>
+        /// Close open workspace windows for a profile.
+        /// </summary>
+        /// <param name="profileName">Profile name.</param>
+        /// <returns>True if at least one workspace was closed.</returns>
+        public bool CloseProfileWorkspaces(string profileName)
+        {
+            if (String.IsNullOrWhiteSpace(profileName)) return false;
+
+            List<TerminalWorkspaceWindow> windows = _WorkspaceWindows
+                .Where(item => item.ProfileName.Equals(profileName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            foreach (TerminalWorkspaceWindow window in windows)
+            {
+                window.Close();
+            }
+
+            return windows.Count > 0;
+        }
+
+        private void OpenWorkspace(TerminalProfile profile)
+        {
+            TerminalWorkspaceWindow window = new TerminalWorkspaceWindow(profile, _ProfileStore, _ShellCatalog, _ColorSchemes);
+            _WorkspaceWindows.Add(window);
+            window.Closed += delegate
+            {
+                _WorkspaceWindows.Remove(window);
+            };
             window.Show();
         }
 
