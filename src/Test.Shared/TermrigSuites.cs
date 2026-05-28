@@ -24,11 +24,37 @@ namespace Test.Shared
             {
                 return new List<TestSuiteDescriptor>
                 {
+                    CrashLogStoreSuite(),
                     ColorSchemeStoreSuite(),
                     ProfileStoreSuite(),
                     ShellCatalogSuite()
                 };
             }
+        }
+
+        /// <summary>
+        /// Crash log persistence suite.
+        /// </summary>
+        /// <returns>Test suite descriptor.</returns>
+        public static TestSuiteDescriptor CrashLogStoreSuite()
+        {
+            return new TestSuiteDescriptor(
+                suiteId: "CrashLogStore",
+                displayName: "Crash Log Store",
+                cases: new List<TestCaseDescriptor>
+                {
+                    new TestCaseDescriptor(
+                        suiteId: "CrashLogStore",
+                        caseId: "CreatesCrashDirectory",
+                        displayName: "Crash log store creates crash directory",
+                        executeAsync: CreatesCrashDirectoryAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "CrashLogStore",
+                        caseId: "WritesFormattedCrashLog",
+                        displayName: "Crash log store writes formatted crash logs",
+                        executeAsync: WritesFormattedCrashLogAsync)
+                });
         }
 
         /// <summary>
@@ -136,10 +162,71 @@ namespace Test.Shared
 
                     new TestCaseDescriptor(
                         suiteId: "ShellCatalog",
+                        caseId: "PowerShellStartupScriptUsesScriptBlock",
+                        displayName: "PowerShell startup scripts use a script block",
+                        executeAsync: PowerShellStartupScriptUsesScriptBlockAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
                         caseId: "WindowsDirectoryPathUsesFileSystemCasing",
                         displayName: "Windows directory paths use filesystem casing",
-                        executeAsync: WindowsDirectoryPathUsesFileSystemCasingAsync)
+                        executeAsync: WindowsDirectoryPathUsesFileSystemCasingAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
+                        caseId: "ShellDisplayNamesAreUserFacing",
+                        displayName: "Shell display names are user-facing",
+                        executeAsync: ShellDisplayNamesAreUserFacingAsync)
                 });
+        }
+
+        private static Task CreatesCrashDirectoryAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"), ".termlog", "crashes");
+            try
+            {
+                CrashLogStore store = new CrashLogStore(directory);
+                if (!Directory.Exists(store.DirectoryPath))
+                {
+                    throw new InvalidOperationException("Expected crash log directory to be created.");
+                }
+
+                return Task.CompletedTask;
+            }
+            finally
+            {
+                string root = Path.GetDirectoryName(Path.GetDirectoryName(directory) ?? String.Empty) ?? String.Empty;
+                if (!String.IsNullOrWhiteSpace(root) && Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
+        private static async Task WritesFormattedCrashLogAsync(CancellationToken token)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"), ".termlog", "crashes");
+            try
+            {
+                CrashLogStore store = new CrashLogStore(directory);
+                string path = await store.WriteAsync("Work Profile", "API/Tab", "Boom", "Details", token).ConfigureAwait(false);
+
+                if (!File.Exists(path)) throw new InvalidOperationException("Expected crash log file to exist.");
+                string filename = Path.GetFileName(path);
+                if (!filename.EndsWith("-Work_Profile-APITab.log", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Unexpected crash log filename: " + filename);
+                }
+
+                string contents = await File.ReadAllTextAsync(path, token).ConfigureAwait(false);
+                if (!contents.Contains("Summary: Boom", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Expected crash log summary.");
+                }
+            }
+            finally
+            {
+                string root = Path.GetDirectoryName(Path.GetDirectoryName(directory) ?? String.Empty) ?? String.Empty;
+                if (!String.IsNullOrWhiteSpace(root) && Directory.Exists(root)) Directory.Delete(root, true);
+            }
         }
 
         private static async Task MissingColorSchemeStoreLoadsDefaultsAsync(CancellationToken token)
@@ -428,6 +515,48 @@ namespace Test.Shared
                 throw new InvalidOperationException("Expected PowerShell launch arguments to include -NoProfile.");
             }
 
+            return Task.CompletedTask;
+        }
+
+        private static Task PowerShellStartupScriptUsesScriptBlockAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!OperatingSystem.IsWindows()) return Task.CompletedTask;
+
+            ShellCatalog catalog = new ShellCatalog();
+            ShellLaunchPlan plan = catalog.BuildLaunchPlan(new TerminalTabProfile
+            {
+                Name = "PowerShell",
+                Shell = ShellType.PowerShell,
+                StartingDirectory = Environment.CurrentDirectory,
+                StartupScript = "codex --yolo"
+            });
+
+            if (!plan.Arguments.Exists(item => item.Equals("-Command", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException("Expected PowerShell launch arguments to include -Command.");
+            }
+
+            if (!plan.Arguments.Exists(item => item.Contains("codex --yolo", StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException("Expected startup command to be preserved.");
+            }
+
+            if (!plan.Arguments.Exists(item => item.StartsWith("& {", StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException("Expected startup command to be wrapped in a script block.");
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private static Task ShellDisplayNamesAreUserFacingAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            AssertEqual("cmd.exe", new TerminalTabProfile { Shell = ShellType.Cmd }.ShellDisplayName, "cmd.exe display name mismatch.");
+            AssertEqual("PowerShell", new TerminalTabProfile { Shell = ShellType.PowerShell }.ShellDisplayName, "PowerShell display name mismatch.");
+            AssertEqual("bash", new TerminalTabProfile { Shell = ShellType.Bash }.ShellDisplayName, "bash display name mismatch.");
             return Task.CompletedTask;
         }
 

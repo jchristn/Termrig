@@ -69,11 +69,13 @@ namespace Termrig.Core.Services
             {
                 plan.Arguments.Add("-NoLogo");
                 plan.Arguments.Add("-NoProfile");
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) plan.Arguments.Add("-ExecutionPolicy");
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) plan.Arguments.Add("Bypass");
                 plan.Arguments.Add("-NoExit");
                 if (!String.IsNullOrWhiteSpace(tab.StartupScript))
                 {
                     plan.Arguments.Add("-Command");
-                    plan.Arguments.Add(tab.StartupScript);
+                    plan.Arguments.Add("& { " + tab.StartupScript + " }");
                 }
             }
             else if (tab.Shell == ShellType.Bash)

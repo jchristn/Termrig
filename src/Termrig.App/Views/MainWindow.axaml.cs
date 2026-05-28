@@ -150,9 +150,9 @@ namespace Termrig.App.Views
 
         private void RefreshTabs()
         {
+            TabsList.ItemsSource = null;
             if (_SelectedProfile == null)
             {
-                TabsList.ItemsSource = null;
                 return;
             }
 
@@ -184,9 +184,11 @@ namespace Termrig.App.Views
 
         private async void OnSaveProfileClicked(object? sender, RoutedEventArgs e)
         {
+            string? selectedProfileId = _SelectedProfile?.Id;
             ApplyEditorToProfile();
             await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
             RefreshProfiles();
+            RestoreSelectedProfile(selectedProfileId);
         }
 
         private void OnNewProfileClicked(object? sender, RoutedEventArgs e)
@@ -292,11 +294,14 @@ namespace Termrig.App.Views
         private async void OnAddTabClicked(object? sender, RoutedEventArgs e)
         {
             if (_SelectedProfile == null) return;
+            ApplyEditorToProfile();
+
             TerminalTabEditorWindow editor = new TerminalTabEditorWindow(null, _ShellCatalog.GetSupportedShells(), _ColorSchemes);
             TerminalTabProfile? tab = await editor.ShowDialog<TerminalTabProfile?>(this).ConfigureAwait(true);
             if (tab == null) return;
             _SelectedProfile.Tabs.Add(tab);
             RefreshTabs();
+            TabsList.SelectedIndex = _SelectedProfile.Tabs.Count - 1;
         }
 
         private async void OnEditTabClicked(object? sender, RoutedEventArgs e)
@@ -441,6 +446,16 @@ namespace Termrig.App.Views
             }
 
             RefreshEditor();
+        }
+
+        private void RestoreSelectedProfile(string? profileId)
+        {
+            if (String.IsNullOrWhiteSpace(profileId)) return;
+
+            Int32 index = _Profiles.FindIndex(item => item.Id == profileId);
+            if (index < 0) return;
+            ProfileList.SelectedIndex = index;
+            _SelectedProfile = _Profiles[index];
         }
 
         private void ReconcileProfilesWithAvailableSchemes(ColorScheme fallback)

@@ -120,7 +120,7 @@
                                     <Border Background="#10161D" BorderBrush="#1F2A34" BorderThickness="0,0,0,1" Padding="10,7">
                                         <Grid ColumnDefinitions="260,120,*,150" ColumnSpacing="12">
                                             <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" Foreground="#E6EDF3" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Shell}" Foreground="#D7DEE8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding ShellDisplayName}" Foreground="#D7DEE8" VerticalAlignment="Center"/>
                                             <TextBlock Grid.Column="2" Text="{Binding StartingDirectory}" Foreground="#AAB6C2" VerticalAlignment="Center"/>
                                             <TextBlock Grid.Column="3" Text="Profile / Override" Foreground="#AAB6C2" VerticalAlignment="Center"/>
                                         </Grid>

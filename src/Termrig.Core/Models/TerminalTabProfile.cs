@@ -32,6 +32,19 @@ namespace Termrig.Core.Models
         public ShellType Shell { get; set; } = ShellType.PowerShell;
 
         /// <summary>
+        /// Shell display name.
+        /// </summary>
+        public string ShellDisplayName
+        {
+            get
+            {
+                if (Shell == ShellType.Cmd) return "cmd.exe";
+                if (Shell == ShellType.Bash) return "bash";
+                return "PowerShell";
+            }
+        }
+
+        /// <summary>
         /// Optional starting directory. Empty value means the current process directory.
         /// </summary>
         public string StartingDirectory { get; set; } = String.Empty;

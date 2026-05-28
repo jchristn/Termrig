@@ -24,6 +24,7 @@ namespace Termrig.App.Views
         private readonly TerminalProfile _Profile;
         private readonly ProfileStore _ProfileStore;
         private readonly ShellCatalog _ShellCatalog;
+        private readonly CrashLogStore _CrashLogStore = new CrashLogStore();
         private readonly List<ColorScheme> _ColorSchemes;
         private readonly List<TerminalSession> _Sessions = new List<TerminalSession>();
 
@@ -114,6 +115,7 @@ namespace Termrig.App.Views
             };
 
             session.TabItem = item;
+            terminal.ProcessExited += OnTerminalProcessExited;
             _Sessions.Add(session);
             TerminalTabs.Items.Add(item);
             TerminalTabs.SelectedItem = item;
@@ -125,6 +127,8 @@ namespace Termrig.App.Views
             {
                 TerminalTabs.Items.Remove(item);
                 _Sessions.Remove(session);
+                terminal.ProcessExited -= OnTerminalProcessExited;
+                WriteTerminalCrashLog(tab, "Terminal launch failed.", BuildLaunchFailureDetails(tab, plan, exception));
                 ShowTerminalLaunchError(tab, plan, exception);
             }
         }
@@ -179,8 +183,29 @@ namespace Termrig.App.Views
         {
             foreach (TerminalSession session in _Sessions)
             {
+                session.IsClosingByTermrig = true;
                 session.Terminal.Kill();
             }
+        }
+
+        private void OnTerminalProcessExited(object? sender, ProcessExitedEventArgs e)
+        {
+            if (!(sender is TerminalControl terminal)) return;
+
+            TerminalSession? session = _Sessions.FirstOrDefault(item => item.Terminal == terminal);
+            if (session == null) return;
+            if (session.IsClosingByTermrig) return;
+            if (e.ExitCode == 0) return;
+
+            string details =
+                "Terminal process exited unexpectedly." + Environment.NewLine +
+                "Profile: " + _Profile.Name + Environment.NewLine +
+                "Tab: " + session.TabProfile.Name + Environment.NewLine +
+                "Shell: " + session.TabProfile.Shell + Environment.NewLine +
+                "Exit code: " + e.ExitCode + Environment.NewLine +
+                "Directory: " + session.TabProfile.StartingDirectory + Environment.NewLine +
+                "Startup script: " + session.TabProfile.StartupScript;
+            WriteTerminalCrashLog(session.TabProfile, "Terminal process exited with non-zero exit code.", details);
         }
 
         private void OnWindowKeyDown(object? sender, KeyEventArgs e)
@@ -318,6 +343,8 @@ namespace Termrig.App.Views
 
         private void CloseSession(TerminalSession session)
         {
+            session.IsClosingByTermrig = true;
+            session.Terminal.ProcessExited -= OnTerminalProcessExited;
             session.Terminal.Kill();
             _Sessions.Remove(session);
             TerminalTabs.Items.Remove(session.TabItem);
@@ -338,13 +365,9 @@ namespace Termrig.App.Views
 
         private static void ApplyTerminalAppearance(TerminalControl terminal, TerminalProfile profile, TerminalTabProfile tab, ColorScheme scheme)
         {
-            string? fontFamily = tab.FontFamily ?? profile.FontFamily;
+            string fontFamily = tab.FontFamily ?? profile.FontFamily ?? GetDefaultTerminalFontFamily();
             double fontSize = tab.FontSize ?? profile.FontSize ?? Constants.DefaultTerminalFontSize;
-            if (!String.IsNullOrWhiteSpace(fontFamily))
-            {
-                ApplyFontFamily(terminal, fontFamily);
-            }
-
+            ApplyFontFamily(terminal, fontFamily);
             terminal.FontSize = fontSize;
             terminal.Background = Brush.Parse(scheme.Background);
             terminal.Foreground = Brush.Parse(scheme.Foreground);
@@ -368,19 +391,36 @@ namespace Termrig.App.Views
             }
         }
 
+        private static string GetDefaultTerminalFontFamily()
+        {
+            if (OperatingSystem.IsWindows()) return "Consolas";
+            if (OperatingSystem.IsMacOS()) return "Menlo";
+            return "DejaVu Sans Mono";
+        }
+
         private async void ShowTerminalLaunchError(TerminalTabProfile tab, ShellLaunchPlan plan, Exception exception)
         {
-            string details =
-                "Tab: " + tab.Name + Environment.NewLine +
-                "Executable: " + plan.Executable + Environment.NewLine +
-                "Directory: " + plan.StartingDirectory + Environment.NewLine +
-                "Args: " + String.Join(" ", plan.Arguments) + Environment.NewLine +
-                "Error: " + exception;
+            string details = BuildLaunchFailureDetails(tab, plan, exception);
             TextPromptWindow prompt = new TextPromptWindow(
                 "Terminal launch failed",
                 "Could not open tab \"" + tab.Name + "\"",
                 details);
             await prompt.ShowDialog<string?>(this).ConfigureAwait(true);
+        }
+
+        private void WriteTerminalCrashLog(TerminalTabProfile tab, string summary, string details)
+        {
+            _CrashLogStore.Write(_Profile.Name, tab.Name, summary, details);
+        }
+
+        private static string BuildLaunchFailureDetails(TerminalTabProfile tab, ShellLaunchPlan plan, Exception exception)
+        {
+            return
+                "Tab: " + tab.Name + Environment.NewLine +
+                "Executable: " + plan.Executable + Environment.NewLine +
+                "Directory: " + plan.StartingDirectory + Environment.NewLine +
+                "Args: " + String.Join(" ", plan.Arguments) + Environment.NewLine +
+                "Error: " + exception;
         }
 
         #endregion

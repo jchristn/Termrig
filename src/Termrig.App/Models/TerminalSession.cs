@@ -28,5 +28,10 @@ namespace Termrig.App.Models
         /// Whether this runtime tab is already part of the saved profile.
         /// </summary>
         public bool IsProfileMember { get; set; } = true;
+
+        /// <summary>
+        /// Whether the terminal process is being closed by Termrig.
+        /// </summary>
+        public bool IsClosingByTermrig { get; set; } = false;
     }
 }
