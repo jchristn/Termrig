@@ -62,6 +62,34 @@ Termrig stores user data under `~/.termrig/`.
 - `profiles.json` stores saved terminal profiles and their tabs.
 - `color-schemes.json` stores editable global color schemes.
 
+You can manually edit these JSON files while Termrig is closed. If Termrig is open, save operations from the app may overwrite manual edits.
+
+## Crash Logs
+
+Termrig writes application and terminal tab crash logs under `~/.termlog/crashes/`.
+
+Crash log filenames use this format:
+
+```text
+yyyyMMdd-HHmmss-{profilename}-{tabname}.log
+```
+
+To retrieve crash logs:
+
+Windows PowerShell:
+
+```powershell
+Get-ChildItem "$env:USERPROFILE\.termlog\crashes"
+```
+
+Mac/Linux:
+
+```sh
+ls -la ~/.termlog/crashes/
+```
+
+Include the relevant `.log` file when filing a bug report.
+
 ## Build and Test
 
 ```powershell
