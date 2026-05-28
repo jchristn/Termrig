@@ -321,10 +321,6 @@ namespace Termrig.App.Views
             session.Terminal.Kill();
             _Sessions.Remove(session);
             TerminalTabs.Items.Remove(session.TabItem);
-            if (session.IsProfileMember)
-            {
-                _Profile.Tabs.Remove(session.TabProfile);
-            }
 
             if (_Sessions.Count < 1)
             {

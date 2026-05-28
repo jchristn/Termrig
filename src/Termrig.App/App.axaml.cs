@@ -1,6 +1,7 @@
 namespace Termrig.App
 {
     using Avalonia;
+    using Avalonia.Controls;
     using Avalonia.Controls.ApplicationLifetimes;
     using Avalonia.Markup.Xaml;
     using Termrig.App.Views;
@@ -25,7 +26,17 @@ namespace Termrig.App
         {
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                desktop.MainWindow = new MainWindow();
+                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                SplashWindow? splash = null;
+                splash = new SplashWindow(delegate
+                {
+                    MainWindow main = new MainWindow();
+                    desktop.MainWindow = main;
+                    desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
+                    main.Show();
+                    splash?.Close();
+                });
+                desktop.MainWindow = splash;
             }
 
             base.OnFrameworkInitializationCompleted();
