@@ -13,8 +13,8 @@
             <DockPanel>
                 <TextBlock DockPanel.Dock="Left" Text="Termrig" Foreground="#FFFFFF" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button x:Name="OpenProfileButton" Content="Open" MinWidth="92"/>
-                    <Button x:Name="SaveProfileButton" Content="Save" MinWidth="92"/>
+                    <Button x:Name="OpenProfileButton" Content="&#x1F4C1; Open" Classes="compact" MinWidth="96"/>
+                    <Button x:Name="SaveProfileButton" Content="&#x1F4BE; Save" Classes="compact" MinWidth="96"/>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -22,16 +22,20 @@
         <Grid Grid.Row="1" ColumnDefinitions="280,*">
             <Border Grid.Column="0" Background="#10161D" BorderBrush="#26313B" BorderThickness="0,0,1,0" Padding="14">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Top" Spacing="8">
-                        <Button x:Name="NewProfileButton" Content="New profile"/>
-                        <Button x:Name="DeleteProfileButton" Content="Delete profile"/>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="NewProfileButton" Classes="compact">
+                            <TextBlock Text="+ New" VerticalAlignment="Center" LineHeight="14"/>
+                        </Button>
+                        <Button x:Name="DeleteProfileButton" Classes="compact">
+                            <TextBlock Text="&#x1F5D1; Delete" VerticalAlignment="Center" LineHeight="14"/>
+                        </Button>
                     </StackPanel>
                     <ListBox x:Name="ProfileList" Margin="0,14,0,0"/>
                 </DockPanel>
             </Border>
 
             <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*" Margin="18">
-                <Grid Grid.Row="0" ColumnDefinitions="*,230,150,150" ColumnSpacing="16">
+                <Grid Grid.Row="0" ColumnDefinitions="*,300,130,130" ColumnSpacing="16">
                     <StackPanel Grid.Column="0" Spacing="6">
                         <TextBlock Text="Profile name" FontWeight="SemiBold"/>
                         <TextBox x:Name="ProfileNameBox"/>
@@ -39,15 +43,27 @@
                     <StackPanel Grid.Column="1" Spacing="6">
                         <TextBlock Text="Global color scheme" FontWeight="SemiBold"/>
                         <ComboBox x:Name="GlobalSchemeCombo"/>
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="AddSchemeButton" Classes="compact">
+                                <TextBlock Text="+ Add" VerticalAlignment="Center" LineHeight="14"/>
+                            </Button>
+                            <Button x:Name="EditSchemeButton" Classes="compact" Margin="6,0,0,0">
+                                <TextBlock Text="&#x2699; Edit" VerticalAlignment="Center" LineHeight="14"/>
+                            </Button>
+                            <Button x:Name="DeleteSchemeButton" Classes="compact" Margin="6,0,0,0">
+                                <TextBlock Text="&#x1F5D1; Delete" VerticalAlignment="Center" LineHeight="14"/>
+                            </Button>
+                            <Button x:Name="ResetSchemesButton" Content="Reset Defaults" Classes="compact" Margin="0,6,0,0"/>
+                        </WrapPanel>
                         <TextBox x:Name="SchemeNameBox" PlaceholderText="Scheme name"/>
                     </StackPanel>
                     <StackPanel Grid.Column="2" Spacing="6">
                         <TextBlock Text="Background" FontWeight="SemiBold"/>
-                        <ColorPicker x:Name="SchemeBackgroundPicker" Width="140" HorizontalAlignment="Left"/>
+                        <ColorPicker x:Name="SchemeBackgroundPicker" Width="120" HorizontalAlignment="Left"/>
                     </StackPanel>
                     <StackPanel Grid.Column="3" Spacing="6">
                         <TextBlock Text="Foreground" FontWeight="SemiBold"/>
-                        <ColorPicker x:Name="SchemeForegroundPicker" Width="140" HorizontalAlignment="Left"/>
+                        <ColorPicker x:Name="SchemeForegroundPicker" Width="120" HorizontalAlignment="Left"/>
                     </StackPanel>
                 </Grid>
 
@@ -65,34 +81,48 @@
                 <Grid Grid.Row="2" RowDefinitions="Auto,*" Margin="0,22,0,0">
                     <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="Tabs" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
-                            <Button x:Name="AddTabButton" Content="+" Classes="icon" ToolTip.Tip="Add Tab"/>
-                            <Button x:Name="EditTabButton" Content="⚙" Classes="icon" ToolTip.Tip="Edit Tab"/>
-                            <Button x:Name="DeleteTabButton" Content="🗑" Classes="icon" ToolTip.Tip="Delete Tab"/>
-                            <Button x:Name="MoveTabUpButton" Content="↑" Classes="icon" ToolTip.Tip="Move Up"/>
-                            <Button x:Name="MoveTabDownButton" Content="↓" Classes="icon" ToolTip.Tip="Move Down"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <Button x:Name="AddTabButton" Classes="compact">
+                                <TextBlock Text="+ New" VerticalAlignment="Center" LineHeight="14"/>
+                            </Button>
+                            <Button x:Name="EditTabButton" Classes="compact">
+                                <TextBlock Text="&#x2699; Edit" VerticalAlignment="Center" LineHeight="14"/>
+                            </Button>
+                            <Button x:Name="DeleteTabButton" Classes="compact">
+                                <TextBlock Text="&#x1F5D1; Delete" VerticalAlignment="Center" LineHeight="14"/>
+                            </Button>
+                            <Button x:Name="MoveTabUpButton" Classes="compact">
+                                <TextBlock Text="&#x2191; Move Up" VerticalAlignment="Center" LineHeight="14"/>
+                            </Button>
+                            <Button x:Name="MoveTabDownButton" Classes="compact">
+                                <TextBlock Text="&#x2193; Move Down" VerticalAlignment="Center" LineHeight="14"/>
+                            </Button>
                         </StackPanel>
                     </Grid>
-                    <ListBox x:Name="TabsList" Grid.Row="1" Margin="0,12,0,0">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="models:TerminalTabProfile">
-                                <Border Background="#141B22" BorderBrush="#283540" BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="0,0,0,6">
-                                    <Grid ColumnDefinitions="220,120,*,150" ColumnSpacing="12">
-                                        <StackPanel Grid.Column="0" Spacing="2">
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#E6EDF3"/>
-                                            <TextBlock Text="{Binding Shell}" Foreground="#AAB6C2" FontSize="11"/>
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="1" Text="{Binding Shell}" Foreground="#D7DEE8" VerticalAlignment="Center"/>
-                                        <TextBlock Grid.Column="2" Text="{Binding StartingDirectory}" Foreground="#AAB6C2" VerticalAlignment="Center"/>
-                                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <TextBlock Text="Color" Foreground="#AAB6C2"/>
-                                            <Border Width="18" Height="18" CornerRadius="3" BorderBrush="#3A4652" BorderThickness="1" Background="#101419"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                    <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,12,0,0">
+                        <Border Grid.Row="0" Background="#151B22" BorderBrush="#283540" BorderThickness="0,0,0,1" Padding="10,7">
+                            <Grid ColumnDefinitions="260,120,*,150" ColumnSpacing="12">
+                                <TextBlock Grid.Column="0" Text="Name" FontWeight="SemiBold" Foreground="#D7DEE8" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="Shell" FontWeight="SemiBold" Foreground="#D7DEE8" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="Starting Directory" FontWeight="SemiBold" Foreground="#D7DEE8" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="3" Text="Color" FontWeight="SemiBold" Foreground="#D7DEE8" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ListBox x:Name="TabsList" Grid.Row="1" Classes="tabsTable" BorderThickness="0" Padding="0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:TerminalTabProfile">
+                                    <Border Background="#10161D" BorderBrush="#1F2A34" BorderThickness="0,0,0,1" Padding="10,7">
+                                        <Grid ColumnDefinitions="260,120,*,150" ColumnSpacing="12">
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" Foreground="#E6EDF3" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Shell}" Foreground="#D7DEE8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding StartingDirectory}" Foreground="#AAB6C2" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="Profile / Override" Foreground="#AAB6C2" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                 </Grid>
             </Grid>
         </Grid>

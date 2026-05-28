@@ -2,7 +2,9 @@ namespace Termrig.App.Views
 {
     using Avalonia.Controls;
     using Avalonia.Interactivity;
+    using Avalonia.Input;
     using Avalonia.Media;
+    using Avalonia.VisualTree;
     using System;
     using System.Collections.Generic;
     using System.Linq;
@@ -19,8 +21,8 @@ namespace Termrig.App.Views
         #region Private-Members
 
         private readonly ProfileStore _ProfileStore = new ProfileStore();
+        private readonly ColorSchemeStore _ColorSchemeStore = new ColorSchemeStore();
         private readonly ShellCatalog _ShellCatalog = new ShellCatalog();
-        private readonly List<ColorScheme> _ColorSchemes = ColorSchemeCatalog.GetSchemes();
         private readonly List<string> _FontFamilies = new List<string>
         {
             "Default terminal font",
@@ -34,6 +36,7 @@ namespace Termrig.App.Views
             "DejaVu Sans Mono",
             "Fira Code"
         };
+        private List<ColorScheme> _ColorSchemes = ColorSchemeCatalog.GetSchemes();
         private List<TerminalProfile> _Profiles = new List<TerminalProfile>();
         private TerminalProfile? _SelectedProfile = null;
 
@@ -62,11 +65,16 @@ namespace Termrig.App.Views
             DeleteProfileButton.Click += OnDeleteProfileClicked;
             SaveProfileButton.Click += OnSaveProfileClicked;
             OpenProfileButton.Click += OnOpenProfileClicked;
+            AddSchemeButton.Click += OnAddSchemeClicked;
+            EditSchemeButton.Click += OnEditSchemeClicked;
+            DeleteSchemeButton.Click += OnDeleteSchemeClicked;
+            ResetSchemesButton.Click += OnResetSchemesClicked;
             AddTabButton.Click += OnAddTabClicked;
             EditTabButton.Click += OnEditTabClicked;
             DeleteTabButton.Click += OnDeleteTabClicked;
             MoveTabUpButton.Click += OnMoveTabUpClicked;
             MoveTabDownButton.Click += OnMoveTabDownClicked;
+            TabsList.Tapped += OnTabsListTapped;
             ProfileList.SelectionChanged += OnProfileSelectionChanged;
             GlobalSchemeCombo.SelectionChanged += OnGlobalSchemeChanged;
             SchemeBackgroundPicker.ColorChanged += OnColorPickerChanged;
@@ -75,12 +83,15 @@ namespace Termrig.App.Views
 
         private void InitializeLists()
         {
-            GlobalSchemeCombo.ItemsSource = _ColorSchemes.Select(item => item.Name).ToList();
+            RefreshColorSchemeList(null);
             ProfileFontFamilyCombo.ItemsSource = _FontFamilies;
         }
 
         private async void LoadProfilesAsync()
         {
+            _ColorSchemes = await _ColorSchemeStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+            RefreshColorSchemeList(null);
+
             _Profiles = await _ProfileStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
             if (!_Profiles.Any())
             {
@@ -151,7 +162,7 @@ namespace Termrig.App.Views
             if (!String.IsNullOrWhiteSpace(ProfileNameBox.Text)) _SelectedProfile.Name = ProfileNameBox.Text;
             if (GlobalSchemeCombo.SelectedItem is string selectedScheme)
             {
-                _SelectedProfile.GlobalColorScheme = ColorSchemeCatalog.FindByName(selectedScheme);
+                _SelectedProfile.GlobalColorScheme = CloneScheme(FindSchemeByName(selectedScheme));
             }
 
             if (!String.IsNullOrWhiteSpace(SchemeNameBox.Text)) _SelectedProfile.GlobalColorScheme.Name = SchemeNameBox.Text;
@@ -198,8 +209,70 @@ namespace Termrig.App.Views
         {
             ApplyEditorToProfile();
             if (_SelectedProfile == null) return;
-            TerminalWorkspaceWindow window = new TerminalWorkspaceWindow(_SelectedProfile, _ProfileStore, _ShellCatalog);
+            TerminalWorkspaceWindow window = new TerminalWorkspaceWindow(_SelectedProfile, _ProfileStore, _ShellCatalog, _ColorSchemes);
             window.Show();
+        }
+
+        private async void OnAddSchemeClicked(object? sender, RoutedEventArgs e)
+        {
+            ColorSchemeEditorWindow editor = new ColorSchemeEditorWindow();
+            ColorScheme? scheme = await editor.ShowDialog<ColorScheme?>(this).ConfigureAwait(true);
+            if (scheme == null) return;
+
+            string uniqueName = GetUniqueSchemeName(scheme.Name, null);
+            scheme.Name = uniqueName;
+            _ColorSchemes.Add(scheme);
+            await _ColorSchemeStore.SaveAsync(_ColorSchemes, CancellationToken.None).ConfigureAwait(true);
+            RefreshColorSchemeList(scheme.Name);
+            ApplySelectedGlobalScheme();
+        }
+
+        private async void OnEditSchemeClicked(object? sender, RoutedEventArgs e)
+        {
+            if (!(GlobalSchemeCombo.SelectedItem is string selectedScheme)) return;
+            Int32 index = _ColorSchemes.FindIndex(item => item.Name == selectedScheme);
+            if (index < 0) return;
+
+            ColorSchemeEditorWindow editor = new ColorSchemeEditorWindow(_ColorSchemes[index]);
+            ColorScheme? scheme = await editor.ShowDialog<ColorScheme?>(this).ConfigureAwait(true);
+            if (scheme == null) return;
+
+            scheme.Name = GetUniqueSchemeName(scheme.Name, index);
+            _ColorSchemes[index] = scheme;
+            await _ColorSchemeStore.SaveAsync(_ColorSchemes, CancellationToken.None).ConfigureAwait(true);
+            RefreshProfilesUsingScheme(selectedScheme, scheme);
+            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+            RefreshColorSchemeList(scheme.Name);
+            ApplySelectedGlobalScheme();
+        }
+
+        private async void OnDeleteSchemeClicked(object? sender, RoutedEventArgs e)
+        {
+            if (_ColorSchemes.Count <= 1) return;
+            if (!(GlobalSchemeCombo.SelectedItem is string selectedScheme)) return;
+
+            Int32 index = _ColorSchemes.FindIndex(item => item.Name == selectedScheme);
+            if (index < 0) return;
+
+            _ColorSchemes.RemoveAt(index);
+            await _ColorSchemeStore.SaveAsync(_ColorSchemes, CancellationToken.None).ConfigureAwait(true);
+
+            ColorScheme fallback = _ColorSchemes[Math.Min(index, _ColorSchemes.Count - 1)];
+            RefreshProfilesUsingScheme(selectedScheme, fallback);
+            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+            RefreshColorSchemeList(fallback.Name);
+            ApplySelectedGlobalScheme();
+        }
+
+        private async void OnResetSchemesClicked(object? sender, RoutedEventArgs e)
+        {
+            string? selectedName = GlobalSchemeCombo.SelectedItem as string;
+            _ColorSchemes = await _ColorSchemeStore.ResetDefaultsAsync(CancellationToken.None).ConfigureAwait(true);
+            string replacementName = _ColorSchemes.Any(item => item.Name == selectedName) ? selectedName! : _ColorSchemes[0].Name;
+            ReconcileProfilesWithAvailableSchemes(_ColorSchemes[0]);
+            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+            RefreshColorSchemeList(replacementName);
+            ApplySelectedGlobalScheme();
         }
 
         private async void OnAddTabClicked(object? sender, RoutedEventArgs e)
@@ -213,6 +286,18 @@ namespace Termrig.App.Views
         }
 
         private async void OnEditTabClicked(object? sender, RoutedEventArgs e)
+        {
+            await EditSelectedTabAsync().ConfigureAwait(true);
+        }
+
+        private async void OnTabsListTapped(object? sender, TappedEventArgs e)
+        {
+            if (!(e.Source is Control source)) return;
+            if (!(source is ListBoxItem) && source.FindAncestorOfType<ListBoxItem>() == null) return;
+            await EditSelectedTabAsync().ConfigureAwait(true);
+        }
+
+        private async System.Threading.Tasks.Task EditSelectedTabAsync()
         {
             if (_SelectedProfile == null) return;
             Int32 index = TabsList.SelectedIndex;
@@ -253,11 +338,16 @@ namespace Termrig.App.Views
 
         private void OnGlobalSchemeChanged(object? sender, SelectionChangedEventArgs e)
         {
+            ApplySelectedGlobalScheme();
+        }
+
+        private void ApplySelectedGlobalScheme()
+        {
             if (_SelectedProfile == null) return;
             if (GlobalSchemeCombo.SelectedItem is string selectedScheme)
             {
-                ColorScheme scheme = ColorSchemeCatalog.FindByName(selectedScheme);
-                _SelectedProfile.GlobalColorScheme = scheme;
+                ColorScheme scheme = FindSchemeByName(selectedScheme);
+                _SelectedProfile.GlobalColorScheme = CloneScheme(scheme);
                 SchemeNameBox.Text = scheme.Name;
                 SchemeBackgroundPicker.Color = ParseColor(scheme.Background);
                 SchemeForegroundPicker.Color = ParseColor(scheme.Foreground);
@@ -282,6 +372,79 @@ namespace Termrig.App.Views
             _SelectedProfile.Tabs.Insert(newIndex, tab);
             RefreshTabs();
             TabsList.SelectedIndex = newIndex;
+        }
+
+        private void RefreshColorSchemeList(string? selectedName)
+        {
+            GlobalSchemeCombo.ItemsSource = _ColorSchemes.Select(item => item.Name).ToList();
+            if (!String.IsNullOrWhiteSpace(selectedName) && _ColorSchemes.Any(item => item.Name == selectedName))
+            {
+                GlobalSchemeCombo.SelectedItem = selectedName;
+            }
+        }
+
+        private ColorScheme FindSchemeByName(string? name)
+        {
+            ColorScheme? scheme = _ColorSchemes.FirstOrDefault(item => item.Name == name);
+            return scheme ?? _ColorSchemes[0];
+        }
+
+        private static ColorScheme CloneScheme(ColorScheme scheme)
+        {
+            return ColorSchemeCatalog.Clone(scheme);
+        }
+
+        private string GetUniqueSchemeName(string requestedName, Int32? editingIndex)
+        {
+            string baseName = String.IsNullOrWhiteSpace(requestedName) ? "New Scheme" : requestedName.Trim();
+            string candidate = baseName;
+            Int32 suffix = 2;
+            while (_ColorSchemes.Where((item, index) => !editingIndex.HasValue || index != editingIndex.Value).Any(item => item.Name.Equals(candidate, StringComparison.OrdinalIgnoreCase)))
+            {
+                candidate = baseName + " " + suffix;
+                suffix++;
+            }
+
+            return candidate;
+        }
+
+        private void RefreshProfilesUsingScheme(string previousName, ColorScheme replacement)
+        {
+            foreach (TerminalProfile profile in _Profiles)
+            {
+                if (profile.GlobalColorScheme.Name.Equals(previousName, StringComparison.OrdinalIgnoreCase))
+                {
+                    profile.GlobalColorScheme = CloneScheme(replacement);
+                }
+
+                foreach (TerminalTabProfile tab in profile.Tabs)
+                {
+                    if (tab.ColorSchemeOverride != null && tab.ColorSchemeOverride.Name.Equals(previousName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        tab.ColorSchemeOverride = CloneScheme(replacement);
+                    }
+                }
+            }
+
+            RefreshEditor();
+        }
+
+        private void ReconcileProfilesWithAvailableSchemes(ColorScheme fallback)
+        {
+            foreach (TerminalProfile profile in _Profiles)
+            {
+                ColorScheme? globalScheme = _ColorSchemes.FirstOrDefault(item => item.Name.Equals(profile.GlobalColorScheme.Name, StringComparison.OrdinalIgnoreCase));
+                profile.GlobalColorScheme = CloneScheme(globalScheme ?? fallback);
+
+                foreach (TerminalTabProfile tab in profile.Tabs)
+                {
+                    if (tab.ColorSchemeOverride == null) continue;
+                    ColorScheme? overrideScheme = _ColorSchemes.FirstOrDefault(item => item.Name.Equals(tab.ColorSchemeOverride.Name, StringComparison.OrdinalIgnoreCase));
+                    tab.ColorSchemeOverride = overrideScheme == null ? null : CloneScheme(overrideScheme);
+                }
+            }
+
+            RefreshEditor();
         }
 
         private static Color ParseColor(string value)

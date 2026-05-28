@@ -17,6 +17,19 @@ namespace Termrig.App.Views
 
         private readonly List<ShellDescriptor> _Shells;
         private readonly List<ColorScheme> _ColorSchemes;
+        private readonly List<string> _FontFamilies = new List<string>
+        {
+            "Use profile font",
+            "Cascadia Mono",
+            "Cascadia Code",
+            "Consolas",
+            "Courier New",
+            "JetBrains Mono",
+            "Menlo",
+            "Monaco",
+            "DejaVu Sans Mono",
+            "Fira Code"
+        };
         private readonly TerminalTabProfile _Original;
 
         #endregion
@@ -92,11 +105,17 @@ namespace Termrig.App.Views
             ColorOverrideCombo.ItemsSource = new List<string> { "Use profile color" }
                 .Concat(_ColorSchemes.Select(item => item.Name))
                 .ToList();
+            if (!String.IsNullOrWhiteSpace(_Original.FontFamily) && !_FontFamilies.Contains(_Original.FontFamily))
+            {
+                _FontFamilies.Add(_Original.FontFamily);
+            }
+
+            FontFamilyCombo.ItemsSource = _FontFamilies;
 
             NameBox.Text = _Original.Name;
             DirectoryBox.Text = _Original.StartingDirectory;
             StartupScriptBox.Text = _Original.StartupScript;
-            FontFamilyBox.Text = _Original.FontFamily ?? String.Empty;
+            FontFamilyCombo.SelectedItem = _Original.FontFamily ?? "Use profile font";
             FontSizeBox.Text = _Original.FontSize.HasValue ? _Original.FontSize.Value.ToString("0.##") : String.Empty;
 
             ShellDescriptor? selectedShell = _Shells.FirstOrDefault(item => item.Shell == _Original.Shell);
@@ -124,7 +143,7 @@ namespace Termrig.App.Views
                 Shell = shell.Shell,
                 StartingDirectory = DirectoryBox.Text ?? String.Empty,
                 StartupScript = StartupScriptBox.Text ?? String.Empty,
-                FontFamily = String.IsNullOrWhiteSpace(FontFamilyBox.Text) ? null : FontFamilyBox.Text,
+                FontFamily = FontFamilyCombo.SelectedItem is string fontFamily && fontFamily != "Use profile font" ? fontFamily : null,
                 FontSize = ParseNullableFontSize(FontSizeBox.Text)
             };
 

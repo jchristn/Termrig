@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Termrig.App.Views.TerminalWorkspaceWindow"
+        Icon="/Assets/avalonia-logo.ico"
         Title="Termrig Workspace"
         Width="1200"
         Height="800"
@@ -11,9 +12,15 @@
             <Grid ColumnDefinitions="*,Auto">
                 <TextBlock x:Name="TitleText" Grid.Column="0" Foreground="#FFFFFF" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" HorizontalAlignment="Right">
-                    <Button x:Name="AddTabButton" Content="+" Classes="icon" ToolTip.Tip="Add tab"/>
-                    <Button x:Name="EditTabButton" Content="Tab Settings" Classes="compact"/>
-                    <Button x:Name="SaveProfileButton" Content="Save Profile" Classes="compact"/>
+                    <Button x:Name="AddTabButton" Classes="compact" ToolTip.Tip="Add tab">
+                        <TextBlock Text="+ Add" VerticalAlignment="Center" LineHeight="14"/>
+                    </Button>
+                    <Button x:Name="EditTabButton" Classes="compact">
+                        <TextBlock Text="&#x2699; Settings" VerticalAlignment="Center" LineHeight="14"/>
+                    </Button>
+                    <Button x:Name="SaveProfileButton" Classes="compact">
+                        <TextBlock Text="&#x1F4BE; Save" VerticalAlignment="Center" LineHeight="14"/>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>

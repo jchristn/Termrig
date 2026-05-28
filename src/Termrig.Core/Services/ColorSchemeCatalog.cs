@@ -21,7 +21,17 @@ namespace Termrig.Core.Services
                 new ColorScheme { Name = "Ink", Background = "#0B0F14", Foreground = "#F4F7FA" },
                 new ColorScheme { Name = "Slate", Background = "#17202A", Foreground = "#DDE7F0" },
                 new ColorScheme { Name = "Light", Background = "#FBFBF8", Foreground = "#222222" },
-                new ColorScheme { Name = "High Contrast", Background = "#000000", Foreground = "#FFFFFF" }
+                new ColorScheme { Name = "High Contrast", Background = "#000000", Foreground = "#FFFFFF" },
+                new ColorScheme { Name = "VS Code Dark+", Background = "#1E1E1E", Foreground = "#D4D4D4" },
+                new ColorScheme { Name = "VS Code Light+", Background = "#FFFFFF", Foreground = "#333333" },
+                new ColorScheme { Name = "Visual Studio Dark", Background = "#1E1E1E", Foreground = "#DCDCDC" },
+                new ColorScheme { Name = "Visual Studio Blue", Background = "#293955", Foreground = "#F1F5FB" },
+                new ColorScheme { Name = "Ubuntu Terminal", Background = "#300A24", Foreground = "#EEEEEC" },
+                new ColorScheme { Name = "Tango Dark", Background = "#000000", Foreground = "#D3D7CF" },
+                new ColorScheme { Name = "Solarized Dark", Background = "#002B36", Foreground = "#839496" },
+                new ColorScheme { Name = "Solarized Light", Background = "#FDF6E3", Foreground = "#657B83" },
+                new ColorScheme { Name = "One Dark", Background = "#282C34", Foreground = "#ABB2BF" },
+                new ColorScheme { Name = "Monokai", Background = "#272822", Foreground = "#F8F8F2" }
             };
         }
 
@@ -34,7 +44,22 @@ namespace Termrig.Core.Services
         {
             List<ColorScheme> schemes = GetSchemes();
             ColorScheme? match = schemes.FirstOrDefault(item => item.Name == name);
-            return match ?? schemes[0];
+            return Clone(match ?? schemes[0]);
+        }
+
+        /// <summary>
+        /// Create a detached copy of a color scheme.
+        /// </summary>
+        /// <param name="scheme">Scheme to clone.</param>
+        /// <returns>Cloned scheme.</returns>
+        public static ColorScheme Clone(ColorScheme scheme)
+        {
+            return new ColorScheme
+            {
+                Name = scheme.Name,
+                Background = scheme.Background,
+                Foreground = scheme.Foreground
+            };
         }
     }
 }

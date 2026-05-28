@@ -85,7 +85,7 @@ namespace Termrig.Core.Services
                     stream,
                     _JsonOptions,
                     token).ConfigureAwait(false);
-                return profiles ?? new List<TerminalProfile>();
+                return NormalizeProfiles(profiles);
             }
         }
 
@@ -158,6 +158,33 @@ namespace Termrig.Core.Services
             string? home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             if (String.IsNullOrWhiteSpace(home)) throw new InvalidOperationException("Unable to resolve the current user's home directory.");
             return Path.Combine(home, Constants.ApplicationDirectoryName);
+        }
+
+        private static List<TerminalProfile> NormalizeProfiles(List<TerminalProfile>? profiles)
+        {
+            if (profiles == null) return new List<TerminalProfile>();
+
+            List<TerminalProfile> normalized = new List<TerminalProfile>();
+            foreach (TerminalProfile? profile in profiles)
+            {
+                if (profile == null) continue;
+                if (profile.GlobalColorScheme == null) profile.GlobalColorScheme = ColorSchemeCatalog.GetSchemes()[0];
+                profile.Tabs ??= new List<TerminalTabProfile>();
+
+                List<TerminalTabProfile> tabs = new List<TerminalTabProfile>();
+                foreach (TerminalTabProfile? tab in profile.Tabs)
+                {
+                    if (tab == null) continue;
+                    tab.StartingDirectory ??= String.Empty;
+                    tab.StartupScript ??= String.Empty;
+                    tabs.Add(tab);
+                }
+
+                profile.Tabs = tabs;
+                normalized.Add(profile);
+            }
+
+            return normalized;
         }
 
         #endregion

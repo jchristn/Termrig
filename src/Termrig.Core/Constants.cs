@@ -16,6 +16,11 @@ namespace Termrig.Core
         public const string ProfilesFilename = "profiles.json";
 
         /// <summary>
+        /// Color scheme store filename.
+        /// </summary>
+        public const string ColorSchemesFilename = "color-schemes.json";
+
+        /// <summary>
         /// Default terminal font size used when no tab or profile font size is set.
         /// </summary>
         public const double DefaultTerminalFontSize = 12;

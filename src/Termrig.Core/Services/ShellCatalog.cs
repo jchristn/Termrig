@@ -68,6 +68,7 @@ namespace Termrig.Core.Services
             else if (tab.Shell == ShellType.PowerShell)
             {
                 plan.Arguments.Add("-NoLogo");
+                plan.Arguments.Add("-NoProfile");
                 plan.Arguments.Add("-NoExit");
                 if (!String.IsNullOrWhiteSpace(tab.StartupScript))
                 {

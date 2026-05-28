@@ -24,10 +24,42 @@ namespace Test.Shared
             {
                 return new List<TestSuiteDescriptor>
                 {
+                    ColorSchemeStoreSuite(),
                     ProfileStoreSuite(),
                     ShellCatalogSuite()
                 };
             }
+        }
+
+        /// <summary>
+        /// Color scheme persistence suite.
+        /// </summary>
+        /// <returns>Test suite descriptor.</returns>
+        public static TestSuiteDescriptor ColorSchemeStoreSuite()
+        {
+            return new TestSuiteDescriptor(
+                suiteId: "ColorSchemeStore",
+                displayName: "Color Scheme Store",
+                cases: new List<TestCaseDescriptor>
+                {
+                    new TestCaseDescriptor(
+                        suiteId: "ColorSchemeStore",
+                        caseId: "MissingStoreLoadsDefaults",
+                        displayName: "Missing color scheme store loads defaults",
+                        executeAsync: MissingColorSchemeStoreLoadsDefaultsAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ColorSchemeStore",
+                        caseId: "SaveAndLoadSchemes",
+                        displayName: "Color schemes persist and load",
+                        executeAsync: SaveAndLoadSchemesAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ColorSchemeStore",
+                        caseId: "ResetDefaultsRestoresBuiltIns",
+                        displayName: "Reset defaults restores built-in schemes",
+                        executeAsync: ResetDefaultsRestoresBuiltInsAsync)
+                });
         }
 
         /// <summary>
@@ -51,7 +83,13 @@ namespace Test.Shared
                         suiteId: "ProfileStore",
                         caseId: "UpsertReplacesExistingProfile",
                         displayName: "Upsert replaces existing profile",
-                        executeAsync: UpsertReplacesExistingProfileAsync)
+                        executeAsync: UpsertReplacesExistingProfileAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ProfileStore",
+                        caseId: "LoadNormalizesNullableProfileFields",
+                        displayName: "Load normalizes nullable profile fields",
+                        executeAsync: LoadNormalizesNullableProfileFieldsAsync)
                 });
         }
 
@@ -92,10 +130,92 @@ namespace Test.Shared
 
                     new TestCaseDescriptor(
                         suiteId: "ShellCatalog",
+                        caseId: "PowerShellLaunchUsesNoProfile",
+                        displayName: "PowerShell launches without profile scripts",
+                        executeAsync: PowerShellLaunchUsesNoProfileAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
                         caseId: "WindowsDirectoryPathUsesFileSystemCasing",
                         displayName: "Windows directory paths use filesystem casing",
                         executeAsync: WindowsDirectoryPathUsesFileSystemCasingAsync)
                 });
+        }
+
+        private static async Task MissingColorSchemeStoreLoadsDefaultsAsync(CancellationToken token)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                ColorSchemeStore store = new ColorSchemeStore(directory);
+                List<ColorScheme> schemes = await store.LoadAsync(token).ConfigureAwait(false);
+
+                AssertEqual(ColorSchemeCatalog.GetSchemes().Count, schemes.Count, "Expected default color schemes.");
+                AssertEqual("Termrig Dark", schemes[0].Name, "Default scheme name mismatch.");
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
+        private static async Task SaveAndLoadSchemesAsync(CancellationToken token)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                ColorSchemeStore store = new ColorSchemeStore(directory);
+                List<ColorScheme> schemes = new List<ColorScheme>
+                {
+                    new ColorScheme
+                    {
+                        Name = "Custom",
+                        Background = "#112233",
+                        Foreground = "#DDEEFF"
+                    }
+                };
+
+                await store.SaveAsync(schemes, token).ConfigureAwait(false);
+                List<ColorScheme> loaded = await store.LoadAsync(token).ConfigureAwait(false);
+
+                AssertEqual(1, loaded.Count, "Expected one loaded color scheme.");
+                AssertEqual("Custom", loaded[0].Name, "Color scheme name mismatch.");
+                AssertEqual("#112233", loaded[0].Background, "Color scheme background mismatch.");
+                AssertEqual("#DDEEFF", loaded[0].Foreground, "Color scheme foreground mismatch.");
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
+        private static async Task ResetDefaultsRestoresBuiltInsAsync(CancellationToken token)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                ColorSchemeStore store = new ColorSchemeStore(directory);
+                await store.SaveAsync(new List<ColorScheme>
+                {
+                    new ColorScheme
+                    {
+                        Name = "Temporary",
+                        Background = "#000000",
+                        Foreground = "#FFFFFF"
+                    }
+                }, token).ConfigureAwait(false);
+
+                List<ColorScheme> reset = await store.ResetDefaultsAsync(token).ConfigureAwait(false);
+                List<ColorScheme> loaded = await store.LoadAsync(token).ConfigureAwait(false);
+
+                AssertEqual(ColorSchemeCatalog.GetSchemes().Count, reset.Count, "Expected reset return count to match defaults.");
+                AssertEqual(ColorSchemeCatalog.GetSchemes().Count, loaded.Count, "Expected loaded count to match defaults.");
+                AssertEqual("Termrig Dark", loaded[0].Name, "Expected built-in default after reset.");
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
         }
 
         private static async Task SaveAndLoadProfilesAsync(CancellationToken token)
@@ -169,6 +289,33 @@ namespace Test.Shared
                 List<TerminalProfile> loaded = await store.LoadAsync(token).ConfigureAwait(false);
                 AssertEqual(1, loaded.Count, "Expected upsert to keep one profile.");
                 AssertEqual("New", loaded[0].Name, "Upserted profile name mismatch.");
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
+        private static async Task LoadNormalizesNullableProfileFieldsAsync(CancellationToken token)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(directory);
+                string filePath = Path.Combine(directory, Termrig.Core.Constants.ProfilesFilename);
+                await File.WriteAllTextAsync(
+                    filePath,
+                    "[{\"Id\":\"profile1\",\"Name\":\"Work\",\"GlobalColorScheme\":null,\"Tabs\":[{\"Name\":\"PowerShell\",\"Shell\":\"PowerShell\",\"StartingDirectory\":null,\"StartupScript\":null}]}]",
+                    token).ConfigureAwait(false);
+
+                ProfileStore store = new ProfileStore(directory);
+                List<TerminalProfile> profiles = await store.LoadAsync(token).ConfigureAwait(false);
+
+                AssertEqual(1, profiles.Count, "Expected one loaded profile.");
+                if (profiles[0].GlobalColorScheme == null) throw new InvalidOperationException("Expected global color scheme to be normalized.");
+                AssertEqual(1, profiles[0].Tabs.Count, "Expected one loaded tab.");
+                AssertEqual(String.Empty, profiles[0].Tabs[0].StartingDirectory, "Expected null starting directory to be normalized.");
+                AssertEqual(String.Empty, profiles[0].Tabs[0].StartupScript, "Expected null startup script to be normalized.");
             }
             finally
             {
@@ -258,6 +405,27 @@ namespace Test.Shared
                 {
                     throw new InvalidOperationException("Expected shell executable to be absolute. Shell: " + shell.Shell + "; Executable: " + shell.Executable + ".");
                 }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private static Task PowerShellLaunchUsesNoProfileAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!OperatingSystem.IsWindows()) return Task.CompletedTask;
+
+            ShellCatalog catalog = new ShellCatalog();
+            ShellLaunchPlan plan = catalog.BuildLaunchPlan(new TerminalTabProfile
+            {
+                Name = "PowerShell",
+                Shell = ShellType.PowerShell,
+                StartingDirectory = Environment.CurrentDirectory
+            });
+
+            if (!plan.Arguments.Exists(item => item.Equals("-NoProfile", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException("Expected PowerShell launch arguments to include -NoProfile.");
             }
 
             return Task.CompletedTask;

@@ -1,0 +1,34 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Termrig.App.Views.ColorSchemeEditorWindow"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Color Scheme"
+        Width="440"
+        Height="430"
+        MinWidth="420"
+        MinHeight="380"
+        WindowStartupLocation="CenterOwner">
+    <Grid RowDefinitions="*,Auto" Background="#0F141A" Margin="18">
+        <StackPanel Grid.Row="0" Spacing="12">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Scheme name" FontWeight="SemiBold"/>
+                <TextBox x:Name="NameBox"/>
+            </StackPanel>
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                <StackPanel Grid.Column="0" Spacing="6">
+                    <TextBlock Text="Background" FontWeight="SemiBold"/>
+                    <ColorPicker x:Name="BackgroundPicker" Width="175" HorizontalAlignment="Left"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="6">
+                    <TextBlock Text="Foreground" FontWeight="SemiBold"/>
+                    <ColorPicker x:Name="ForegroundPicker" Width="175" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button x:Name="CancelButton" Content="Cancel" Classes="compact" MinWidth="82"/>
+            <Button x:Name="SaveButton" Content="&#x1F4BE; Save" Classes="compact" MinWidth="92"/>
+        </StackPanel>
+    </Grid>
+</Window>

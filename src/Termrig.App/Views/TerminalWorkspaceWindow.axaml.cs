@@ -24,7 +24,7 @@ namespace Termrig.App.Views
         private readonly TerminalProfile _Profile;
         private readonly ProfileStore _ProfileStore;
         private readonly ShellCatalog _ShellCatalog;
-        private readonly List<ColorScheme> _ColorSchemes = ColorSchemeCatalog.GetSchemes();
+        private readonly List<ColorScheme> _ColorSchemes;
         private readonly List<TerminalSession> _Sessions = new List<TerminalSession>();
 
         #endregion
@@ -35,7 +35,7 @@ namespace Termrig.App.Views
         /// Instantiate the terminal workspace window for the XAML loader.
         /// </summary>
         public TerminalWorkspaceWindow()
-            : this(new TerminalProfile { Name = "Default" }, new ProfileStore(), new ShellCatalog())
+            : this(new TerminalProfile { Name = "Default" }, new ProfileStore(), new ShellCatalog(), ColorSchemeCatalog.GetSchemes())
         {
         }
 
@@ -45,18 +45,22 @@ namespace Termrig.App.Views
         /// <param name="profile">Profile to open.</param>
         /// <param name="profileStore">Profile store used for save operations.</param>
         /// <param name="shellCatalog">Shell catalog.</param>
+        /// <param name="colorSchemes">Available color schemes.</param>
         /// <exception cref="ArgumentNullException">Thrown when required inputs are null.</exception>
-        public TerminalWorkspaceWindow(TerminalProfile profile, ProfileStore profileStore, ShellCatalog shellCatalog)
+        public TerminalWorkspaceWindow(TerminalProfile profile, ProfileStore profileStore, ShellCatalog shellCatalog, List<ColorScheme> colorSchemes)
         {
             ArgumentNullException.ThrowIfNull(profile);
             ArgumentNullException.ThrowIfNull(profileStore);
             ArgumentNullException.ThrowIfNull(shellCatalog);
+            ArgumentNullException.ThrowIfNull(colorSchemes);
 
             _Profile = profile;
             _ProfileStore = profileStore;
             _ShellCatalog = shellCatalog;
+            _ColorSchemes = colorSchemes;
 
             InitializeComponent();
+            Title = profile.Name + " | Termrig Workspace";
             TitleText.Text = profile.Name;
             WireEvents();
             LaunchProfile();
@@ -71,6 +75,7 @@ namespace Termrig.App.Views
             AddTabButton.Click += OnAddTabClicked;
             EditTabButton.Click += OnEditTabClicked;
             SaveProfileButton.Click += OnSaveProfileClicked;
+            AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
             Closing += OnWindowClosing;
         }
 
@@ -176,6 +181,15 @@ namespace Termrig.App.Views
             {
                 session.Terminal.Kill();
             }
+        }
+
+        private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.W) return;
+            if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+
+            e.Handled = true;
+            CloseSelectedTab();
         }
 
         private Control BuildTabHeader(TerminalSession session)
@@ -292,6 +306,18 @@ namespace Termrig.App.Views
             if (!(sender is Control control)) return;
             if (!(control.Tag is TerminalSession session)) return;
 
+            CloseSession(session);
+        }
+
+        private void CloseSelectedTab()
+        {
+            Int32 index = TerminalTabs.SelectedIndex;
+            if (index < 0 || index >= _Sessions.Count) return;
+            CloseSession(_Sessions[index]);
+        }
+
+        private void CloseSession(TerminalSession session)
+        {
             session.Terminal.Kill();
             _Sessions.Remove(session);
             TerminalTabs.Items.Remove(session.TabItem);
