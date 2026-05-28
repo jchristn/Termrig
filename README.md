@@ -6,7 +6,7 @@
 
 **NOTE: Termrig is in ALPHA v0.1.0 and subject to change.**
 
-Termrig is an Avalonia desktop terminal profile manager. It opens a profile as a multi-tab terminal workspace and launches each tab into a real PTY-backed terminal session.
+Termrig is a desktop profile manager, allowing you to create profiles consisting of groups of tabs, each with their own configuration. Termrig is designed to allow developers to quickly open a collection of tabs together as an atomic unit to rapidly reproduce workspaces for development and operational workflows.
 
 ## MVP Features
 
