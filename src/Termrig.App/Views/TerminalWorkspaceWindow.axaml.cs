@@ -4,6 +4,7 @@ namespace Termrig.App.Views
     using Avalonia.Interactivity;
     using Avalonia.Input;
     using Avalonia.Media;
+    using Avalonia.Threading;
     using Iciclecreek.Terminal;
     using System;
     using System.Collections.Generic;
@@ -76,6 +77,7 @@ namespace Termrig.App.Views
             AddTabButton.Click += OnAddTabClicked;
             EditTabButton.Click += OnEditTabClicked;
             SaveProfileButton.Click += OnSaveProfileClicked;
+            TerminalTabs.SelectionChanged += OnTerminalTabSelectionChanged;
             AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
             Closing += OnWindowClosing;
         }
@@ -97,8 +99,10 @@ namespace Termrig.App.Views
             {
                 BufferSize = 2000,
                 Background = Brush.Parse(scheme.Background),
-                Foreground = Brush.Parse(scheme.Foreground)
+                Foreground = Brush.Parse(scheme.Foreground),
+                Focusable = true
             };
+            terminal.PointerPressed += OnTerminalPointerPressed;
             ApplyTerminalAppearance(terminal, _Profile, tab, scheme);
 
             TerminalSession session = new TerminalSession
@@ -122,12 +126,14 @@ namespace Termrig.App.Views
             try
             {
                 terminal.LaunchProcess(plan.StartingDirectory, plan.Executable, plan.Arguments.ToArray());
+                FocusTerminal(session);
             }
             catch (Exception exception)
             {
                 TerminalTabs.Items.Remove(item);
                 _Sessions.Remove(session);
                 terminal.ProcessExited -= OnTerminalProcessExited;
+                terminal.PointerPressed -= OnTerminalPointerPressed;
                 WriteTerminalCrashLog(tab, "Terminal launch failed.", BuildLaunchFailureDetails(tab, plan, exception));
                 ShowTerminalLaunchError(tab, plan, exception);
             }
@@ -211,10 +217,21 @@ namespace Termrig.App.Views
         private void OnWindowKeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key != Key.W) return;
-            if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+            if (e.KeyModifiers != KeyModifiers.Control) return;
 
             e.Handled = true;
             CloseSelectedTab();
+        }
+
+        private void OnTerminalTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            FocusSelectedTerminal();
+        }
+
+        private void OnTerminalPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (!(sender is TerminalControl terminal)) return;
+            terminal.Focus();
         }
 
         private Control BuildTabHeader(TerminalSession session)
@@ -345,6 +362,7 @@ namespace Termrig.App.Views
         {
             session.IsClosingByTermrig = true;
             session.Terminal.ProcessExited -= OnTerminalProcessExited;
+            session.Terminal.PointerPressed -= OnTerminalPointerPressed;
             session.Terminal.Kill();
             _Sessions.Remove(session);
             TerminalTabs.Items.Remove(session.TabItem);
@@ -353,6 +371,21 @@ namespace Termrig.App.Views
             {
                 Close();
             }
+        }
+
+        private void FocusSelectedTerminal()
+        {
+            Int32 index = TerminalTabs.SelectedIndex;
+            if (index < 0 || index >= _Sessions.Count) return;
+            FocusTerminal(_Sessions[index]);
+        }
+
+        private static void FocusTerminal(TerminalSession session)
+        {
+            Dispatcher.UIThread.Post(delegate
+            {
+                session.Terminal.Focus();
+            }, DispatcherPriority.Input);
         }
 
         private void CaptureSessionDirectory(TerminalSession session)

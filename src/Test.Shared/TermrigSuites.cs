@@ -144,6 +144,12 @@ namespace Test.Shared
 
                     new TestCaseDescriptor(
                         suiteId: "ShellCatalog",
+                        caseId: "LaunchArgumentsDoNotClearTerminal",
+                        displayName: "Launch arguments do not clear the terminal",
+                        executeAsync: LaunchArgumentsDoNotClearTerminalAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
                         caseId: "WindowsSupportsCmdAndPowerShell",
                         displayName: "Windows supports cmd.exe and PowerShell",
                         executeAsync: WindowsSupportsCmdAndPowerShellAsync),
@@ -437,6 +443,33 @@ namespace Test.Shared
             if (!plan.Arguments.Exists(item => item.Contains("echo ready", StringComparison.OrdinalIgnoreCase)))
             {
                 throw new InvalidOperationException("Expected startup script in launch arguments.");
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private static Task LaunchArgumentsDoNotClearTerminalAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            ShellCatalog catalog = new ShellCatalog();
+            foreach (ShellDescriptor descriptor in catalog.GetSupportedShells())
+            {
+                ShellLaunchPlan plan = catalog.BuildLaunchPlan(new TerminalTabProfile
+                {
+                    Name = "Test",
+                    Shell = descriptor.Shell,
+                    StartingDirectory = Environment.CurrentDirectory,
+                    StartupScript = "echo ready"
+                });
+
+                foreach (string argument in plan.Arguments)
+                {
+                    string normalized = argument.Trim().ToLowerInvariant();
+                    if (normalized == "clear" || normalized == "cls" || normalized.Contains("clear-host", StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException("Launch arguments should not clear the terminal. Argument: " + argument);
+                    }
+                }
             }
 
             return Task.CompletedTask;
