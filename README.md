@@ -10,6 +10,8 @@ Is it pretty?  NO.  Is it flashy?  NO.  Is it a runway model?  NO.
 
 It's none of that.  It's Termrig, a desktop terminal profile manager, allowing you to create profiles with groups of tabs, each with their own configuration and startup scripts.  Termrig is designed to allow you to quickly open a collection of terminal tabs together as a grouped atomic unit to rapidly reproduce workspaces for development and operational workflows.
 
+Why did I build it and what problem am I trying to solve? I wanted a simple way to restart a series of tabs for software development against a given software asset, i.e. open a terminal for the source directory, spawn an agent harness in another, another terminal tab for the logs directory, and yet another for the docker directory.  I set up a profile with a series of tabs defined within, and launch the profile.
+
 ## Quickstart
 
 Windows:
