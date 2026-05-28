@@ -123,7 +123,7 @@ namespace Termrig.App.Views
 
             TerminalControl terminal = new TerminalControl
             {
-                BufferSize = 2000,
+                BufferSize = ResolveTerminalBufferSize(tab),
                 Background = Brush.Parse(scheme.Background),
                 Foreground = Brush.Parse(scheme.Foreground),
                 Focusable = true,
@@ -619,8 +619,14 @@ namespace Termrig.App.Views
             double fontSize = tab.FontSize ?? profile.FontSize ?? Constants.DefaultTerminalFontSize;
             ApplyFontFamily(terminal, fontFamily);
             terminal.FontSize = fontSize;
+            terminal.BufferSize = ResolveTerminalBufferSize(tab);
             terminal.Background = Brush.Parse(scheme.Background);
             terminal.Foreground = Brush.Parse(scheme.Foreground);
+        }
+
+        private static int ResolveTerminalBufferSize(TerminalTabProfile tab)
+        {
+            return tab.ScrollbackBufferSize ?? Constants.DefaultTerminalBufferSize;
         }
 
         private static void ApplyFontFamily(TerminalControl terminal, string fontFamily)

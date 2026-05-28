@@ -1,6 +1,7 @@
 namespace Termrig.Core.Models
 {
     using System;
+    using Termrig.Core;
     using Termrig.Core.Enums;
 
     /// <summary>
@@ -90,6 +91,23 @@ namespace Termrig.Core.Models
             }
         }
 
+        /// <summary>
+        /// Optional per-tab terminal scrollback buffer size. Null means the application default is used.
+        /// </summary>
+        public int? ScrollbackBufferSize
+        {
+            get
+            {
+                return _ScrollbackBufferSize;
+            }
+            set
+            {
+                _ScrollbackBufferSize = value.HasValue
+                    ? Math.Clamp(value.Value, Constants.MinimumTerminalBufferSize, Constants.MaximumTerminalBufferSize)
+                    : null;
+            }
+        }
+
         #endregion
 
         #region Private-Members
@@ -97,6 +115,7 @@ namespace Termrig.Core.Models
         private string _Name = "Terminal";
         private string? _FontFamily = null;
         private double? _FontSize = null;
+        private int? _ScrollbackBufferSize = null;
 
         #endregion
     }

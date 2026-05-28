@@ -115,7 +115,13 @@ namespace Test.Shared
                         suiteId: "ProfileStore",
                         caseId: "LoadNormalizesNullableProfileFields",
                         displayName: "Load normalizes nullable profile fields",
-                        executeAsync: LoadNormalizesNullableProfileFieldsAsync)
+                        executeAsync: LoadNormalizesNullableProfileFieldsAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ProfileStore",
+                        caseId: "TabScrollbackBufferSizeIsClamped",
+                        displayName: "Tab scrollback buffer size is clamped",
+                        executeAsync: TabScrollbackBufferSizeIsClampedAsync)
                 });
         }
 
@@ -345,7 +351,8 @@ namespace Test.Shared
                                 StartingDirectory = "C:\\Code",
                                 StartupScript = "Write-Host ready",
                                 FontFamily = "Consolas",
-                                FontSize = 16
+                                FontSize = 16,
+                                ScrollbackBufferSize = 7500
                             },
                             new TerminalTabProfile
                             {
@@ -370,8 +377,10 @@ namespace Test.Shared
                 AssertEqual("Write-Host ready", loaded[0].Tabs[0].StartupScript, "Startup script mismatch.");
                 AssertEqual("Consolas", loaded[0].Tabs[0].FontFamily, "Font family mismatch.");
                 AssertEqual(16, loaded[0].Tabs[0].FontSize, "Font size mismatch.");
+                AssertEqual(7500, loaded[0].Tabs[0].ScrollbackBufferSize, "Scrollback buffer size mismatch.");
                 AssertEqual<string?>(null, loaded[0].Tabs[1].FontFamily, "Inherited tab font family should be null.");
                 AssertEqual<double?>(null, loaded[0].Tabs[1].FontSize, "Inherited tab font size should be null.");
+                AssertEqual<int?>(null, loaded[0].Tabs[1].ScrollbackBufferSize, "Default tab scrollback buffer size should be null.");
             }
             finally
             {
@@ -421,11 +430,30 @@ namespace Test.Shared
                 AssertEqual(1, profiles[0].Tabs.Count, "Expected one loaded tab.");
                 AssertEqual(String.Empty, profiles[0].Tabs[0].StartingDirectory, "Expected null starting directory to be normalized.");
                 AssertEqual(String.Empty, profiles[0].Tabs[0].StartupScript, "Expected null startup script to be normalized.");
+                AssertEqual<int?>(null, profiles[0].Tabs[0].ScrollbackBufferSize, "Missing scrollback buffer size should remain null.");
             }
             finally
             {
                 if (Directory.Exists(directory)) Directory.Delete(directory, true);
             }
+        }
+
+        private static Task TabScrollbackBufferSizeIsClampedAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            TerminalTabProfile tab = new TerminalTabProfile
+            {
+                ScrollbackBufferSize = 50
+            };
+            AssertEqual(Termrig.Core.Constants.MinimumTerminalBufferSize, tab.ScrollbackBufferSize, "Expected low scrollback buffer size to be clamped.");
+
+            tab.ScrollbackBufferSize = 200000;
+            AssertEqual(Termrig.Core.Constants.MaximumTerminalBufferSize, tab.ScrollbackBufferSize, "Expected high scrollback buffer size to be clamped.");
+
+            tab.ScrollbackBufferSize = null;
+            AssertEqual<int?>(null, tab.ScrollbackBufferSize, "Expected null scrollback buffer size to remain null.");
+            return Task.CompletedTask;
         }
 
         private static Task SupportedShellsAreDetectedAsync(CancellationToken token)

@@ -29,5 +29,20 @@ namespace Termrig.Core
         /// Default terminal font size used when no tab or profile font size is set.
         /// </summary>
         public const double DefaultTerminalFontSize = 12;
+
+        /// <summary>
+        /// Default per-tab terminal scrollback buffer size.
+        /// </summary>
+        public const int DefaultTerminalBufferSize = 5000;
+
+        /// <summary>
+        /// Minimum per-tab terminal scrollback buffer size.
+        /// </summary>
+        public const int MinimumTerminalBufferSize = 1000;
+
+        /// <summary>
+        /// Maximum per-tab terminal scrollback buffer size.
+        /// </summary>
+        public const int MaximumTerminalBufferSize = 100000;
     }
 }

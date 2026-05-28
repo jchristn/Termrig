@@ -90,6 +90,7 @@ namespace Termrig.App.Views
                 StartupScript = tab.StartupScript,
                 FontFamily = tab.FontFamily,
                 FontSize = tab.FontSize,
+                ScrollbackBufferSize = tab.ScrollbackBufferSize,
                 ColorSchemeOverride = tab.ColorSchemeOverride == null ? null : new ColorScheme
                 {
                     Name = tab.ColorSchemeOverride.Name,
@@ -117,6 +118,7 @@ namespace Termrig.App.Views
             StartupScriptBox.Text = _Original.StartupScript;
             FontFamilyCombo.SelectedItem = _Original.FontFamily ?? "Use profile font";
             FontSizeBox.Text = _Original.FontSize.HasValue ? _Original.FontSize.Value.ToString("0.##") : String.Empty;
+            ScrollbackBufferBox.Text = _Original.ScrollbackBufferSize.HasValue ? _Original.ScrollbackBufferSize.Value.ToString() : String.Empty;
 
             ShellDescriptor? selectedShell = _Shells.FirstOrDefault(item => item.Shell == _Original.Shell);
             ShellCombo.SelectedItem = selectedShell == null ? null : selectedShell.Name;
@@ -144,7 +146,8 @@ namespace Termrig.App.Views
                 StartingDirectory = DirectoryBox.Text ?? String.Empty,
                 StartupScript = StartupScriptBox.Text ?? String.Empty,
                 FontFamily = FontFamilyCombo.SelectedItem is string fontFamily && fontFamily != "Use profile font" ? fontFamily : null,
-                FontSize = ParseNullableFontSize(FontSizeBox.Text)
+                FontSize = ParseNullableFontSize(FontSizeBox.Text),
+                ScrollbackBufferSize = ParseNullableBufferSize(ScrollbackBufferBox.Text)
             };
 
             if (ColorOverrideCombo.SelectedItem is string selectedColor && selectedColor != "Use profile color")
@@ -173,6 +176,13 @@ namespace Termrig.App.Views
         {
             if (String.IsNullOrWhiteSpace(value)) return null;
             if (Double.TryParse(value, out double fontSize)) return fontSize;
+            return null;
+        }
+
+        private static int? ParseNullableBufferSize(string? value)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            if (Int32.TryParse(value, out int bufferSize)) return bufferSize;
             return null;
         }
 
