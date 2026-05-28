@@ -6,7 +6,9 @@
 
 **NOTE: Termrig is in ALPHA v0.1.0 and subject to change.**
 
-Termrig is a desktop profile manager, allowing you to create profiles consisting of groups of tabs, each with their own configuration. Termrig is designed to allow developers to quickly open a collection of tabs together as an atomic unit to rapidly reproduce workspaces for development and operational workflows.
+Is it pretty?  NO.  Is it flashy?  NO.  Is it a runway model?  NO.
+
+It's none of that.  It's Termrig, a desktop terminal profile manager, allowing you to create profiles with groups of tabs, each with their own configuration and startup scripts.  Termrig is designed to allow you to quickly open a collection of terminal tabs together as a grouped atomic unit to rapidly reproduce workspaces for development and operational workflows.
 
 ## Quickstart
 
