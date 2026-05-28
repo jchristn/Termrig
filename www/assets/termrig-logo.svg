@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Termrig logo">
-  <rect x="10" y="14" width="108" height="100" rx="16" fill="#10161D" stroke="#43B581" stroke-width="4"/>
-  <path d="M10 31C10 21.6 17.6 14 27 14H101C110.4 14 118 21.6 118 31V42H10V31Z" fill="#17212B"/>
-  <circle cx="29" cy="28" r="4" fill="#FF5F57"/>
-  <circle cx="44" cy="28" r="4" fill="#FFBD2E"/>
-  <circle cx="59" cy="28" r="4" fill="#28C840"/>
-  <path d="M35 64L55 78L35 92" fill="none" stroke="#43B581" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M68 92H95" stroke="#E6EDF3" stroke-width="9" stroke-linecap="round"/>
-</svg>
