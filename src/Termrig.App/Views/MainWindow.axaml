@@ -3,7 +3,7 @@
         xmlns:models="using:Termrig.Core.Models"
         x:Class="Termrig.App.Views.MainWindow"
         Icon="/Assets/termrig-logo.ico"
-        Title="Termrig"
+        Title="Termrig | Profiles"
         Width="1180"
         Height="720"
         MinWidth="980"

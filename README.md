@@ -26,6 +26,46 @@ cd Termrig
 chmod +x go.sh && ./go.sh
 ```
 
+## Global Command
+
+Termrig can be installed from the repository as a .NET global tool named `tr`.
+
+Install on Windows:
+
+```powershell
+git clone https://github.com/jchristn/Termrig
+cd Termrig
+install-tool.bat
+```
+
+Install on Mac/Linux:
+
+```sh
+git clone https://github.com/jchristn/Termrig
+cd Termrig
+chmod +x install-tool.sh && ./install-tool.sh
+```
+
+After installation, run Termrig from any terminal:
+
+```sh
+tr
+```
+
+The `tr` command starts the Termrig desktop app and relinquishes the terminal so you can keep using that terminal window.
+
+Remove on Windows:
+
+```powershell
+remove-tool.bat
+```
+
+Remove on Mac/Linux:
+
+```sh
+chmod +x remove-tool.sh && ./remove-tool.sh
+```
+
 ## Features
 
 - Multi-tab terminal profiles for saving and reopening complete workspaces.
