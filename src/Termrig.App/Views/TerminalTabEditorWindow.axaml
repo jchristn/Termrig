@@ -30,12 +30,12 @@
             </StackPanel>
             <Grid ColumnDefinitions="*,120" ColumnSpacing="12">
                 <StackPanel Grid.Column="0" Spacing="6">
-                    <TextBlock Text="Font family" FontWeight="SemiBold"/>
-                    <TextBox x:Name="FontFamilyBox"/>
+                    <TextBlock Text="Font family override" FontWeight="SemiBold"/>
+                    <TextBox x:Name="FontFamilyBox" PlaceholderText="Leave empty to use the profile font"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="6">
-                    <TextBlock Text="Font size" FontWeight="SemiBold"/>
-                    <NumericUpDown x:Name="FontSizeBox" Minimum="8" Maximum="36" Increment="1"/>
+                    <TextBlock Text="Font size override" FontWeight="SemiBold"/>
+                    <TextBox x:Name="FontSizeBox" PlaceholderText="Profile"/>
                 </StackPanel>
             </Grid>
         </StackPanel>

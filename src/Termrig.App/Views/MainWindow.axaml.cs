@@ -2,6 +2,7 @@ namespace Termrig.App.Views
 {
     using Avalonia.Controls;
     using Avalonia.Interactivity;
+    using Avalonia.Media;
     using System;
     using System.Collections.Generic;
     using System.Linq;
@@ -20,6 +21,19 @@ namespace Termrig.App.Views
         private readonly ProfileStore _ProfileStore = new ProfileStore();
         private readonly ShellCatalog _ShellCatalog = new ShellCatalog();
         private readonly List<ColorScheme> _ColorSchemes = ColorSchemeCatalog.GetSchemes();
+        private readonly List<string> _FontFamilies = new List<string>
+        {
+            "Default terminal font",
+            "Cascadia Mono",
+            "Cascadia Code",
+            "Consolas",
+            "Courier New",
+            "JetBrains Mono",
+            "Menlo",
+            "Monaco",
+            "DejaVu Sans Mono",
+            "Fira Code"
+        };
         private List<TerminalProfile> _Profiles = new List<TerminalProfile>();
         private TerminalProfile? _SelectedProfile = null;
 
@@ -55,11 +69,14 @@ namespace Termrig.App.Views
             MoveTabDownButton.Click += OnMoveTabDownClicked;
             ProfileList.SelectionChanged += OnProfileSelectionChanged;
             GlobalSchemeCombo.SelectionChanged += OnGlobalSchemeChanged;
+            SchemeBackgroundPicker.ColorChanged += OnColorPickerChanged;
+            SchemeForegroundPicker.ColorChanged += OnColorPickerChanged;
         }
 
         private void InitializeLists()
         {
             GlobalSchemeCombo.ItemsSource = _ColorSchemes.Select(item => item.Name).ToList();
+            ProfileFontFamilyCombo.ItemsSource = _FontFamilies;
         }
 
         private async void LoadProfilesAsync()
@@ -110,8 +127,10 @@ namespace Termrig.App.Views
             ProfileNameBox.Text = _SelectedProfile.Name;
             GlobalSchemeCombo.SelectedItem = _SelectedProfile.GlobalColorScheme.Name;
             SchemeNameBox.Text = _SelectedProfile.GlobalColorScheme.Name;
-            SchemeBackgroundBox.Text = _SelectedProfile.GlobalColorScheme.Background;
-            SchemeForegroundBox.Text = _SelectedProfile.GlobalColorScheme.Foreground;
+            SchemeBackgroundPicker.Color = ParseColor(_SelectedProfile.GlobalColorScheme.Background);
+            SchemeForegroundPicker.Color = ParseColor(_SelectedProfile.GlobalColorScheme.Foreground);
+            ProfileFontFamilyCombo.SelectedItem = _SelectedProfile.FontFamily ?? "Default terminal font";
+            ProfileFontSizeBox.Text = _SelectedProfile.FontSize.HasValue ? _SelectedProfile.FontSize.Value.ToString("0.##") : String.Empty;
             RefreshTabs();
         }
 
@@ -123,14 +142,7 @@ namespace Termrig.App.Views
                 return;
             }
 
-            TabsList.ItemsSource = _SelectedProfile.Tabs.Select(DescribeTab).ToList();
-        }
-
-        private static string DescribeTab(TerminalTabProfile tab)
-        {
-            string color = tab.ColorSchemeOverride == null ? "profile colors" : tab.ColorSchemeOverride.Name;
-            string directory = String.IsNullOrWhiteSpace(tab.StartingDirectory) ? "default directory" : tab.StartingDirectory;
-            return tab.Name + " | " + tab.Shell + " | " + color + " | " + directory;
+            TabsList.ItemsSource = _SelectedProfile.Tabs;
         }
 
         private void ApplyEditorToProfile()
@@ -143,8 +155,17 @@ namespace Termrig.App.Views
             }
 
             if (!String.IsNullOrWhiteSpace(SchemeNameBox.Text)) _SelectedProfile.GlobalColorScheme.Name = SchemeNameBox.Text;
-            if (!String.IsNullOrWhiteSpace(SchemeBackgroundBox.Text)) _SelectedProfile.GlobalColorScheme.Background = SchemeBackgroundBox.Text;
-            if (!String.IsNullOrWhiteSpace(SchemeForegroundBox.Text)) _SelectedProfile.GlobalColorScheme.Foreground = SchemeForegroundBox.Text;
+            _SelectedProfile.GlobalColorScheme.Background = ToHex(SchemeBackgroundPicker.Color);
+            _SelectedProfile.GlobalColorScheme.Foreground = ToHex(SchemeForegroundPicker.Color);
+            _SelectedProfile.FontFamily = ProfileFontFamilyCombo.SelectedItem is string fontFamily && fontFamily != "Default terminal font" ? fontFamily : null;
+            if (String.IsNullOrWhiteSpace(ProfileFontSizeBox.Text))
+            {
+                _SelectedProfile.FontSize = null;
+            }
+            else if (Double.TryParse(ProfileFontSizeBox.Text, out double fontSize))
+            {
+                _SelectedProfile.FontSize = fontSize;
+            }
         }
 
         private async void OnSaveProfileClicked(object? sender, RoutedEventArgs e)
@@ -238,9 +259,14 @@ namespace Termrig.App.Views
                 ColorScheme scheme = ColorSchemeCatalog.FindByName(selectedScheme);
                 _SelectedProfile.GlobalColorScheme = scheme;
                 SchemeNameBox.Text = scheme.Name;
-                SchemeBackgroundBox.Text = scheme.Background;
-                SchemeForegroundBox.Text = scheme.Foreground;
+                SchemeBackgroundPicker.Color = ParseColor(scheme.Background);
+                SchemeForegroundPicker.Color = ParseColor(scheme.Foreground);
             }
+        }
+
+        private void OnColorPickerChanged(object? sender, ColorChangedEventArgs e)
+        {
+            ApplyEditorToProfile();
         }
 
         private void MoveSelectedTab(Int32 offset)
@@ -256,6 +282,23 @@ namespace Termrig.App.Views
             _SelectedProfile.Tabs.Insert(newIndex, tab);
             RefreshTabs();
             TabsList.SelectedIndex = newIndex;
+        }
+
+        private static Color ParseColor(string value)
+        {
+            try
+            {
+                return Color.Parse(value);
+            }
+            catch (FormatException)
+            {
+                return Color.Parse("#101419");
+            }
+        }
+
+        private static string ToHex(Color color)
+        {
+            return "#" + color.R.ToString("X2") + color.G.ToString("X2") + color.B.ToString("X2");
         }
 
         #endregion

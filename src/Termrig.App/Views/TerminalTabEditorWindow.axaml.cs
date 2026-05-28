@@ -63,9 +63,7 @@ namespace Termrig.App.Views
             {
                 Name = "Terminal",
                 Shell = shell,
-                StartingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                FontFamily = "Cascadia Mono,Consolas,Menlo,monospace",
-                FontSize = 14
+                StartingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
             };
         }
 
@@ -98,8 +96,8 @@ namespace Termrig.App.Views
             NameBox.Text = _Original.Name;
             DirectoryBox.Text = _Original.StartingDirectory;
             StartupScriptBox.Text = _Original.StartupScript;
-            FontFamilyBox.Text = _Original.FontFamily;
-            FontSizeBox.Value = Convert.ToDecimal(_Original.FontSize);
+            FontFamilyBox.Text = _Original.FontFamily ?? String.Empty;
+            FontSizeBox.Text = _Original.FontSize.HasValue ? _Original.FontSize.Value.ToString("0.##") : String.Empty;
 
             ShellDescriptor? selectedShell = _Shells.FirstOrDefault(item => item.Shell == _Original.Shell);
             ShellCombo.SelectedItem = selectedShell == null ? null : selectedShell.Name;
@@ -126,8 +124,8 @@ namespace Termrig.App.Views
                 Shell = shell.Shell,
                 StartingDirectory = DirectoryBox.Text ?? String.Empty,
                 StartupScript = StartupScriptBox.Text ?? String.Empty,
-                FontFamily = String.IsNullOrWhiteSpace(FontFamilyBox.Text) ? _Original.FontFamily : FontFamilyBox.Text,
-                FontSize = FontSizeBox.Value.HasValue ? Convert.ToDouble(FontSizeBox.Value.Value) : _Original.FontSize
+                FontFamily = String.IsNullOrWhiteSpace(FontFamilyBox.Text) ? null : FontFamilyBox.Text,
+                FontSize = ParseNullableFontSize(FontSizeBox.Text)
             };
 
             if (ColorOverrideCombo.SelectedItem is string selectedColor && selectedColor != "Use profile color")
@@ -150,6 +148,13 @@ namespace Termrig.App.Views
         private void OnCancelClicked(object? sender, RoutedEventArgs e)
         {
             Close(null);
+        }
+
+        private static double? ParseNullableFontSize(string? value)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            if (Double.TryParse(value, out double fontSize)) return fontSize;
+            return null;
         }
 
         #endregion

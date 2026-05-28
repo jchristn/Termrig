@@ -10,6 +10,7 @@ namespace Termrig.App.Views
     using System.Linq;
     using System.Threading;
     using Termrig.App.Models;
+    using Termrig.Core;
     using Termrig.Core.Models;
     using Termrig.Core.Services;
 
@@ -92,7 +93,7 @@ namespace Termrig.App.Views
                 Background = Brush.Parse(scheme.Background),
                 Foreground = Brush.Parse(scheme.Foreground)
             };
-            ApplyTerminalAppearance(terminal, tab, scheme);
+            ApplyTerminalAppearance(terminal, _Profile, tab, scheme);
 
             TerminalSession session = new TerminalSession
             {
@@ -111,7 +112,16 @@ namespace Termrig.App.Views
             _Sessions.Add(session);
             TerminalTabs.Items.Add(item);
             TerminalTabs.SelectedItem = item;
-            terminal.LaunchProcess(plan.StartingDirectory, plan.Executable, plan.Arguments.ToArray());
+            try
+            {
+                terminal.LaunchProcess(plan.StartingDirectory, plan.Executable, plan.Arguments.ToArray());
+            }
+            catch (Exception exception)
+            {
+                TerminalTabs.Items.Remove(item);
+                _Sessions.Remove(session);
+                ShowTerminalLaunchError(tab, plan, exception);
+            }
         }
 
         private async void OnSaveProfileClicked(object? sender, RoutedEventArgs e)
@@ -145,7 +155,7 @@ namespace Termrig.App.Views
             }
 
             session.TabProfile = updated;
-            ApplyTerminalAppearance(session.Terminal, updated, updated.ColorSchemeOverride ?? _Profile.GlobalColorScheme);
+            ApplyTerminalAppearance(session.Terminal, _Profile, updated, updated.ColorSchemeOverride ?? _Profile.GlobalColorScheme);
             session.TabItem.Header = BuildTabHeader(session);
         }
 
@@ -172,23 +182,25 @@ namespace Termrig.App.Views
         {
             Border container = new Border
             {
-                BorderBrush = Brush.Parse("#AEB8C4"),
+                BorderBrush = Brush.Parse("#35424F"),
                 BorderThickness = new Avalonia.Thickness(1, 1, 1, 0),
-                CornerRadius = new Avalonia.CornerRadius(4, 4, 0, 0),
-                Padding = new Avalonia.Thickness(8, 4),
-                Background = Brush.Parse("#F4F7FA")
+                CornerRadius = new Avalonia.CornerRadius(3, 3, 0, 0),
+                Padding = new Avalonia.Thickness(5, 1),
+                Background = Brush.Parse("#121820"),
+                MinHeight = 22
             };
 
             StackPanel panel = new StackPanel
             {
                 Orientation = Avalonia.Layout.Orientation.Horizontal,
-                Spacing = 6
+                Spacing = 4
             };
 
             TextBlock title = new TextBlock
             {
                 Text = session.TabProfile.Name,
-                FontSize = 12,
+                FontSize = 10,
+                Foreground = Brush.Parse("#E6EDF3"),
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
                 Tag = session
             };
@@ -200,8 +212,10 @@ namespace Termrig.App.Views
                 Button profileButton = new Button
                 {
                     Content = "*",
-                    Padding = new Avalonia.Thickness(5, 0),
-                    FontSize = 11,
+                    Classes = { "icon" },
+                    Width = 20,
+                    Height = 20,
+                    FontSize = 9,
                     Tag = session
                 };
                 ToolTip.SetTip(profileButton, "Profile actions");
@@ -212,8 +226,10 @@ namespace Termrig.App.Views
             Button closeButton = new Button
             {
                 Content = "X",
-                Padding = new Avalonia.Thickness(5, 0),
-                FontSize = 11,
+                Classes = { "icon" },
+                Width = 20,
+                Height = 20,
+                FontSize = 9,
                 Tag = session
             };
             ToolTip.SetTip(closeButton, "Close tab");
@@ -283,6 +299,11 @@ namespace Termrig.App.Views
             {
                 _Profile.Tabs.Remove(session.TabProfile);
             }
+
+            if (_Sessions.Count < 1)
+            {
+                Close();
+            }
         }
 
         private void CaptureSessionDirectory(TerminalSession session)
@@ -293,12 +314,51 @@ namespace Termrig.App.Views
             }
         }
 
-        private static void ApplyTerminalAppearance(TerminalControl terminal, TerminalTabProfile tab, ColorScheme scheme)
+        private static void ApplyTerminalAppearance(TerminalControl terminal, TerminalProfile profile, TerminalTabProfile tab, ColorScheme scheme)
         {
-            terminal.FontFamily = new FontFamily(tab.FontFamily);
-            terminal.FontSize = tab.FontSize;
+            string? fontFamily = tab.FontFamily ?? profile.FontFamily;
+            double fontSize = tab.FontSize ?? profile.FontSize ?? Constants.DefaultTerminalFontSize;
+            if (!String.IsNullOrWhiteSpace(fontFamily))
+            {
+                ApplyFontFamily(terminal, fontFamily);
+            }
+
+            terminal.FontSize = fontSize;
             terminal.Background = Brush.Parse(scheme.Background);
             terminal.Foreground = Brush.Parse(scheme.Foreground);
+        }
+
+        private static void ApplyFontFamily(TerminalControl terminal, string fontFamily)
+        {
+            string normalized = fontFamily;
+            if (fontFamily.Contains(",", StringComparison.Ordinal))
+            {
+                string[] parts = fontFamily.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (parts.Length > 0) normalized = parts[0];
+            }
+
+            try
+            {
+                terminal.FontFamily = new FontFamily(normalized);
+            }
+            catch (FormatException)
+            {
+            }
+        }
+
+        private async void ShowTerminalLaunchError(TerminalTabProfile tab, ShellLaunchPlan plan, Exception exception)
+        {
+            string details =
+                "Tab: " + tab.Name + Environment.NewLine +
+                "Executable: " + plan.Executable + Environment.NewLine +
+                "Directory: " + plan.StartingDirectory + Environment.NewLine +
+                "Args: " + String.Join(" ", plan.Arguments) + Environment.NewLine +
+                "Error: " + exception;
+            TextPromptWindow prompt = new TextPromptWindow(
+                "Terminal launch failed",
+                "Could not open tab \"" + tab.Name + "\"",
+                details);
+            await prompt.ShowDialog<string?>(this).ConfigureAwait(true);
         }
 
         #endregion

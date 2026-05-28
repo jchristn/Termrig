@@ -7,16 +7,16 @@
         MinWidth="900"
         MinHeight="600">
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="#151B22" Padding="12">
-            <DockPanel>
-                <TextBlock x:Name="TitleText" DockPanel.Dock="Left" Foreground="#FFFFFF" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="AddTabButton" Content="+" Width="34" ToolTip.Tip="Add tab"/>
-                    <Button x:Name="EditTabButton" Content="Tab settings"/>
-                    <Button x:Name="SaveProfileButton" Content="Save profile"/>
+        <Border DockPanel.Dock="Top" Background="#151B22" Padding="10,8">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock x:Name="TitleText" Grid.Column="0" Foreground="#FFFFFF" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" HorizontalAlignment="Right">
+                    <Button x:Name="AddTabButton" Content="+" Classes="icon" ToolTip.Tip="Add tab"/>
+                    <Button x:Name="EditTabButton" Content="Tab Settings" Classes="compact"/>
+                    <Button x:Name="SaveProfileButton" Content="Save Profile" Classes="compact"/>
                 </StackPanel>
-            </DockPanel>
+            </Grid>
         </Border>
-        <TabControl x:Name="TerminalTabs" Padding="0" FontSize="12"/>
+        <TabControl x:Name="TerminalTabs" Padding="0" FontSize="11"/>
     </DockPanel>
 </Window>

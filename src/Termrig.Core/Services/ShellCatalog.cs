@@ -25,7 +25,7 @@ namespace Termrig.Core.Services
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                shells.Add(new ShellDescriptor { Shell = ShellType.Cmd, Name = "cmd.exe", Executable = "cmd.exe" });
+                shells.Add(new ShellDescriptor { Shell = ShellType.Cmd, Name = "cmd.exe", Executable = ResolveCmdExecutable() });
                 shells.Add(new ShellDescriptor { Shell = ShellType.PowerShell, Name = "PowerShell", Executable = ResolvePowerShellExecutable() });
             }
             else
@@ -126,10 +126,30 @@ namespace Termrig.Core.Services
 
         #region Private-Methods
 
+        private static string ResolveCmdExecutable()
+        {
+            string candidate = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+            if (File.Exists(candidate)) return candidate;
+
+            string? pathCandidate = ResolveWindowsExecutable("cmd.exe");
+            if (!String.IsNullOrWhiteSpace(pathCandidate)) return pathCandidate;
+            return "cmd.exe";
+        }
+
         private static string ResolvePowerShellExecutable()
         {
             string? pwsh = ResolveWindowsExecutable("pwsh.exe");
             if (!String.IsNullOrWhiteSpace(pwsh)) return pwsh;
+
+            string windowsPowerShell = Path.Combine(
+                Environment.SystemDirectory,
+                "WindowsPowerShell",
+                "v1.0",
+                "powershell.exe");
+            if (File.Exists(windowsPowerShell)) return windowsPowerShell;
+
+            string? powershell = ResolveWindowsExecutable("powershell.exe");
+            if (!String.IsNullOrWhiteSpace(powershell)) return powershell;
             return "powershell.exe";
         }
 

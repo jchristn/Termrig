@@ -48,6 +48,37 @@ namespace Termrig.Core.Models
         public ColorScheme GlobalColorScheme { get; set; } = new ColorScheme();
 
         /// <summary>
+        /// Optional profile-wide terminal font family. Null means the system/default font is used.
+        /// </summary>
+        public string? FontFamily
+        {
+            get
+            {
+                return _FontFamily;
+            }
+            set
+            {
+                if (value != null && String.IsNullOrWhiteSpace(value)) throw new ArgumentNullException(nameof(FontFamily));
+                _FontFamily = value;
+            }
+        }
+
+        /// <summary>
+        /// Optional profile-wide terminal font size. Null means the system/default font size is used. Minimum is 8 and maximum is 36.
+        /// </summary>
+        public double? FontSize
+        {
+            get
+            {
+                return _FontSize;
+            }
+            set
+            {
+                _FontSize = value.HasValue ? Math.Clamp(value.Value, 8, 36) : null;
+            }
+        }
+
+        /// <summary>
         /// Tabs opened when the profile is launched.
         /// </summary>
         public List<TerminalTabProfile> Tabs { get; set; } = new List<TerminalTabProfile>();
@@ -58,6 +89,8 @@ namespace Termrig.Core.Models
 
         private string _Id = Guid.NewGuid().ToString("N");
         private string _Name = "New Profile";
+        private string? _FontFamily = null;
+        private double? _FontSize = null;
 
         #endregion
     }

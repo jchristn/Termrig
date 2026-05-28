@@ -7,7 +7,7 @@ Termrig is an Avalonia desktop terminal profile manager. It opens a profile as a
 - Windows shell support for `cmd.exe` and PowerShell.
 - macOS/Linux shell support for `bash`.
 - Profile management from the main window: create, delete, rename, save, and apply a global color scheme.
-- Per-tab settings: name, shell, starting directory, startup script, and optional color override.
+- Per-tab settings: name, shell, starting directory, startup script, font, and optional color override.
 - Tabbed terminal workspace with a `Save profile` action that overwrites the existing profile.
 - Profiles are stored as JSON under `~/.termrig/profiles.json`.
 
@@ -16,7 +16,9 @@ Termrig is an Avalonia desktop terminal profile manager. It opens a profile as a
 ```powershell
 dotnet restore src/Termrig.slnx
 dotnet build src/Termrig.slnx
+dotnet run --project src/Test.Automated/Test.Automated.csproj --framework net10.0
 dotnet test src/Test.Xunit/Test.Xunit.csproj
+dotnet test src/Test.Nunit/Test.Nunit.csproj
 ```
 
 ## Run

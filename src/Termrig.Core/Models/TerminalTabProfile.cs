@@ -47,9 +47,9 @@ namespace Termrig.Core.Models
         public ColorScheme? ColorSchemeOverride { get; set; } = null;
 
         /// <summary>
-        /// Terminal font family. Default is "Cascadia Mono,Consolas,Menlo,monospace".
+        /// Optional terminal font family override. Null means the profile font is used.
         /// </summary>
-        public string FontFamily
+        public string? FontFamily
         {
             get
             {
@@ -57,15 +57,15 @@ namespace Termrig.Core.Models
             }
             set
             {
-                if (String.IsNullOrWhiteSpace(value)) throw new ArgumentNullException(nameof(FontFamily));
+                if (value != null && String.IsNullOrWhiteSpace(value)) throw new ArgumentNullException(nameof(FontFamily));
                 _FontFamily = value;
             }
         }
 
         /// <summary>
-        /// Terminal font size. Default is 14. Minimum is 8 and maximum is 36.
+        /// Optional terminal font size override. Null means the profile font size is used. Minimum is 8 and maximum is 36.
         /// </summary>
-        public double FontSize
+        public double? FontSize
         {
             get
             {
@@ -73,7 +73,7 @@ namespace Termrig.Core.Models
             }
             set
             {
-                _FontSize = Math.Clamp(value, 8, 36);
+                _FontSize = value.HasValue ? Math.Clamp(value.Value, 8, 36) : null;
             }
         }
 
@@ -82,8 +82,8 @@ namespace Termrig.Core.Models
         #region Private-Members
 
         private string _Name = "Terminal";
-        private string _FontFamily = "Cascadia Mono,Consolas,Menlo,monospace";
-        private double _FontSize = 14;
+        private string? _FontFamily = null;
+        private double? _FontSize = null;
 
         #endregion
     }
