@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Termrig.App.Views.ColorSchemeEditorWindow"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/termrig-logo.ico"
         Title="Color Scheme"
         Width="440"
         Height="430"

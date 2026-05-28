@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Termrig.App.Views.SplashWindow"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/termrig-logo.ico"
         Title="Termrig"
         Width="420"
         Height="360"
@@ -11,27 +11,7 @@
         Background="#0F141A">
     <Grid RowDefinitions="*,Auto" Margin="28">
         <StackPanel Grid.Row="0" Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-            <Border Width="112"
-                    Height="112"
-                    Background="#10161D"
-                    BorderBrush="#43B581"
-                    BorderThickness="2"
-                    CornerRadius="16"
-                    BoxShadow="0 12 28 0 #66000000">
-                <Grid RowDefinitions="24,*">
-                    <Border Grid.Row="0" Background="#17212B" CornerRadius="14,14,0,0">
-                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="12,0,0,0" VerticalAlignment="Center">
-                            <Ellipse Width="7" Height="7" Fill="#FF5F57"/>
-                            <Ellipse Width="7" Height="7" Fill="#FFBD2E"/>
-                            <Ellipse Width="7" Height="7" Fill="#28C840"/>
-                        </StackPanel>
-                    </Border>
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
-                        <TextBlock Text="&gt;" Foreground="#43B581" FontSize="34" FontWeight="SemiBold" FontFamily="Consolas"/>
-                        <TextBlock Text="_" Foreground="#E6EDF3" FontSize="34" FontWeight="SemiBold" FontFamily="Consolas"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
+            <Image Source="/Assets/termrig-logo.ico" Width="128" Height="128"/>
             <TextBlock Text="Termrig" Foreground="#FFFFFF" FontSize="28" FontWeight="SemiBold" HorizontalAlignment="Center"/>
         </StackPanel>
 
