@@ -25,6 +25,11 @@ namespace Termrig.App.Models
         public Control Header { get; set; } = new Border();
 
         /// <summary>
+        /// Initial runtime font size used by reset zoom.
+        /// </summary>
+        public double RuntimeDefaultFontSize { get; set; } = 12;
+
+        /// <summary>
         /// Whether this runtime tab is already part of the saved profile.
         /// </summary>
         public bool IsProfileMember { get; set; } = true;

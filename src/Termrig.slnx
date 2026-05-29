@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="Termrig.App/Termrig.App.csproj" />
   <Project Path="Termrig.Core/Termrig.Core.csproj" />
+  <Project Path="ThirdParty/Iciclecreek.Avalonia.Terminal/Iciclecreek.Avalonia.Terminal.csproj" />
   <Project Path="Test.Automated/Test.Automated.csproj" />
   <Project Path="Test.Nunit/Test.Nunit.csproj" />
   <Project Path="Test.Shared/Test.Shared.csproj" />

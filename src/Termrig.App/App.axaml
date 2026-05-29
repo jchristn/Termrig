@@ -69,11 +69,11 @@
             <Setter Property="Margin" Value="0"/>
         </Style>
         <Style Selector="ListBox.tabsTable ListBoxItem:selected">
-            <Setter Property="Background" Value="#1A2632"/>
+            <Setter Property="Background" Value="#203A50"/>
         </Style>
         <Style Selector="ListBox.tabsTable ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#1A2632"/>
-            <Setter Property="BorderBrush" Value="#2D4354"/>
+            <Setter Property="Background" Value="#203A50"/>
+            <Setter Property="BorderBrush" Value="#58A6FF"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
         </Style>
         <Style Selector="TabControl">

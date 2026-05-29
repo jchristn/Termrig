@@ -80,7 +80,8 @@ namespace Termrig.App.Views
             DeleteTabButton.Click += OnDeleteTabClicked;
             MoveTabUpButton.Click += OnMoveTabUpClicked;
             MoveTabDownButton.Click += OnMoveTabDownClicked;
-            TabsList.Tapped += OnTabsListTapped;
+            ProfileList.DoubleTapped += OnProfileListDoubleTapped;
+            TabsList.DoubleTapped += OnTabsListDoubleTapped;
             ProfileList.SelectionChanged += OnProfileSelectionChanged;
             GlobalSchemeCombo.SelectionChanged += OnGlobalSchemeChanged;
             SchemeBackgroundPicker.ColorChanged += OnColorPickerChanged;
@@ -229,6 +230,16 @@ namespace Termrig.App.Views
             OpenWorkspace(_SelectedProfile);
         }
 
+        private void OnProfileListDoubleTapped(object? sender, TappedEventArgs e)
+        {
+            if (!(e.Source is Control source)) return;
+            if (!(source is ListBoxItem) && source.FindAncestorOfType<ListBoxItem>() == null) return;
+
+            ApplyEditorToProfile();
+            if (_SelectedProfile == null) return;
+            OpenWorkspace(_SelectedProfile);
+        }
+
         /// <summary>
         /// Open a profile workspace by profile name.
         /// </summary>
@@ -368,10 +379,11 @@ namespace Termrig.App.Views
             await EditSelectedTabAsync().ConfigureAwait(true);
         }
 
-        private async void OnTabsListTapped(object? sender, TappedEventArgs e)
+        private async void OnTabsListDoubleTapped(object? sender, TappedEventArgs e)
         {
             if (!(e.Source is Control source)) return;
             if (!(source is ListBoxItem) && source.FindAncestorOfType<ListBoxItem>() == null) return;
+
             await EditSelectedTabAsync().ConfigureAwait(true);
         }
 
