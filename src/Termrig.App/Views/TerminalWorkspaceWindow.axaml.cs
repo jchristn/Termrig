@@ -5,6 +5,7 @@ namespace Termrig.App.Views
     using Avalonia.Input;
     using Avalonia.Media;
     using Avalonia.Threading;
+    using Avalonia.VisualTree;
     using Iciclecreek.Terminal;
     using System;
     using System.Collections.Generic;
@@ -30,12 +31,17 @@ namespace Termrig.App.Views
         private readonly CrashLogStore _CrashLogStore = new CrashLogStore();
         private readonly List<ColorScheme> _ColorSchemes;
         private readonly List<TerminalSession> _Sessions = new List<TerminalSession>();
+        private readonly DispatcherTimer _TerminalRenderRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         private TerminalSession? _SelectedSession = null;
         private static readonly FieldInfo? _TerminalViewField = typeof(TerminalControl).GetField("_terminalView", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo? _PtyConnectionField = typeof(TerminalView).GetField("_ptyConnection", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo? _ProcessCancellationField = typeof(TerminalView).GetField("_processCts", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly MethodInfo? _SendToPtyMethod = typeof(TerminalView).GetMethod("SendToPtyAsync", BindingFlags.Instance | BindingFlags.NonPublic);
         private bool _IsClosingWorkspace = false;
+        private bool _SuppressNextShortcutTextInput = false;
+        private const double TerminalFontZoomStep = 1;
+        private const double MinimumTerminalFontSize = 8;
+        private const double MaximumTerminalFontSize = 36;
 
         #endregion
 
@@ -102,6 +108,9 @@ namespace Termrig.App.Views
             SaveProfileButton.Click += OnSaveProfileClicked;
             AddHandler(KeyDownEvent, OnWindowPreviewKeyDown, RoutingStrategies.Tunnel, true);
             AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Bubble, true);
+            AddHandler(TextInputEvent, OnWindowTextInput, RoutingStrategies.Tunnel, true);
+            _TerminalRenderRefreshTimer.Tick += OnTerminalRenderRefreshTick;
+            _TerminalRenderRefreshTimer.Start();
             Opened += OnWorkspaceOpened;
             Closing += OnWindowClosing;
         }
@@ -144,7 +153,8 @@ namespace Termrig.App.Views
                 Focusable = true,
                 IsHitTestVisible = false,
                 Opacity = 0,
-                Process = String.Empty
+                Process = String.Empty,
+                Options = BuildTerminalOptions(tab)
             };
             ApplyTerminalAppearance(terminal, _Profile, tab, scheme);
 
@@ -153,7 +163,8 @@ namespace Termrig.App.Views
                 TabProfile = tab,
                 Terminal = terminal,
                 IsProfileMember = isProfileMember,
-                LaunchPlan = plan
+                LaunchPlan = plan,
+                RuntimeDefaultFontSize = terminal.FontSize
             };
 
             session.Header = BuildTabHeader(session);
@@ -216,10 +227,17 @@ namespace Termrig.App.Views
 
         private async void OnEditTabClicked(object? sender, RoutedEventArgs e)
         {
-            Int32 index = _SelectedSession == null ? -1 : _Sessions.IndexOf(_SelectedSession);
+            TerminalSession? session = GetSelectedSession();
+            if (session == null) return;
+
+            await EditSessionTabAsync(session).ConfigureAwait(true);
+        }
+
+        private async Task EditSessionTabAsync(TerminalSession session)
+        {
+            Int32 index = _Sessions.IndexOf(session);
             if (index < 0 || index >= _Sessions.Count) return;
 
-            TerminalSession session = _Sessions[index];
             TerminalTabEditorWindow editor = new TerminalTabEditorWindow(session.TabProfile, _ShellCatalog.GetSupportedShells(), _ColorSchemes);
             TerminalTabProfile? updated = await editor.ShowDialog<TerminalTabProfile?>(this).ConfigureAwait(true);
             if (updated == null) return;
@@ -250,6 +268,8 @@ namespace Termrig.App.Views
         {
             if (_IsClosingWorkspace) return;
             _IsClosingWorkspace = true;
+            _TerminalRenderRefreshTimer.Stop();
+            _TerminalRenderRefreshTimer.Tick -= OnTerminalRenderRefreshTick;
 
             foreach (TerminalSession session in _Sessions.ToList())
             {
@@ -290,10 +310,24 @@ namespace Termrig.App.Views
             CloseSelectedTab();
         }
 
+        private void OnWindowTextInput(object? sender, TextInputEventArgs e)
+        {
+            if (!_SuppressNextShortcutTextInput) return;
+
+            _SuppressNextShortcutTextInput = false;
+            if (e.Text != "+" && e.Text != "=" && e.Text != "-") return;
+            e.Handled = true;
+        }
+
         private async void OnWindowPreviewKeyDown(object? sender, KeyEventArgs e)
         {
             TerminalSession? session = GetSelectedSession();
             if (session == null) return;
+
+            if (TryHandleTerminalControlShortcut(session, e))
+            {
+                return;
+            }
 
             if (e.Key == Key.V && (e.KeyModifiers & KeyModifiers.Control) == KeyModifiers.Control)
             {
@@ -329,6 +363,101 @@ namespace Termrig.App.Views
             session.Terminal.Terminal.Selection.ClearSelection();
         }
 
+        private bool TryHandleTerminalControlShortcut(TerminalSession session, KeyEventArgs e)
+        {
+            if ((e.KeyModifiers & KeyModifiers.Control) != KeyModifiers.Control) return false;
+            if ((e.KeyModifiers & KeyModifiers.Alt) == KeyModifiers.Alt) return false;
+
+            if (IsIncreaseFontKey(e))
+            {
+                e.Handled = true;
+                _SuppressNextShortcutTextInput = true;
+                AdjustTerminalFontSize(session, TerminalFontZoomStep);
+                return true;
+            }
+
+            if (IsDecreaseFontKey(e))
+            {
+                e.Handled = true;
+                _SuppressNextShortcutTextInput = true;
+                AdjustTerminalFontSize(session, -TerminalFontZoomStep);
+                return true;
+            }
+
+            if (IsResetFontKey(e))
+            {
+                e.Handled = true;
+                _SuppressNextShortcutTextInput = true;
+                SetTerminalFontSize(session, session.RuntimeDefaultFontSize);
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsIncreaseFontKey(KeyEventArgs e)
+        {
+            return
+                e.Key == Key.OemPlus ||
+                e.Key == Key.Add ||
+                e.PhysicalKey == PhysicalKey.Equal ||
+                e.PhysicalKey == PhysicalKey.NumPadAdd ||
+                e.KeySymbol == "+" ||
+                e.KeySymbol == "=";
+        }
+
+        private static bool IsDecreaseFontKey(KeyEventArgs e)
+        {
+            return
+                e.Key == Key.OemMinus ||
+                e.Key == Key.Subtract ||
+                e.PhysicalKey == PhysicalKey.Minus ||
+                e.PhysicalKey == PhysicalKey.NumPadSubtract ||
+                e.KeySymbol == "-";
+        }
+
+        private static bool IsResetFontKey(KeyEventArgs e)
+        {
+            return
+                e.Key == Key.D0 ||
+                e.Key == Key.NumPad0 ||
+                e.PhysicalKey == PhysicalKey.Digit0 ||
+                e.PhysicalKey == PhysicalKey.NumPad0;
+        }
+
+        private void AdjustTerminalFontSize(TerminalSession session, double delta)
+        {
+            SetTerminalFontSize(session, session.Terminal.FontSize + delta);
+        }
+
+        private void SetTerminalFontSize(TerminalSession session, double fontSize)
+        {
+            double clamped = Math.Clamp(fontSize, MinimumTerminalFontSize, MaximumTerminalFontSize);
+            session.Terminal.FontSize = clamped;
+            UpdateProfileFontSize(session, clamped);
+            ClearTerminalLineCaches(session.Terminal);
+            InvalidateTerminalView(session.Terminal);
+        }
+
+        private void UpdateProfileFontSize(TerminalSession session, double fontSize)
+        {
+            session.TabProfile.FontSize = fontSize;
+
+            if (session.IsProfileMember)
+            {
+                _ = _ProfileStore.UpsertAsync(_Profile, CancellationToken.None);
+            }
+        }
+
+        private void OnTerminalRenderRefreshTick(object? sender, EventArgs e)
+        {
+            TerminalSession? session = GetSelectedSession();
+            if (session == null) return;
+
+            ClearTerminalLineCaches(session.Terminal);
+            InvalidateTerminalView(session.Terminal);
+        }
+
         private Control BuildTabHeader(TerminalSession session)
         {
             Border container = new Border
@@ -342,6 +471,7 @@ namespace Termrig.App.Views
             };
             container.Tag = session;
             container.PointerPressed += OnTabHeaderPointerPressed;
+            container.DoubleTapped += OnTabHeaderDoubleTapped;
 
             StackPanel panel = new StackPanel
             {
@@ -357,7 +487,6 @@ namespace Termrig.App.Views
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
                 Tag = session
             };
-            title.DoubleTapped += OnTabTitleDoubleTapped;
             panel.Children.Add(title);
 
             if (!session.IsProfileMember)
@@ -393,21 +522,14 @@ namespace Termrig.App.Views
             return container;
         }
 
-        private async void OnTabTitleDoubleTapped(object? sender, TappedEventArgs e)
+        private async void OnTabHeaderDoubleTapped(object? sender, TappedEventArgs e)
         {
+            if (e.Source is Control source && (source is Button || source.FindAncestorOfType<Button>() != null)) return;
             if (!(sender is Control control)) return;
             if (!(control.Tag is TerminalSession session)) return;
 
-            TextPromptWindow prompt = new TextPromptWindow("Rename tab", "Tab name", session.TabProfile.Name);
-            string? name = await prompt.ShowDialog<string?>(this).ConfigureAwait(true);
-            if (String.IsNullOrWhiteSpace(name)) return;
-
-            session.TabProfile.Name = name;
-            ReplaceTabHeader(session);
-            if (session.IsProfileMember)
-            {
-                await _ProfileStore.UpsertAsync(_Profile, CancellationToken.None).ConfigureAwait(true);
-            }
+            SelectSession(session);
+            await EditSessionTabAsync(session).ConfigureAwait(true);
         }
 
         private void OnTabHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -635,6 +757,7 @@ namespace Termrig.App.Views
             ApplyFontFamily(terminal, fontFamily);
             terminal.FontSize = fontSize;
             terminal.BufferSize = ResolveTerminalBufferSize(tab);
+            terminal.Options = BuildTerminalOptions(tab);
             terminal.Background = Brush.Parse(scheme.Background);
             terminal.Foreground = Brush.Parse(scheme.Foreground);
         }
@@ -642,6 +765,16 @@ namespace Termrig.App.Views
         private static int ResolveTerminalBufferSize(TerminalTabProfile tab)
         {
             return tab.ScrollbackBufferSize ?? Constants.DefaultTerminalBufferSize;
+        }
+
+        private static XTerm.Options.TerminalOptions BuildTerminalOptions(TerminalTabProfile tab)
+        {
+            return new XTerm.Options.TerminalOptions
+            {
+                ConvertEol = true,
+                Scrollback = ResolveTerminalBufferSize(tab),
+                TermName = "xterm-256color"
+            };
         }
 
         private static void ApplyFontFamily(TerminalControl terminal, string fontFamily)
@@ -667,6 +800,39 @@ namespace Termrig.App.Views
             if (OperatingSystem.IsWindows()) return "Consolas";
             if (OperatingSystem.IsMacOS()) return "Menlo";
             return "DejaVu Sans Mono";
+        }
+
+        private static void ClearTerminalLineCaches(TerminalControl terminal)
+        {
+            try
+            {
+                XTerm.Terminal xterm = terminal.Terminal;
+                int start = Math.Max(0, xterm.Buffer.ViewportY - 1);
+                int end = Math.Min(xterm.Buffer.Length - 1, xterm.Buffer.ViewportY + xterm.Rows + 1);
+                for (int index = start; index <= end; index++)
+                {
+                    XTerm.Buffer.BufferLine? line = xterm.Buffer.GetLine(index);
+                    if (line != null) line.Cache = null;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (NullReferenceException)
+            {
+            }
+        }
+
+        private static void InvalidateTerminalView(TerminalControl terminal)
+        {
+            if (_TerminalViewField?.GetValue(terminal) is TerminalView terminalView)
+            {
+                terminalView.InvalidateVisual();
+            }
+            else
+            {
+                terminal.InvalidateVisual();
+            }
         }
 
         private async void ShowTerminalLaunchError(TerminalTabProfile tab, ShellLaunchPlan plan, Exception exception)

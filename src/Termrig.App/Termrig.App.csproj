@@ -27,10 +27,10 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.2" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.2" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
-    <PackageReference Include="Iciclecreek.Avalonia.Terminal" Version="2.0.3" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ThirdParty\Iciclecreek.Avalonia.Terminal\Iciclecreek.Avalonia.Terminal.csproj" />
     <ProjectReference Include="..\Termrig.Core\Termrig.Core.csproj" />
   </ItemGroup>
 </Project>
