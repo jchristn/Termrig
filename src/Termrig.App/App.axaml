@@ -54,6 +54,16 @@
             <Setter Property="BorderBrush" Value="#283540"/>
             <Setter Property="FontSize" Value="12"/>
         </Style>
+        <Style Selector="ListBoxItem.draggingItem /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#315E7A"/>
+            <Setter Property="BorderBrush" Value="#8BD5FF"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
+        <Style Selector="ListBoxItem.dropTargetItem /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#23435A"/>
+            <Setter Property="BorderBrush" Value="#58A6FF"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
         <Style Selector="ListBox.tabsTable">
             <Setter Property="Padding" Value="0"/>
             <Setter Property="BorderThickness" Value="0"/>
