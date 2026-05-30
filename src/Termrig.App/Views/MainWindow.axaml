@@ -39,7 +39,13 @@
                             </Button>
                         </StackPanel>
                     </StackPanel>
-                    <ListBox x:Name="ProfileList" Margin="0,14,0,0"/>
+                    <ListBox x:Name="ProfileList" Margin="0,14,0,0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:TerminalProfile">
+                                <TextBlock Text="{Binding Name}"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </DockPanel>
             </Border>
 

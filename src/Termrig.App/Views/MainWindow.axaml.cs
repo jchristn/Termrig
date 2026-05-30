@@ -1,9 +1,11 @@
 namespace Termrig.App.Views
 {
+    using Avalonia;
     using Avalonia.Controls;
     using Avalonia.Interactivity;
     using Avalonia.Input;
     using Avalonia.Media;
+    using Avalonia.Threading;
     using Avalonia.VisualTree;
     using System;
     using System.Collections.Generic;
@@ -42,6 +44,25 @@ namespace Termrig.App.Views
         private List<ColorScheme> _ColorSchemes = ColorSchemeCatalog.GetSchemes();
         private List<TerminalProfile> _Profiles = new List<TerminalProfile>();
         private TerminalProfile? _SelectedProfile = null;
+        private TerminalProfile? _DraggedProfile = null;
+        private TerminalTabProfile? _DraggedTab = null;
+        private TerminalProfile? _DraggedTabSourceProfile = null;
+        private Control? _DraggedControl = null;
+        private Control? _DropTargetControl = null;
+        private TerminalProfile? _PendingDraggedProfile = null;
+        private TerminalTabProfile? _PendingDraggedTab = null;
+        private TerminalProfile? _PendingDraggedTabSourceProfile = null;
+        private ListBoxItem? _PendingDragItem = null;
+        private PointerPressedEventArgs? _PendingDragPressedEvent = null;
+        private Point _PendingDragStartPoint;
+        private bool _IsStartingDrag = false;
+        private bool _DropHandled = false;
+        private int? _LastProfileDropIndex = null;
+        private TerminalProfile? _LastProfileDropTargetProfile = null;
+        private int? _LastTabDropIndex = null;
+        private const string DraggingItemClass = "draggingItem";
+        private const string DropTargetItemClass = "dropTargetItem";
+        private const double DragStartThreshold = 4;
         private readonly List<TerminalWorkspaceWindow> _WorkspaceWindows = new List<TerminalWorkspaceWindow>();
         private readonly TaskCompletionSource<bool> _ProfilesLoaded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -86,6 +107,20 @@ namespace Termrig.App.Views
             GlobalSchemeCombo.SelectionChanged += OnGlobalSchemeChanged;
             SchemeBackgroundPicker.ColorChanged += OnColorPickerChanged;
             SchemeForegroundPicker.ColorChanged += OnColorPickerChanged;
+            ProfileList.AddHandler(PointerPressedEvent, OnProfileListPointerPressed, RoutingStrategies.Bubble, true);
+            TabsList.AddHandler(PointerPressedEvent, OnTabsListPointerPressed, RoutingStrategies.Bubble, true);
+            ProfileList.AddHandler(PointerMovedEvent, OnProfileListPointerMoved, RoutingStrategies.Bubble, true);
+            TabsList.AddHandler(PointerMovedEvent, OnTabsListPointerMoved, RoutingStrategies.Bubble, true);
+            ProfileList.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Bubble, true);
+            TabsList.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Bubble, true);
+            DragDrop.SetAllowDrop(ProfileList, true);
+            DragDrop.SetAllowDrop(TabsList, true);
+            DragDrop.AddDragOverHandler(ProfileList, OnProfileListDragOver);
+            DragDrop.AddDropHandler(ProfileList, OnProfileListDrop);
+            DragDrop.AddDragLeaveHandler(ProfileList, OnListDragLeave);
+            DragDrop.AddDragOverHandler(TabsList, OnTabsListDragOver);
+            DragDrop.AddDropHandler(TabsList, OnTabsListDrop);
+            DragDrop.AddDragLeaveHandler(TabsList, OnListDragLeave);
         }
 
         private void InitializeLists()
@@ -139,7 +174,8 @@ namespace Termrig.App.Views
 
         private void RefreshProfiles()
         {
-            ProfileList.ItemsSource = _Profiles.Select(item => item.Name).ToList();
+            ProfileList.ItemsSource = null;
+            ProfileList.ItemsSource = _Profiles;
         }
 
         private void RefreshEditor()
@@ -447,6 +483,395 @@ namespace Termrig.App.Views
         private void OnColorPickerChanged(object? sender, ColorChangedEventArgs e)
         {
             ApplyEditorToProfile();
+        }
+
+        private void OnProfileListPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (!e.GetCurrentPoint(ProfileList).Properties.IsLeftButtonPressed) return;
+            if (!(e.Source is Control source)) return;
+            if (source is Button || source.FindAncestorOfType<Button>() != null) return;
+            ListBoxItem? item = GetListBoxItem(source);
+            if (!(item?.DataContext is TerminalProfile profile)) return;
+
+            ClearPendingDrag();
+            _PendingDraggedProfile = profile;
+            _PendingDragItem = item;
+            _PendingDragPressedEvent = e;
+            _PendingDragStartPoint = e.GetPosition(ProfileList);
+        }
+
+        private void OnTabsListPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (_SelectedProfile == null) return;
+            if (!e.GetCurrentPoint(TabsList).Properties.IsLeftButtonPressed) return;
+            if (!(e.Source is Control source)) return;
+            if (source is Button || source.FindAncestorOfType<Button>() != null) return;
+            ListBoxItem? item = GetListBoxItem(source);
+            if (!(item?.DataContext is TerminalTabProfile tab)) return;
+
+            ClearPendingDrag();
+            _PendingDraggedTab = tab;
+            _PendingDraggedTabSourceProfile = _SelectedProfile;
+            _PendingDragItem = item;
+            _PendingDragPressedEvent = e;
+            _PendingDragStartPoint = e.GetPosition(TabsList);
+        }
+
+        private async void OnProfileListPointerMoved(object? sender, PointerEventArgs e)
+        {
+            if (_PendingDraggedProfile == null || _PendingDragItem == null) return;
+            if (!ShouldStartDrag(e, ProfileList)) return;
+
+            _IsStartingDrag = true;
+            _DraggedProfile = _PendingDraggedProfile;
+            _DraggedTab = null;
+            _DraggedTabSourceProfile = null;
+            _DropHandled = false;
+            ClearLastDropTargets();
+            ListBoxItem dragItem = _PendingDragItem;
+            PointerPressedEventArgs? triggerEvent = _PendingDragPressedEvent;
+            if (triggerEvent == null) return;
+            ClearPendingDrag(e);
+            MarkDraggedControl(dragItem);
+            try
+            {
+                await FlushDragVisualAsync().ConfigureAwait(true);
+                DataTransfer data = new DataTransfer();
+                data.Add(DataTransferItem.CreateText("termrig-profile:" + _DraggedProfile.Id));
+                DragDropEffects result = await DragDrop.DoDragDropAsync(triggerEvent, data, DragDropEffects.Move).ConfigureAwait(true);
+                if (!_DropHandled && result == DragDropEffects.Move && _LastProfileDropIndex.HasValue)
+                {
+                    await MoveDraggedProfileAsync(_LastProfileDropIndex.Value).ConfigureAwait(true);
+                }
+            }
+            finally
+            {
+                _IsStartingDrag = false;
+                ClearDragVisuals();
+                ClearLastDropTargets();
+                _DropHandled = false;
+                _DraggedProfile = null;
+            }
+        }
+
+        private async void OnTabsListPointerMoved(object? sender, PointerEventArgs e)
+        {
+            if (_PendingDraggedTab == null || _PendingDraggedTabSourceProfile == null || _PendingDragItem == null) return;
+            if (!ShouldStartDrag(e, TabsList)) return;
+
+            _IsStartingDrag = true;
+            _DraggedProfile = null;
+            _DraggedTab = _PendingDraggedTab;
+            _DraggedTabSourceProfile = _PendingDraggedTabSourceProfile;
+            _DropHandled = false;
+            ClearLastDropTargets();
+            ListBoxItem dragItem = _PendingDragItem;
+            PointerPressedEventArgs? triggerEvent = _PendingDragPressedEvent;
+            if (triggerEvent == null) return;
+            ClearPendingDrag(e);
+            MarkDraggedControl(dragItem);
+            try
+            {
+                await FlushDragVisualAsync().ConfigureAwait(true);
+                DataTransfer data = new DataTransfer();
+                data.Add(DataTransferItem.CreateText("termrig-tab:" + _DraggedTabSourceProfile.Id + ":" + _DraggedTabSourceProfile.Tabs.IndexOf(_DraggedTab)));
+                DragDropEffects result = await DragDrop.DoDragDropAsync(triggerEvent, data, DragDropEffects.Move).ConfigureAwait(true);
+                if (!_DropHandled && result == DragDropEffects.Move)
+                {
+                    if (_LastTabDropIndex.HasValue)
+                    {
+                        await MoveDraggedTabToProfileAsync(_SelectedProfile, _LastTabDropIndex.Value).ConfigureAwait(true);
+                    }
+                    else if (_LastProfileDropTargetProfile != null)
+                    {
+                        await MoveDraggedTabToProfileAsync(_LastProfileDropTargetProfile, _LastProfileDropTargetProfile.Tabs.Count).ConfigureAwait(true);
+                    }
+                }
+            }
+            finally
+            {
+                _IsStartingDrag = false;
+                ClearDragVisuals();
+                ClearLastDropTargets();
+                _DropHandled = false;
+                _DraggedTab = null;
+                _DraggedTabSourceProfile = null;
+            }
+        }
+
+        private void OnListPointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            ClearPendingDrag(e);
+        }
+
+        private void OnProfileListDragOver(object? sender, DragEventArgs e)
+        {
+            e.DragEffects = _DraggedProfile != null || _DraggedTab != null ? DragDropEffects.Move : DragDropEffects.None;
+            if (_DraggedProfile != null)
+            {
+                _LastProfileDropIndex = GetProfileDropIndex(e);
+                _LastProfileDropTargetProfile = null;
+                _LastTabDropIndex = null;
+            }
+            else if (_DraggedTab != null)
+            {
+                _LastProfileDropIndex = null;
+                _LastProfileDropTargetProfile = GetDropListBoxItem(e)?.DataContext as TerminalProfile;
+                _LastTabDropIndex = null;
+            }
+
+            MarkDropTarget(GetDropListBoxItem(e), e.DragEffects != DragDropEffects.None);
+            e.Handled = true;
+        }
+
+        private async void OnProfileListDrop(object? sender, DragEventArgs e)
+        {
+            if (_DraggedProfile != null)
+            {
+                await DropProfileAsync(e).ConfigureAwait(true);
+                return;
+            }
+
+            if (_DraggedTab != null && _DraggedTabSourceProfile != null)
+            {
+                await DropTabOntoProfileAsync(e).ConfigureAwait(true);
+            }
+
+            ClearDropTarget();
+        }
+
+        private void OnTabsListDragOver(object? sender, DragEventArgs e)
+        {
+            e.DragEffects = _DraggedTab != null && _DraggedTabSourceProfile != null ? DragDropEffects.Move : DragDropEffects.None;
+            if (_DraggedTab != null)
+            {
+                _LastProfileDropIndex = null;
+                _LastProfileDropTargetProfile = null;
+                _LastTabDropIndex = GetTabDropIndex(e);
+            }
+
+            MarkDropTarget(GetDropListBoxItem(e), e.DragEffects != DragDropEffects.None);
+            e.Handled = true;
+        }
+
+        private async void OnTabsListDrop(object? sender, DragEventArgs e)
+        {
+            if (_DraggedTab == null || _DraggedTabSourceProfile == null || _SelectedProfile == null)
+            {
+                ClearDropTarget();
+                return;
+            }
+
+            Int32 targetIndex = GetTabDropIndex(e);
+            await MoveDraggedTabToProfileAsync(_SelectedProfile, targetIndex).ConfigureAwait(true);
+            ClearDropTarget();
+            e.Handled = true;
+        }
+
+        private async Task DropProfileAsync(DragEventArgs e)
+        {
+            if (_DraggedProfile == null)
+            {
+                ClearDropTarget();
+                return;
+            }
+
+            Int32 targetIndex = GetProfileDropIndex(e);
+            await MoveDraggedProfileAsync(targetIndex).ConfigureAwait(true);
+            ClearDropTarget();
+            e.Handled = true;
+        }
+
+        private async Task DropTabOntoProfileAsync(DragEventArgs e)
+        {
+            if (_DraggedTab == null || _DraggedTabSourceProfile == null)
+            {
+                ClearDropTarget();
+                return;
+            }
+
+            ApplyEditorToProfile();
+            if (!(GetDropListBoxItem(e)?.DataContext is TerminalProfile targetProfile))
+            {
+                ClearDropTarget();
+                return;
+            }
+
+            if (targetProfile == _DraggedTabSourceProfile)
+            {
+                ClearDropTarget();
+                return;
+            }
+
+            await MoveDraggedTabToProfileAsync(targetProfile, targetProfile.Tabs.Count).ConfigureAwait(true);
+            ClearDropTarget();
+            e.Handled = true;
+        }
+
+        private async Task MoveDraggedProfileAsync(int targetIndex)
+        {
+            if (_DraggedProfile == null) return;
+            ApplyEditorToProfile();
+
+            string selectedProfileId = _DraggedProfile.Id;
+            Int32 sourceIndex = _Profiles.IndexOf(_DraggedProfile);
+            if (sourceIndex < 0) return;
+
+            _Profiles.RemoveAt(sourceIndex);
+            if (sourceIndex < targetIndex) targetIndex--;
+            targetIndex = Math.Clamp(targetIndex, 0, _Profiles.Count);
+            _Profiles.Insert(targetIndex, _DraggedProfile);
+
+            RefreshProfiles();
+            RestoreSelectedProfile(selectedProfileId);
+            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+            _DropHandled = true;
+        }
+
+        private async Task MoveDraggedTabToProfileAsync(TerminalProfile? targetProfile, int targetIndex)
+        {
+            if (_DraggedTab == null || _DraggedTabSourceProfile == null || targetProfile == null) return;
+            ApplyEditorToProfile();
+
+            TerminalProfile sourceProfile = _DraggedTabSourceProfile;
+            Int32 sourceIndex = sourceProfile.Tabs.IndexOf(_DraggedTab);
+            if (sourceIndex < 0) return;
+
+            sourceProfile.Tabs.RemoveAt(sourceIndex);
+            if (sourceProfile == targetProfile && sourceIndex < targetIndex) targetIndex--;
+            targetIndex = Math.Clamp(targetIndex, 0, targetProfile.Tabs.Count);
+            targetProfile.Tabs.Insert(targetIndex, _DraggedTab);
+
+            RefreshProfiles();
+            RestoreSelectedProfile(targetProfile.Id);
+            RefreshTabs();
+            TabsList.SelectedIndex = Math.Clamp(targetIndex, 0, Math.Max(0, targetProfile.Tabs.Count - 1));
+            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+            _DropHandled = true;
+        }
+
+        private void OnListDragLeave(object? sender, DragEventArgs e)
+        {
+            ClearDropTarget();
+        }
+
+        private void MarkDraggedControl(Control control)
+        {
+            ClearDragVisuals();
+            _DraggedControl = control;
+            control.Classes.Add(DraggingItemClass);
+            control.Opacity = 0.55;
+            control.Cursor = new Cursor(StandardCursorType.SizeAll);
+        }
+
+        private void MarkDropTarget(Control? control, bool isValidTarget)
+        {
+            if (!isValidTarget || control == null || control == _DraggedControl)
+            {
+                ClearDropTarget();
+                return;
+            }
+
+            if (_DropTargetControl == control) return;
+
+            ClearDropTarget();
+            _DropTargetControl = control;
+            control.Classes.Add(DropTargetItemClass);
+            control.Opacity = 0.78;
+            control.Cursor = new Cursor(StandardCursorType.SizeAll);
+        }
+
+        private void ClearDragVisuals()
+        {
+            if (_DraggedControl != null)
+            {
+                _DraggedControl.Classes.Remove(DraggingItemClass);
+                _DraggedControl.Opacity = 1;
+                _DraggedControl.Cursor = null;
+                _DraggedControl = null;
+            }
+
+            ClearDropTarget();
+        }
+
+        private void ClearDropTarget()
+        {
+            if (_DropTargetControl == null) return;
+            _DropTargetControl.Classes.Remove(DropTargetItemClass);
+            if (_DropTargetControl != _DraggedControl) _DropTargetControl.Opacity = 1;
+            _DropTargetControl.Cursor = null;
+            _DropTargetControl = null;
+        }
+
+        private bool ShouldStartDrag(PointerEventArgs e, Control relativeTo)
+        {
+            if (_IsStartingDrag) return false;
+            if (!e.GetCurrentPoint(relativeTo).Properties.IsLeftButtonPressed)
+            {
+                ClearPendingDrag(e);
+                return false;
+            }
+
+            Point current = e.GetPosition(relativeTo);
+            return
+                Math.Abs(current.X - _PendingDragStartPoint.X) >= DragStartThreshold ||
+                Math.Abs(current.Y - _PendingDragStartPoint.Y) >= DragStartThreshold;
+        }
+
+        private void ClearPendingDrag(PointerEventArgs? e = null)
+        {
+            _PendingDraggedProfile = null;
+            _PendingDraggedTab = null;
+            _PendingDraggedTabSourceProfile = null;
+            _PendingDragItem = null;
+            _PendingDragPressedEvent = null;
+        }
+
+        private void ClearLastDropTargets()
+        {
+            _LastProfileDropIndex = null;
+            _LastProfileDropTargetProfile = null;
+            _LastTabDropIndex = null;
+        }
+
+        private Int32 GetProfileDropIndex(DragEventArgs e)
+        {
+            ListBoxItem? item = GetDropListBoxItem(e);
+            if (!(item?.DataContext is TerminalProfile profile)) return _Profiles.Count;
+
+            Int32 index = _Profiles.IndexOf(profile);
+            if (index < 0) return _Profiles.Count;
+            return IsDropAfterItem(e, item) ? index + 1 : index;
+        }
+
+        private Int32 GetTabDropIndex(DragEventArgs e)
+        {
+            ListBoxItem? item = GetDropListBoxItem(e);
+            if (_SelectedProfile == null || !(item?.DataContext is TerminalTabProfile tab)) return _SelectedProfile?.Tabs.Count ?? 0;
+
+            Int32 index = _SelectedProfile.Tabs.IndexOf(tab);
+            if (index < 0) return _SelectedProfile.Tabs.Count;
+            return IsDropAfterItem(e, item) ? index + 1 : index;
+        }
+
+        private static ListBoxItem? GetDropListBoxItem(RoutedEventArgs e)
+        {
+            return e.Source is Control source ? GetListBoxItem(source) : null;
+        }
+
+        private static ListBoxItem? GetListBoxItem(Control source)
+        {
+            return source as ListBoxItem ?? source.FindAncestorOfType<ListBoxItem>();
+        }
+
+        private static async Task FlushDragVisualAsync()
+        {
+            await Dispatcher.UIThread.InvokeAsync(delegate { }, DispatcherPriority.Render);
+        }
+
+        private static bool IsDropAfterItem(DragEventArgs e, ListBoxItem item)
+        {
+            return e.GetPosition(item).Y > item.Bounds.Height / 2;
         }
 
         private void MoveSelectedTab(Int32 offset)

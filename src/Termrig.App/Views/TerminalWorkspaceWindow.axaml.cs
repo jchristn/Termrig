@@ -33,6 +33,8 @@ namespace Termrig.App.Views
         private readonly List<TerminalSession> _Sessions = new List<TerminalSession>();
         private readonly DispatcherTimer _TerminalRenderRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         private TerminalSession? _SelectedSession = null;
+        private TerminalSession? _DraggedSession = null;
+        private Control? _DropTargetHeader = null;
         private static readonly FieldInfo? _TerminalViewField = typeof(TerminalControl).GetField("_terminalView", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo? _PtyConnectionField = typeof(TerminalView).GetField("_ptyConnection", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo? _ProcessCancellationField = typeof(TerminalView).GetField("_processCts", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -113,6 +115,10 @@ namespace Termrig.App.Views
             _TerminalRenderRefreshTimer.Start();
             Opened += OnWorkspaceOpened;
             Closing += OnWindowClosing;
+            DragDrop.SetAllowDrop(TerminalTabHeaders, true);
+            DragDrop.AddDragOverHandler(TerminalTabHeaders, OnTabHeadersDragOver);
+            DragDrop.AddDropHandler(TerminalTabHeaders, OnTabHeadersDrop);
+            DragDrop.AddDragLeaveHandler(TerminalTabHeaders, OnTabHeadersDragLeave);
         }
 
         private void LaunchProfile()
@@ -532,11 +538,165 @@ namespace Termrig.App.Views
             await EditSessionTabAsync(session).ConfigureAwait(true);
         }
 
-        private void OnTabHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
+        private async void OnTabHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
         {
+            if (e.Source is Control source && (source is Button || source.FindAncestorOfType<Button>() != null)) return;
             if (!(sender is Control control)) return;
             if (!(control.Tag is TerminalSession session)) return;
+
             SelectSession(session);
+            _DraggedSession = session;
+            MarkDraggedHeader(session);
+            try
+            {
+                DataTransfer data = new DataTransfer();
+                data.Add(DataTransferItem.CreateText("termrig-workspace-tab:" + _Sessions.IndexOf(session)));
+                await DragDrop.DoDragDropAsync(e, data, DragDropEffects.Move).ConfigureAwait(true);
+            }
+            finally
+            {
+                ClearHeaderDragVisuals();
+                _DraggedSession = null;
+            }
+        }
+
+        private void OnTabHeadersDragOver(object? sender, DragEventArgs e)
+        {
+            e.DragEffects = _DraggedSession != null ? DragDropEffects.Move : DragDropEffects.None;
+            MarkDropTargetHeader(GetTabHeaderDropTarget(e), e.DragEffects != DragDropEffects.None);
+            e.Handled = true;
+        }
+
+        private async void OnTabHeadersDrop(object? sender, DragEventArgs e)
+        {
+            if (_DraggedSession == null) return;
+
+            Int32 sourceIndex = _Sessions.IndexOf(_DraggedSession);
+            if (sourceIndex < 0) return;
+
+            Int32 targetIndex = GetTabHeaderDropIndex(e);
+            _Sessions.RemoveAt(sourceIndex);
+            TerminalTabHeaders.Children.Remove(_DraggedSession.Header);
+            if (sourceIndex < targetIndex) targetIndex--;
+            targetIndex = Math.Clamp(targetIndex, 0, _Sessions.Count);
+            _Sessions.Insert(targetIndex, _DraggedSession);
+            TerminalTabHeaders.Children.Insert(targetIndex, _DraggedSession.Header);
+            SelectSession(_DraggedSession);
+            await PersistProfileTabOrderAsync().ConfigureAwait(true);
+            ClearDropTargetHeader();
+            e.Handled = true;
+        }
+
+        private void OnTabHeadersDragLeave(object? sender, DragEventArgs e)
+        {
+            ClearDropTargetHeader();
+        }
+
+        private Int32 GetTabHeaderDropIndex(DragEventArgs e)
+        {
+            if (e.Source is Control source)
+            {
+                Control? current = source;
+                while (current != null)
+                {
+                    if (current is Border border && border.Tag is TerminalSession session)
+                    {
+                        Int32 index = _Sessions.IndexOf(session);
+                        if (index < 0) return _Sessions.Count;
+                        return e.GetPosition(border).X > border.Bounds.Width / 2 ? index + 1 : index;
+                    }
+
+                    current = current.GetVisualParent() as Control;
+                }
+            }
+
+            return _Sessions.Count;
+        }
+
+        private Control? GetTabHeaderDropTarget(DragEventArgs e)
+        {
+            if (e.Source is Control source)
+            {
+                Control? current = source;
+                while (current != null)
+                {
+                    if (current is Border border && border.Tag is TerminalSession)
+                    {
+                        return border;
+                    }
+
+                    current = current.GetVisualParent() as Control;
+                }
+            }
+
+            return null;
+        }
+
+        private void MarkDraggedHeader(TerminalSession session)
+        {
+            if (session.Header is Control header)
+            {
+                header.Opacity = 0.55;
+                header.Cursor = new Cursor(StandardCursorType.SizeAll);
+            }
+        }
+
+        private void MarkDropTargetHeader(Control? header, bool isValidTarget)
+        {
+            if (!isValidTarget || header == null || (_DraggedSession != null && header == _DraggedSession.Header))
+            {
+                ClearDropTargetHeader();
+                return;
+            }
+
+            if (_DropTargetHeader == header) return;
+
+            ClearDropTargetHeader();
+            _DropTargetHeader = header;
+            header.Opacity = 0.78;
+            header.Cursor = new Cursor(StandardCursorType.SizeAll);
+        }
+
+        private void ClearHeaderDragVisuals()
+        {
+            if (_DraggedSession?.Header is Control header)
+            {
+                header.Opacity = 1;
+                header.Cursor = null;
+            }
+
+            ClearDropTargetHeader();
+        }
+
+        private void ClearDropTargetHeader()
+        {
+            if (_DropTargetHeader == null) return;
+            if (_DropTargetHeader != _DraggedSession?.Header) _DropTargetHeader.Opacity = 1;
+            _DropTargetHeader.Cursor = null;
+            _DropTargetHeader = null;
+        }
+
+        private async Task PersistProfileTabOrderAsync()
+        {
+            List<TerminalTabProfile> reorderedTabs = _Sessions
+                .Where(item => item.IsProfileMember)
+                .Select(item => item.TabProfile)
+                .ToList();
+            if (reorderedTabs.Count < 1) return;
+
+            List<TerminalTabProfile> existingTabs = _Profile.Tabs.ToList();
+            Int32 insertIndex = existingTabs
+                .Select((item, index) => new { item, index })
+                .Where(item => reorderedTabs.Contains(item.item))
+                .Select(item => item.index)
+                .DefaultIfEmpty(0)
+                .Min();
+
+            _Profile.Tabs.RemoveAll(item => reorderedTabs.Contains(item));
+            insertIndex = Math.Clamp(insertIndex, 0, _Profile.Tabs.Count);
+            _Profile.Tabs.InsertRange(insertIndex, reorderedTabs);
+            CaptureCurrentDirectories();
+            await _ProfileStore.UpsertAsync(_Profile, CancellationToken.None).ConfigureAwait(true);
         }
 
         private void OnUnsavedTabMenuClicked(object? sender, RoutedEventArgs e)
