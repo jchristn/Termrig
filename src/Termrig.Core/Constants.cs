@@ -6,6 +6,31 @@ namespace Termrig.Core
     public static class Constants
     {
         /// <summary>
+        /// Public application name.
+        /// </summary>
+        public const string ApplicationName = "Termrig";
+
+        /// <summary>
+        /// Package publisher identity.
+        /// </summary>
+        public const string PublisherName = "jchristn";
+
+        /// <summary>
+        /// Stable reverse-DNS application identifier used by native packages.
+        /// </summary>
+        public const string ApplicationId = "com.jchristn.Termrig";
+
+        /// <summary>
+        /// Short application description used in package metadata.
+        /// </summary>
+        public const string ApplicationDescription = "Desktop terminal profile manager";
+
+        /// <summary>
+        /// Project homepage.
+        /// </summary>
+        public const string HomepageUrl = "https://github.com/jchristn/Termrig";
+
+        /// <summary>
         /// Application data directory name created under the user's home directory.
         /// </summary>
         public const string ApplicationDirectoryName = ".termrig";

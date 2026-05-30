@@ -12,6 +12,59 @@ It's none of that.  It's Termrig, a desktop terminal profile manager, allowing y
 
 Why did I build it and what problem am I trying to solve? I wanted a simple way to restart a series of tabs for software development against a given software asset, i.e. open a terminal for the source directory, spawn an agent harness in another, another terminal tab for the logs directory, and yet another for the docker directory.  I set up a profile with a series of tabs defined within, and launch the profile.
 
+## Install
+
+Native packages are the intended installation path for normal users. Packaging
+artifacts are built under `artifacts/packages/`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging/build-packages.ps1 -Target package-all
+```
+
+First-pass package outputs:
+
+- Windows: portable `.zip`, and an Inno Setup installer when `ISCC.exe` is on `PATH`.
+- macOS: `.app` bundle zip on non-macOS hosts, and `.dmg` on macOS.
+- Ubuntu: `.deb` staging on non-Linux hosts, and `.deb` plus portable archive on Linux.
+
+Native desktop packages install only the Termrig desktop app. They do not install
+the legacy `tr` command.
+
+### Windows
+
+Install the generated setup executable when available, or unzip the portable
+archive and run `Termrig.exe`.
+
+Uninstall from Windows Apps & Features when installed through the setup
+executable. For portable installs, delete the extracted folder.
+
+### macOS
+
+Open the generated DMG, drag `Termrig.app` to Applications, and launch Termrig
+from Finder, Spotlight, or the Dock. Unsigned development builds may require
+Gatekeeper approval.
+
+Uninstall by deleting `/Applications/Termrig.app`.
+
+### Ubuntu
+
+Install the generated Debian package:
+
+```sh
+sudo apt install ./artifacts/packages/termrig_0.1.0_amd64.deb
+```
+
+Uninstall the package:
+
+```sh
+sudo apt remove termrig
+```
+
+User data remains under `~/.termrig/` after uninstall on all platforms.
+
+If dock or taskbar pinning groups incorrectly, remove the pinned icon, launch the
+installed app from the platform launcher, then pin the running app again.
+
 ## Quickstart
 
 Windows:
@@ -30,9 +83,11 @@ cd Termrig
 chmod +x go.sh && ./go.sh
 ```
 
-## Global Command
+## Legacy Developer Command
 
-Termrig can be installed from the repository as a .NET global tool named `tr`.
+Termrig can still be installed from the repository as a developer-only .NET
+global tool named `tr`. This is not used by native desktop packages and is not
+recommended for Ubuntu because `tr` conflicts with an existing system command.
 
 Install on Windows:
 

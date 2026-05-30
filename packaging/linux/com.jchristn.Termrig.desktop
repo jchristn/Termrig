@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Termrig
+Comment=Desktop terminal profile manager
+Exec=/opt/termrig/Termrig
+Icon=com.jchristn.Termrig
+Terminal=false
+Categories=System;TerminalEmulator;Utility;
+StartupNotify=true
+StartupWMClass=Termrig

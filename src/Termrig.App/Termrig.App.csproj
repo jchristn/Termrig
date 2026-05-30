@@ -7,6 +7,10 @@
     <Version>0.1.0</Version>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
     <FileVersion>0.1.0.0</FileVersion>
+    <AssemblyName>Termrig</AssemblyName>
+    <Product>Termrig</Product>
+    <Authors>jchristn</Authors>
+    <Description>Desktop terminal profile manager</Description>
     <PackageId>Termrig</PackageId>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>tr</ToolCommandName>

@@ -1,0 +1,8 @@
+Package: termrig
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Termrig Maintainers
+Description: Desktop terminal profile manager
+ Termrig opens saved groups of terminal tabs as repeatable desktop workspaces.
