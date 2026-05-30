@@ -239,7 +239,8 @@ namespace Iciclecreek.Terminal
         public virtual async Task LaunchProcess()
         {
             EnsureTerminalControl();
-            await _terminalControl.LaunchProcess();
+            TerminalControl terminalControl = _terminalControl ?? throw new InvalidOperationException("Terminal control was not initialized.");
+            await terminalControl.LaunchProcess();
 
             Dispatcher.UIThread.Post(() =>
             {

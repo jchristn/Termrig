@@ -1847,14 +1847,15 @@ namespace Iciclecreek.Terminal
                     processToLaunch = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "cmd.exe" : "bash";
                 }
 
-                SetAndRaise(CurrentDirectoryProperty, ref _currentDirectory, StartingDirectory ?? Environment.CurrentDirectory);
+                string currentDirectory = StartingDirectory ?? Environment.CurrentDirectory;
+                SetAndRaise(CurrentDirectoryProperty, ref _currentDirectory, currentDirectory);
 
                 var options = new PtyOptions
                 {
                     Name = processToLaunch,
                     Cols = GetPtyColumns(_terminal.Cols),
                     Rows = _terminal.Rows,
-                    Cwd = _currentDirectory,
+                    Cwd = currentDirectory,
                     App = processToLaunch
                 };
 
