@@ -91,6 +91,8 @@ namespace Termrig.App.Views
                 FontFamily = tab.FontFamily,
                 FontSize = tab.FontSize,
                 ScrollbackBufferSize = tab.ScrollbackBufferSize,
+                RecordPtyOutput = tab.RecordPtyOutput,
+                PtyRecordingDirectory = tab.PtyRecordingDirectory,
                 ColorSchemeOverride = tab.ColorSchemeOverride == null ? null : new ColorScheme
                 {
                     Name = tab.ColorSchemeOverride.Name,
@@ -119,6 +121,8 @@ namespace Termrig.App.Views
             FontFamilyCombo.SelectedItem = _Original.FontFamily ?? "Use profile font";
             FontSizeBox.Text = _Original.FontSize.HasValue ? _Original.FontSize.Value.ToString("0.##") : String.Empty;
             ScrollbackBufferBox.Text = _Original.ScrollbackBufferSize.HasValue ? _Original.ScrollbackBufferSize.Value.ToString() : String.Empty;
+            RecordPtyOutputBox.IsChecked = _Original.RecordPtyOutput;
+            PtyRecordingDirectoryBox.Text = _Original.PtyRecordingDirectory;
 
             ShellDescriptor? selectedShell = _Shells.FirstOrDefault(item => item.Shell == _Original.Shell);
             ShellCombo.SelectedItem = selectedShell == null ? null : selectedShell.Name;
@@ -129,6 +133,7 @@ namespace Termrig.App.Views
         {
             SaveButton.Click += OnSaveClicked;
             CancelButton.Click += OnCancelClicked;
+            RecordPtyOutputBox.IsCheckedChanged += OnRecordPtyOutputChanged;
         }
 
         private void OnSaveClicked(object? sender, RoutedEventArgs e)
@@ -147,7 +152,11 @@ namespace Termrig.App.Views
                 StartupScript = StartupScriptBox.Text ?? String.Empty,
                 FontFamily = FontFamilyCombo.SelectedItem is string fontFamily && fontFamily != "Use profile font" ? fontFamily : null,
                 FontSize = ParseNullableFontSize(FontSizeBox.Text),
-                ScrollbackBufferSize = ParseNullableBufferSize(ScrollbackBufferBox.Text)
+                ScrollbackBufferSize = ParseNullableBufferSize(ScrollbackBufferBox.Text),
+                RecordPtyOutput = RecordPtyOutputBox.IsChecked == true,
+                PtyRecordingDirectory = RecordPtyOutputBox.IsChecked == true
+                    ? ResolvePtyRecordingDirectory(PtyRecordingDirectoryBox.Text)
+                    : (PtyRecordingDirectoryBox.Text ?? String.Empty)
             };
 
             if (ColorOverrideCombo.SelectedItem is string selectedColor && selectedColor != "Use profile color")
@@ -172,6 +181,14 @@ namespace Termrig.App.Views
             Close(null);
         }
 
+        private void OnRecordPtyOutputChanged(object? sender, RoutedEventArgs e)
+        {
+            if (RecordPtyOutputBox.IsChecked == true && String.IsNullOrWhiteSpace(PtyRecordingDirectoryBox.Text))
+            {
+                PtyRecordingDirectoryBox.Text = GetDefaultPtyRecordingDirectory();
+            }
+        }
+
         private static double? ParseNullableFontSize(string? value)
         {
             if (String.IsNullOrWhiteSpace(value)) return null;
@@ -184,6 +201,19 @@ namespace Termrig.App.Views
             if (String.IsNullOrWhiteSpace(value)) return null;
             if (Int32.TryParse(value, out int bufferSize)) return bufferSize;
             return null;
+        }
+
+        private static string ResolvePtyRecordingDirectory(string? value)
+        {
+            return String.IsNullOrWhiteSpace(value) ? GetDefaultPtyRecordingDirectory() : value;
+        }
+
+        private static string GetDefaultPtyRecordingDirectory()
+        {
+            return System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Termrig",
+                "pty-recordings");
         }
 
         #endregion

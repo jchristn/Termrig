@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -41,6 +42,9 @@ namespace Iciclecreek.Terminal
         private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         private int _processExitHandled;    // 0=false, 1=true — written via Interlocked
         private readonly object _terminalLock = new object(); // Serialises all _terminal.Write/WriteLine calls
+        private bool _recordCurrentPtyOutput;
+        private string? _currentPtyRecordingDirectory;
+        private string? _currentPtyRecordingProcessName;
 
         // Cursor blinking
         private DispatcherTimer _cursorBlinkTimer;
@@ -290,6 +294,16 @@ namespace Iciclecreek.Terminal
             AvaloniaProperty.Register<TerminalView, string?>(
                 nameof(StartingDirectory),
                 defaultValue: Environment.CurrentDirectory);
+
+        public static readonly StyledProperty<bool> RecordPtyOutputProperty =
+            AvaloniaProperty.Register<TerminalView, bool>(
+                nameof(RecordPtyOutput),
+                defaultValue: false);
+
+        public static readonly StyledProperty<string?> PtyRecordingDirectoryProperty =
+            AvaloniaProperty.Register<TerminalView, string?>(
+                nameof(PtyRecordingDirectory),
+                defaultValue: null);
 
         public static readonly StyledProperty<Color> CursorColorProperty =
             AvaloniaProperty.Register<TerminalView, Color>(
@@ -642,6 +656,24 @@ namespace Iciclecreek.Terminal
                 SetAndRaise(BufferSizeProperty, ref _bufferSize, value);
                 this.RequestInvalidate();
             }
+        }
+
+        /// <summary>
+        /// Gets or sets whether raw PTY output should be recorded for the launched process.
+        /// </summary>
+        public bool RecordPtyOutput
+        {
+            get => GetValue(RecordPtyOutputProperty);
+            set => SetValue(RecordPtyOutputProperty, value);
+        }
+
+        /// <summary>
+        /// Gets or sets the directory where raw PTY output recordings are written.
+        /// </summary>
+        public string? PtyRecordingDirectory
+        {
+            get => GetValue(PtyRecordingDirectoryProperty);
+            set => SetValue(PtyRecordingDirectoryProperty, value);
         }
 
         /// <summary>
@@ -2107,6 +2139,9 @@ namespace Iciclecreek.Terminal
 
                 string currentDirectory = StartingDirectory ?? Environment.CurrentDirectory;
                 SetAndRaise(CurrentDirectoryProperty, ref _currentDirectory, currentDirectory);
+                _recordCurrentPtyOutput = RecordPtyOutput;
+                _currentPtyRecordingDirectory = PtyRecordingDirectory;
+                _currentPtyRecordingProcessName = processToLaunch;
 
                 int launchCols;
                 int launchRows;
@@ -2173,6 +2208,7 @@ namespace Iciclecreek.Terminal
                 var decoder = Utf8NoBom.GetDecoder();
                 var charBuffer = new char[Utf8NoBom.GetMaxCharCount(buffer.Length)];
                 var lineEndingPaddingNormalizer = new LineEndingPaddingNormalizer();
+                await using FileStream? ptyRecordingStream = OpenPtyRecordingStream();
                 while (!cancellationToken.IsCancellationRequested && _ptyConnection != null)
                 {
                     var bytesRead = await _ptyConnection.ReaderStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
@@ -2198,6 +2234,11 @@ namespace Iciclecreek.Terminal
                             this.RequestInvalidate();
                         }
                         break;
+                    }
+
+                    if (ptyRecordingStream != null)
+                    {
+                        await ptyRecordingStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
                     }
 
                     int normalizeColumns;
@@ -2268,6 +2309,42 @@ namespace Iciclecreek.Terminal
 
                 this.RequestInvalidate();
             }
+        }
+
+        private FileStream? OpenPtyRecordingStream()
+        {
+            if (!_recordCurrentPtyOutput || String.IsNullOrWhiteSpace(_currentPtyRecordingDirectory))
+                return null;
+
+            try
+            {
+                Directory.CreateDirectory(_currentPtyRecordingDirectory);
+                string timestamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
+                string processName = SanitizeFileName(Path.GetFileNameWithoutExtension(_currentPtyRecordingProcessName) ?? "terminal");
+                string instance = _instanceId.ToString("N")[..8];
+                string path = Path.Combine(_currentPtyRecordingDirectory, $"{timestamp}-{processName}-{instance}.pty.bin");
+                return new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 81920, useAsync: true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[{_instanceId}] Failed to open PTY recording: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static string SanitizeFileName(string value)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return "terminal";
+
+            char[] invalid = Path.GetInvalidFileNameChars();
+            var builder = new StringBuilder(value.Length);
+            foreach (char character in value)
+            {
+                builder.Append(invalid.Contains(character) ? '_' : character);
+            }
+
+            string sanitized = builder.ToString().Trim();
+            return String.IsNullOrWhiteSpace(sanitized) ? "terminal" : sanitized;
         }
 
         private void OnPtyProcessExited(object? sender, PtyExitedEventArgs e)

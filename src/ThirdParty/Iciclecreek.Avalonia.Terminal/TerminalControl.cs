@@ -59,6 +59,16 @@ namespace Iciclecreek.Terminal
                 nameof(Options),
                 defaultValue: null);
 
+        public static readonly StyledProperty<bool> RecordPtyOutputProperty =
+            AvaloniaProperty.Register<TerminalControl, bool>(
+                nameof(RecordPtyOutput),
+                defaultValue: false);
+
+        public static readonly StyledProperty<string?> PtyRecordingDirectoryProperty =
+            AvaloniaProperty.Register<TerminalControl, string?>(
+                nameof(PtyRecordingDirectory),
+                defaultValue: null);
+
         public event EventHandler<ProcessExitedEventArgs>? ProcessExited;
 
         /// <summary>
@@ -118,6 +128,24 @@ namespace Iciclecreek.Terminal
         {
             get => GetValue(OptionsProperty);
             set => SetValue(OptionsProperty, value);
+        }
+
+        /// <summary>
+        /// Gets or sets whether raw PTY output should be recorded for the launched process.
+        /// </summary>
+        public bool RecordPtyOutput
+        {
+            get => GetValue(RecordPtyOutputProperty);
+            set => SetValue(RecordPtyOutputProperty, value);
+        }
+
+        /// <summary>
+        /// Gets or sets the directory where raw PTY output recordings are written.
+        /// </summary>
+        public string? PtyRecordingDirectory
+        {
+            get => GetValue(PtyRecordingDirectoryProperty);
+            set => SetValue(PtyRecordingDirectoryProperty, value);
         }
 
         private static bool _stylesLoaded = false;

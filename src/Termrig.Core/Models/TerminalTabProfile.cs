@@ -108,6 +108,16 @@ namespace Termrig.Core.Models
             }
         }
 
+        /// <summary>
+        /// True to record raw PTY output bytes for this tab.
+        /// </summary>
+        public bool RecordPtyOutput { get; set; } = false;
+
+        /// <summary>
+        /// Directory where raw PTY output recordings should be written when <see cref="RecordPtyOutput"/> is true.
+        /// </summary>
+        public string PtyRecordingDirectory { get; set; } = String.Empty;
+
         #endregion
 
         #region Private-Members

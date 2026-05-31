@@ -34,6 +34,8 @@ namespace Termrig.App.Views
         private TerminalSession? _DraggedSession = null;
         private Control? _DropTargetHeader = null;
         private bool _IsClosingWorkspace = false;
+        private bool _IsCloseConfirmationOpen = false;
+        private bool _HasConfirmedWorkspaceClose = false;
         private bool _SuppressNextShortcutTextInput = false;
         private const double TerminalFontZoomStep = 1;
         private const double MinimumTerminalFontSize = 8;
@@ -262,9 +264,26 @@ namespace Termrig.App.Views
             }
         }
 
-        private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
+        private async void OnWindowClosing(object? sender, WindowClosingEventArgs e)
         {
             if (_IsClosingWorkspace) return;
+
+            if (!_HasConfirmedWorkspaceClose)
+            {
+                e.Cancel = true;
+                if (_IsCloseConfirmationOpen) return;
+
+                _IsCloseConfirmationOpen = true;
+                WorkspaceCloseConfirmationWindow confirmation = new WorkspaceCloseConfirmationWindow(_Profile.Name, _Sessions.Count);
+                bool confirmed = await confirmation.ShowDialog<bool>(this).ConfigureAwait(true);
+                _IsCloseConfirmationOpen = false;
+                if (!confirmed) return;
+
+                _HasConfirmedWorkspaceClose = true;
+                Close();
+                return;
+            }
+
             _IsClosingWorkspace = true;
             foreach (TerminalSession session in _Sessions.ToList())
             {
@@ -882,6 +901,8 @@ namespace Termrig.App.Views
             terminal.Options = BuildTerminalOptions(tab);
             terminal.Background = Brush.Parse(scheme.Background);
             terminal.Foreground = Brush.Parse(scheme.Foreground);
+            terminal.RecordPtyOutput = tab.RecordPtyOutput;
+            terminal.PtyRecordingDirectory = tab.PtyRecordingDirectory;
         }
 
         private static int ResolveTerminalBufferSize(TerminalTabProfile tab)
