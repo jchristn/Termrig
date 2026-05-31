@@ -150,5 +150,43 @@ namespace Test.Terminal
             Assert.Contains("Working...    43279 esc to interrupt)", snapshot.VisibleRows[0].Text);
             Assert.DoesNotContain("Workkingg", snapshot.VisibleRows[0].Text);
         }
+
+        [Fact]
+        public void SettingScrollRegionHomesCursorBeforePromptRedraw()
+        {
+            string output =
+                "\u001b[5;1H\u203a" +
+                "\u001b[2;4r" +
+                "content";
+
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                20,
+                5,
+                new[] { Encoding.UTF8.GetBytes(output) },
+                trimLineEndingPadding: true);
+
+            Assert.StartsWith("content", snapshot.VisibleRows[0].Text);
+            Assert.Equal("\u203a", snapshot.VisibleRows[4].Text);
+        }
+
+        [Fact]
+        public void OriginModeCursorPositionIsRelativeToScrollRegion()
+        {
+            string output =
+                "\u001b[2;4r" +
+                "\u001b[?6h" +
+                "\u001b[1;1Htop" +
+                "\u001b[3;1Hbottom";
+
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                20,
+                5,
+                new[] { Encoding.UTF8.GetBytes(output) },
+                trimLineEndingPadding: true);
+
+            Assert.Equal(string.Empty, snapshot.VisibleRows[0].Text);
+            Assert.StartsWith("top", snapshot.VisibleRows[1].Text);
+            Assert.StartsWith("bottom", snapshot.VisibleRows[3].Text);
+        }
     }
 }

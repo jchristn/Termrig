@@ -364,6 +364,9 @@ namespace Iciclecreek.Terminal
         {
             if (_terminalView != null)
             {
+                if (_terminalView.IsAlternateBuffer)
+                    return;
+
                 _terminalView.ViewportY = (int)e.NewValue;
             }
         }
