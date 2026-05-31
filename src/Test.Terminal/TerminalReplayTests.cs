@@ -136,5 +136,19 @@ namespace Test.Terminal
 
             Assert.Contains("Network docker_default              Created", snapshot.VisibleRows[0].Text);
         }
+
+        [Fact]
+        public void CursorForwardStatusRewriteKeepsExistingTextInPlace()
+        {
+            string output =
+                "\u001b[2KWorking... (esc to interrupt)" +
+                "\r\u001b[2KWorking... (123 esc to interrupt)" +
+                "\r\u001b[2KWorking...\u001b[4C43279 esc to interrupt)";
+
+            TerminalSnapshot snapshot = TerminalReplay.Replay(80, 4, new[] { Encoding.UTF8.GetBytes(output) }, trimLineEndingPadding: true);
+
+            Assert.Contains("Working...    43279 esc to interrupt)", snapshot.VisibleRows[0].Text);
+            Assert.DoesNotContain("Workkingg", snapshot.VisibleRows[0].Text);
+        }
     }
 }

@@ -120,10 +120,10 @@ namespace Iciclecreek.Terminal
                             }
 
                             FlushTo(builder);
-                            if (final == 'C')
+                            if (final == 'C' && IsPaddingCount(parameters, columns))
                             {
                                 int count = ParseCsiCount(parameters, 1);
-                                int targetColumn = Math.Min(Math.Max(0, columns - 1), _column + count + (count <= 20 ? 1 : 0));
+                                int targetColumn = Math.Min(Math.Max(0, columns - 1), _column + count);
                                 builder.Append("\u001b[");
                                 builder.Append(targetColumn + 1);
                                 builder.Append('G');
@@ -131,7 +131,7 @@ namespace Iciclecreek.Terminal
                                 index = finalIndex;
                                 continue;
                             }
-                            else if (final == 'X')
+                            else if (final == 'X' && IsPaddingCount(parameters, columns))
                             {
                                 builder.Append("\u001b[K");
                                 index = finalIndex;
@@ -182,6 +182,14 @@ namespace Iciclecreek.Terminal
                 {
                     _column = Math.Max(0, ParseCsiCount(parameters, 1) - 1);
                 }
+                else if (final == 'C')
+                {
+                    _column += ParseCsiCount(parameters, 1);
+                }
+                else if (final == 'D')
+                {
+                    _column = Math.Max(0, _column - ParseCsiCount(parameters, 1));
+                }
                 else if (final == 'H' || final == 'f')
                 {
                     string[] parts = parameters.Split(';');
@@ -194,6 +202,8 @@ namespace Iciclecreek.Terminal
                         _column = 0;
                     }
                 }
+
+                _column = Math.Min(Math.Max(0, _column), Int32.MaxValue);
             }
 
             private static int ParseCsiCount(string parameters, int defaultValue)
@@ -205,6 +215,14 @@ namespace Iciclecreek.Terminal
                 return int.TryParse(first.TrimStart('?'), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
                     ? Math.Max(1, value)
                     : defaultValue;
+            }
+
+            private static bool IsPaddingCount(string parameters, int columns)
+            {
+                if (columns <= 0)
+                    return false;
+
+                return ParseCsiCount(parameters, 1) > columns / 2;
             }
         }
 
