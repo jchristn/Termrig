@@ -160,6 +160,7 @@ namespace Iciclecreek.Terminal
         /// <summary>
         /// Gets the underlying <see cref="XTerm.Terminal"/> instance.
         /// </summary>
+        [Obsolete("Use TerminalControl public APIs instead of mutating the XTerm terminal directly.")]
         public XTerm.Terminal Terminal => _terminalView!.Terminal;
 
 
@@ -173,6 +174,35 @@ namespace Iciclecreek.Terminal
         /// Terminates the running terminal process.
         /// </summary>
         public void Kill() => _terminalView!.Kill();
+
+        public void TerminateSession() => _terminalView?.TerminateSession();
+
+        public Task PasteAsync() => _terminalView?.PasteAsync() ?? Task.CompletedTask;
+
+        public Task PasteTextAsync(string? text) => _terminalView?.PasteTextAsync(text) ?? Task.CompletedTask;
+
+        public Task SendTextAsync(string text, System.Threading.CancellationToken cancellationToken = default) =>
+            _terminalView?.SendTextAsync(text, cancellationToken) ?? Task.CompletedTask;
+
+        public bool HasSelection => _terminalView?.HasSelection ?? false;
+
+        public string GetSelectedText() => _terminalView?.GetSelectedText() ?? string.Empty;
+
+        public void ClearSelection() => _terminalView?.ClearSelection();
+
+        public void ClearVisibleLineCaches() => _terminalView?.ClearVisibleLineCaches();
+
+        public void RequestRenderInvalidate()
+        {
+            if (_terminalView != null)
+            {
+                _terminalView.InvalidateVisual();
+            }
+            else
+            {
+                InvalidateVisual();
+            }
+        }
 
         /// <summary>
         /// Call before removing this control from one visual tree and adding it to another

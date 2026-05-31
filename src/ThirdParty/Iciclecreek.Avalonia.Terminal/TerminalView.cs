@@ -63,6 +63,146 @@ namespace Iciclecreek.Terminal
         private bool _suppressCleanupOnDetach;
 
         private sealed record CachedTextRun(FormattedText Text, int StartX, int CellCount, IBrush Background);
+        private sealed record CachedLineRender(ulong Fingerprint, List<CachedTextRun> TextRuns);
+        private sealed class LineEndingPaddingNormalizer
+        {
+            private int _pendingSpaces;
+
+            private int _column;
+
+            public string Process(string output, int columns)
+            {
+                if (output.Length == 0)
+                    return output;
+
+                var builder = new StringBuilder(output.Length + _pendingSpaces);
+                for (int index = 0; index < output.Length; index++)
+                {
+                    char ch = output[index];
+                    if (ch == ' ')
+                    {
+                        _pendingSpaces++;
+                        continue;
+                    }
+
+                    if (ch == '\r' || ch == '\n')
+                    {
+                        _pendingSpaces = 0;
+                        builder.Append(ch);
+                        if (ch == '\r')
+                        {
+                            _column = 0;
+                        }
+                        continue;
+                    }
+
+                    if (ch == '\u001b' && index + 1 < output.Length && output[index + 1] == '[')
+                    {
+                        int finalIndex = index + 2;
+                        while (finalIndex < output.Length && (output[finalIndex] < '@' || output[finalIndex] > '~'))
+                        {
+                            finalIndex++;
+                        }
+
+                        if (finalIndex < output.Length)
+                        {
+                            string parameters = output.Substring(index + 2, finalIndex - index - 2);
+                            char final = output[finalIndex];
+                            if (final == 'm')
+                            {
+                                builder.Append(output, index, finalIndex - index + 1);
+                                index = finalIndex;
+                                continue;
+                            }
+
+                            FlushTo(builder);
+                            if (final == 'C')
+                            {
+                                int count = ParseCsiCount(parameters, 1);
+                                int targetColumn = Math.Min(Math.Max(0, columns - 1), _column + count + (count <= 20 ? 1 : 0));
+                                builder.Append("\u001b[");
+                                builder.Append(targetColumn + 1);
+                                builder.Append('G');
+                                _column = targetColumn;
+                                index = finalIndex;
+                                continue;
+                            }
+                            else if (final == 'X')
+                            {
+                                builder.Append("\u001b[K");
+                                index = finalIndex;
+                                continue;
+                            }
+
+                            builder.Append(output, index, finalIndex - index + 1);
+                            TrackCsiPosition(parameters, final);
+                            index = finalIndex;
+                            continue;
+                        }
+                    }
+
+                    FlushTo(builder);
+                    builder.Append(ch);
+                    if (!char.IsControl(ch))
+                    {
+                        _column = Math.Min(Math.Max(0, columns - 1), _column + 1);
+                    }
+                }
+
+                return builder.ToString();
+            }
+
+            public string Flush()
+            {
+                if (_pendingSpaces == 0)
+                    return string.Empty;
+
+                string output = new string(' ', _pendingSpaces);
+                _pendingSpaces = 0;
+                return output;
+            }
+
+            private void FlushTo(StringBuilder builder)
+            {
+                if (_pendingSpaces == 0)
+                    return;
+
+                builder.Append(' ', _pendingSpaces);
+                _column += _pendingSpaces;
+                _pendingSpaces = 0;
+            }
+
+            private void TrackCsiPosition(string parameters, char final)
+            {
+                if (final == 'G')
+                {
+                    _column = Math.Max(0, ParseCsiCount(parameters, 1) - 1);
+                }
+                else if (final == 'H' || final == 'f')
+                {
+                    string[] parts = parameters.Split(';');
+                    if (parts.Length >= 2 && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int column))
+                    {
+                        _column = Math.Max(0, column - 1);
+                    }
+                    else
+                    {
+                        _column = 0;
+                    }
+                }
+            }
+
+            private static int ParseCsiCount(string parameters, int defaultValue)
+            {
+                if (string.IsNullOrWhiteSpace(parameters))
+                    return defaultValue;
+
+                string first = parameters.Split(';')[0];
+                return int.TryParse(first.TrimStart('?'), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
+                    ? Math.Max(1, value)
+                    : defaultValue;
+            }
+        }
 
         public static readonly DirectProperty<TerminalView, bool> IsAlternateBufferProperty =
             AvaloniaProperty.RegisterDirect<TerminalView, bool>(
@@ -191,7 +331,7 @@ namespace Iciclecreek.Terminal
         }
 
         public static readonly StyledProperty<XTerm.Options.TerminalOptions?> OptionsProperty =
-            AvaloniaProperty.Register<TerminalControl, XTerm.Options.TerminalOptions?>(
+            AvaloniaProperty.Register<TerminalView, XTerm.Options.TerminalOptions?>(
                 nameof(Options),
                 defaultValue: null);
 
@@ -479,7 +619,16 @@ namespace Iciclecreek.Terminal
         /// <summary>
         /// Gets a value indicating whether the terminal is currently using the alternate screen buffer.
         /// </summary>
-        public bool IsAlternateBuffer => _isAlternateBuffer;
+        public bool IsAlternateBuffer
+        {
+            get
+            {
+                lock (_terminalLock)
+                {
+                    return _isAlternateBuffer;
+                }
+            }
+        }
 
         /// <summary>
         /// Gets or sets the terminal scrollback buffer size in lines.
@@ -501,15 +650,27 @@ namespace Iciclecreek.Terminal
         /// </summary>
         public int ViewportY
         {
-            get => _terminal.Buffer.ViewportY;
+            get
+            {
+                lock (_terminalLock)
+                {
+                    return _terminal.Buffer.ViewportY;
+                }
+            }
             set
             {
-                var oldValue = _terminal.Buffer.ViewportY;
-                _terminal.Buffer.ViewportY = value;
-
-                if (oldValue != _terminal.Buffer.ViewportY)
+                int oldValue;
+                int newValue;
+                lock (_terminalLock)
                 {
-                    RaisePropertyChanged(ViewportYProperty, oldValue, _terminal.Buffer.ViewportY);
+                    oldValue = _terminal.Buffer.ViewportY;
+                    _terminal.Buffer.ViewportY = value;
+                    newValue = _terminal.Buffer.ViewportY;
+                }
+
+                if (oldValue != newValue)
+                {
+                    RaisePropertyChanged(ViewportYProperty, oldValue, newValue);
                     this.RequestInvalidate();
                 }
             }
@@ -524,15 +685,28 @@ namespace Iciclecreek.Terminal
             get
             {
                 // Simple: total lines in buffer minus how many we can see
-                var totalLines = _terminal.Buffer.Length;
-                var viewportLines = _terminal.Rows;
-                var max = Math.Max(0, totalLines - viewportLines);
-                return max;
+                lock (_terminalLock)
+                {
+                    var totalLines = _terminal.Buffer.Length;
+                    var viewportLines = _terminal.Rows;
+                    var max = Math.Max(0, totalLines - viewportLines);
+                    return max;
+                }
             }
         }
 
-        public int ViewportLines => _terminal.Rows;
+        public int ViewportLines
+        {
+            get
+            {
+                lock (_terminalLock)
+                {
+                    return _terminal.Rows;
+                }
+            }
+        }
 
+        [Obsolete("Use TerminalControl public APIs instead of mutating the XTerm terminal directly.")]
         public XTerm.Terminal Terminal => _terminal;
 
         public void WaitForExit(int ms) => _ptyConnection!.WaitForExit(ms);
@@ -552,15 +726,91 @@ namespace Iciclecreek.Terminal
                 return;
 
             var text = await clipboard.TryGetTextAsync();
-            if (!string.IsNullOrEmpty(text))
-            {
-                // Wrap paste in bracketed paste sequences if mode is enabled
-                if (_terminal.BracketedPasteMode)
-                {
-                    text = $"\u001b[200~{text}\u001b[201~";
-                }
+            await PasteTextAsync(text).ConfigureAwait(true);
+        }
 
-                await SendToPtyAsync(text);
+        public async Task PasteTextAsync(string? text, CancellationToken ct = default)
+        {
+            if (string.IsNullOrEmpty(text))
+                return;
+
+            bool bracketedPasteMode;
+            lock (_terminalLock)
+            {
+                bracketedPasteMode = _terminal.BracketedPasteMode;
+            }
+
+            if (bracketedPasteMode)
+            {
+                text = $"\u001b[200~{text}\u001b[201~";
+            }
+
+            await SendToPtyAsync(text, ct).ConfigureAwait(false);
+        }
+
+        public Task SendTextAsync(string text, CancellationToken ct = default) => SendToPtyAsync(text, ct);
+
+        public bool HasSelection
+        {
+            get
+            {
+                lock (_terminalLock)
+                {
+                    return _terminal.Selection.HasSelection;
+                }
+            }
+        }
+
+        public string GetSelectedText()
+        {
+            lock (_terminalLock)
+            {
+                return _terminal.Selection.GetSelectionText();
+            }
+        }
+
+        public void ClearSelection()
+        {
+            lock (_terminalLock)
+            {
+                _terminal.Selection.ClearSelection();
+            }
+
+            this.RequestInvalidate();
+        }
+
+        public void ClearVisibleLineCaches()
+        {
+            lock (_terminalLock)
+            {
+                ClearVisibleLineCachesUnderLock();
+            }
+        }
+
+        public void TerminateSession()
+        {
+            _processCts?.Cancel();
+            _ptyConnection?.Kill();
+        }
+
+        private int GetMaxScrollbackUnderLock()
+        {
+            var totalLines = _terminal.Buffer.Length;
+            var viewportLines = _terminal.Rows;
+            return Math.Max(0, totalLines - viewportLines);
+        }
+
+        private void ClearVisibleLineCachesUnderLock()
+        {
+            int start = Math.Max(0, _terminal.Buffer.ViewportY - 1);
+            int end = Math.Min(_terminal.Buffer.Length - 1, _terminal.Buffer.ViewportY + _terminal.Rows + 1);
+            for (int index = start; index <= end; index++)
+            {
+                BufferLine? line = _terminal.Buffer.GetLine(index);
+                if (line != null)
+                {
+                    line.Cache = null;
+                }
             }
         }
 
@@ -890,12 +1140,15 @@ namespace Iciclecreek.Terminal
             if (CursorBlink && IsFocused)
             {
                 _cursorBlinkOn = !_cursorBlinkOn;
-                for (int y = 0; y < _terminal.Rows; y++)
+                lock (_terminalLock)
                 {
-                    var line = _terminal.Buffer.GetLine(y);
-                    if (line != null && line.Any(cell => cell.Attributes.IsBlink()))
+                    for (int y = 0; y < _terminal.Rows; y++)
                     {
-                        line.Cache = null;
+                        var line = _terminal.Buffer.GetLine(y);
+                        if (line != null && line.Any(cell => cell.Attributes.IsBlink()))
+                        {
+                            line.Cache = null;
+                        }
                     }
                 }
 
@@ -1438,14 +1691,19 @@ namespace Iciclecreek.Terminal
 
         private void OnTerminalBufferChanged(object? sender, XT.Events.TerminalEvents.BufferChangedEventArgs e)
         {
+            bool oldValue;
+            bool newValue = e.Buffer == XT.Common.BufferType.Alternate;
+            lock (_terminalLock)
+            {
+                oldValue = _isAlternateBuffer;
+                _isAlternateBuffer = newValue;
+            }
+
             Dispatcher.UIThread.Post(() =>
             {
-                var oldValue = _isAlternateBuffer;
-                _isAlternateBuffer = e.Buffer == XT.Common.BufferType.Alternate;
-
-                if (oldValue != _isAlternateBuffer)
+                if (oldValue != newValue)
                 {
-                    RaisePropertyChanged(IsAlternateBufferProperty, oldValue, _isAlternateBuffer);
+                    RaisePropertyChanged(IsAlternateBufferProperty, oldValue, newValue);
                 }
 
                 RaisePropertyChanged(MaxScrollbackProperty, default(int), MaxScrollback);
@@ -1850,11 +2108,19 @@ namespace Iciclecreek.Terminal
                 string currentDirectory = StartingDirectory ?? Environment.CurrentDirectory;
                 SetAndRaise(CurrentDirectoryProperty, ref _currentDirectory, currentDirectory);
 
+                int launchCols;
+                int launchRows;
+                lock (_terminalLock)
+                {
+                    launchCols = _terminal.Cols;
+                    launchRows = _terminal.Rows;
+                }
+
                 var options = new PtyOptions
                 {
                     Name = processToLaunch,
-                    Cols = GetPtyColumns(_terminal.Cols),
-                    Rows = _terminal.Rows,
+                    Cols = launchCols,
+                    Rows = launchRows,
                     Cwd = currentDirectory,
                     App = processToLaunch
                 };
@@ -1904,11 +2170,15 @@ namespace Iciclecreek.Terminal
             try
             {
                 var buffer = new byte[0x40000];
+                var decoder = Utf8NoBom.GetDecoder();
+                var charBuffer = new char[Utf8NoBom.GetMaxCharCount(buffer.Length)];
+                var lineEndingPaddingNormalizer = new LineEndingPaddingNormalizer();
                 while (!cancellationToken.IsCancellationRequested && _ptyConnection != null)
                 {
                     var bytesRead = await _ptyConnection.ReaderStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
                     if (bytesRead == 0)
                     {
+                        string pendingOutput = lineEndingPaddingNormalizer.Flush();
                         // Process has exited — fallback in case OnPtyProcessExited didn't fire first.
                         if (Interlocked.Exchange(ref _processExitHandled, 1) == 0)
                         {
@@ -1916,6 +2186,11 @@ namespace Iciclecreek.Terminal
 
                             lock (_terminalLock)
                             {
+                                if (pendingOutput.Length > 0)
+                                {
+                                    _terminal.Write(pendingOutput);
+                                }
+
                                 _terminal.WriteLine($"\nProcess exited with code: {exitCode}\n");
                                 _terminal.Buffer.ScrollToBottom();
                             }
@@ -1925,38 +2200,48 @@ namespace Iciclecreek.Terminal
                         break;
                     }
 
-                    var output = NormalizeCarriageReturnRedraws(Encoding.UTF8.GetString(buffer, 0, bytesRead));
-
-                    // Snapshot before write so we can detect buffer growth (MaxScrollback
-                    // increases when _terminal.Write adds lines; ScrollToBottom only moves
-                    // ViewportY and does not affect buffer length).
-                    var oldMax = MaxScrollback;
-                    var oldY = _terminal.Buffer.ViewportY;
-
+                    int normalizeColumns;
                     lock (_terminalLock)
                     {
-                        _terminal.Write(output);
+                        normalizeColumns = _terminal.Cols;
                     }
 
-                    // Auto-scroll to bottom when new content arrives, but only in normal buffer.
-                    // Alternate buffer (used by full-screen apps like vim, htop, asciiquarium)
-                    // handles its own cursor positioning and shouldn't be scrolled.
-                    if (!_isAlternateBuffer)
-                    {
-                        _terminal.Buffer.ScrollToBottom();
-                        var newY = _terminal.Buffer.ViewportY;
-                        var newMax = MaxScrollback;
+                    int charsRead = decoder.GetChars(buffer, 0, bytesRead, charBuffer, 0, flush: false);
+                    var output = lineEndingPaddingNormalizer.Process(new string(charBuffer, 0, charsRead), normalizeColumns);
+                    if (output.Length == 0)
+                        continue;
 
-                        if (oldMax != newMax || oldY != newY)
+                    int oldMax;
+                    int oldY;
+                    int newMax = 0;
+                    int newY = 0;
+                    bool scrollChanged = false;
+                    lock (_terminalLock)
+                    {
+                        oldMax = GetMaxScrollbackUnderLock();
+                        oldY = _terminal.Buffer.ViewportY;
+                        _terminal.Write(output);
+
+                        // Auto-scroll to bottom when new content arrives, but only in normal buffer.
+                        // Alternate buffer handles its own cursor positioning and shouldn't be scrolled.
+                        if (!_isAlternateBuffer)
                         {
-                            Dispatcher.UIThread.Post(() =>
-                            {
-                                if (oldMax != newMax)
-                                    RaisePropertyChanged(MaxScrollbackProperty, oldMax, newMax);
-                                if (oldY != newY)
-                                    RaisePropertyChanged(ViewportYProperty, oldY, newY);
-                            });
+                            _terminal.Buffer.ScrollToBottom();
+                            newY = _terminal.Buffer.ViewportY;
+                            newMax = GetMaxScrollbackUnderLock();
+                            scrollChanged = oldMax != newMax || oldY != newY;
                         }
+                    }
+
+                    if (scrollChanged)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (oldMax != newMax)
+                                RaisePropertyChanged(MaxScrollbackProperty, oldMax, newMax);
+                            if (oldY != newY)
+                                RaisePropertyChanged(ViewportYProperty, oldY, newY);
+                        });
                     }
 
                     // Notify IME of cursor position change after terminal processes data
@@ -2004,31 +2289,6 @@ namespace Iciclecreek.Terminal
                 var args = new ProcessExitedEventArgs(e.ExitCode);
                 ProcessExited?.Invoke(this, args);
             });
-        }
-
-        private static string NormalizeCarriageReturnRedraws(string output)
-        {
-            if (String.IsNullOrEmpty(output) || !output.Contains('\r', StringComparison.Ordinal)) return output;
-
-            StringBuilder builder = new StringBuilder(output.Length);
-            for (int index = 0; index < output.Length; index++)
-            {
-                char current = output[index];
-                builder.Append(current);
-                if (current != '\r') continue;
-
-                char next = index + 1 < output.Length ? output[index + 1] : '\0';
-                if (next == '\n') continue;
-
-                builder.Append("\u001b[2K");
-            }
-
-            return builder.ToString();
-        }
-
-        private static int GetPtyColumns(int terminalColumns)
-        {
-            return Math.Max(1, terminalColumns - 1);
         }
 
         private void CleanupProcess()
@@ -2089,12 +2349,22 @@ namespace Iciclecreek.Terminal
                 int newRows = Math.Max(1, (int)(finalSize.Height / _charHeight));
 
                 // Only resize if dimensions have changed
-                if (newCols != _terminal.Cols || newRows != _terminal.Rows)
+                bool resized = false;
+                lock (_terminalLock)
                 {
-                    _terminal.Resize(newCols, newRows);
+                    if (newCols != _terminal.Cols || newRows != _terminal.Rows)
+                    {
+                        _terminal.Resize(newCols, newRows);
+                        ClearVisibleLineCachesUnderLock();
+                        resized = true;
+                    }
+                }
 
-                    // Also resize the PTY connection if it exists
-                    _ptyConnection?.Resize(GetPtyColumns(newCols), newRows);
+                if (resized)
+                {
+                    // Also resize the PTY connection if it exists. The PTY geometry must
+                    // match the rendered grid exactly.
+                    _ptyConnection?.Resize(newCols, newRows);
 
                     RaisePropertyChanged(ViewportLinesProperty, default(int), ViewportLines);
                 }
@@ -2111,47 +2381,50 @@ namespace Iciclecreek.Terminal
             //Debug.WriteLine(_terminal.Buffer.PrintViewport());
 
             // Use the terminal buffer's ViewportY to determine what to render
-            int viewportY = _terminal.Buffer.ViewportY;
-            int viewportLines = _terminal.Rows;
-            int startLine = viewportY;
-            int endLine = Math.Min(_terminal.Buffer.Length, startLine + viewportLines);
             try
             {
-
-                for (int y = startLine; y < endLine; y++)
+                lock (_terminalLock)
                 {
-                    var line = _terminal.Buffer.GetLine(y);
-                    if (line == null)
-                        continue;
+                    int viewportY = _terminal.Buffer.ViewportY;
+                    int viewportLines = _terminal.Rows;
+                    int startLine = viewportY;
+                    int endLine = Math.Min(_terminal.Buffer.Length, startLine + viewportLines);
 
-                    int screenY = y - startLine;
-
-                    // Calculate Y positions for this screen row
-                    var startYPos = Snap(screenY * _charHeight, scale);
-                    var endYPos = Snap((screenY + 1) * _charHeight, scale);
-                    var rowHeight = Math.Max(0, endYPos - startYPos);
-
-                    // Check for double-width/double-height line attributes
-                    var lineAttr = line.LineAttribute;
-                    if (lineAttr == LineAttribute.DoubleWidth ||
-                             lineAttr == LineAttribute.DoubleHeightTop ||
-                             lineAttr == LineAttribute.DoubleHeightBottom)
+                    for (int y = startLine; y < endLine; y++)
                     {
-                        RenderDoubleWidthLine(context, line, screenY, startYPos, rowHeight, lineAttr, scale);
+                        var line = _terminal.Buffer.GetLine(y);
+                        if (line == null)
+                            continue;
+
+                        int screenY = y - startLine;
+
+                        // Calculate Y positions for this screen row
+                        var startYPos = Snap(screenY * _charHeight, scale);
+                        var endYPos = Snap((screenY + 1) * _charHeight, scale);
+                        var rowHeight = Math.Max(0, endYPos - startYPos);
+
+                        // Check for double-width/double-height line attributes
+                        var lineAttr = line.LineAttribute;
+                        if (lineAttr == LineAttribute.DoubleWidth ||
+                                 lineAttr == LineAttribute.DoubleHeightTop ||
+                                 lineAttr == LineAttribute.DoubleHeightBottom)
+                        {
+                            RenderDoubleWidthLine(context, line, screenY, startYPos, rowHeight, lineAttr, scale);
+                        }
+                        else
+                        {
+                            RenderNormalLine(context, line, screenY, startYPos, rowHeight, scale);
+                        }
                     }
-                    else
-                    {
-                        RenderNormalLine(context, line, screenY, startYPos, rowHeight, scale);
-                    }
+
+                    // Render selection overlay
+                    RenderSelection(context, viewportY, scale);
+
+                    RenderCursor(context, viewportY, scale);
+
+                    // Render IME preedit (composition) text overlay
+                    RenderPreeditText(context, viewportY, scale);
                 }
-
-                // Render selection overlay
-                RenderSelection(context, viewportY, scale);
-
-                RenderCursor(context, viewportY, scale);
-
-                // Render IME preedit (composition) text overlay
-                RenderPreeditText(context, viewportY, scale);
             }
             catch (Exception ex)
             {
@@ -2164,11 +2437,15 @@ namespace Iciclecreek.Terminal
         /// </summary>
         private void RenderNormalLine(DrawingContext context, BufferLine line, int screenY, double startYPos, double rowHeight, double scale)
         {
+            ulong fingerprint = GetLineRenderFingerprint(line);
+            double rowWidth = Snap(_terminal.Cols * _charWidth, scale);
+            context.FillRectangle(this.Background, new Rect(0, startYPos, Math.Max(0, rowWidth), rowHeight));
+
             // Try to use cached text runs for this line (but not when ReverseVideo mode is active as it affects all cells)
-            var textRuns = !_terminal.ReverseVideo ? line.Cache as List<CachedTextRun> : null;
-            if (textRuns != null)
+            var cachedLine = !_terminal.ReverseVideo ? line.Cache as CachedLineRender : null;
+            if (cachedLine != null && cachedLine.Fingerprint == fingerprint)
             {
-                foreach (var run in textRuns)
+                foreach (var run in cachedLine.TextRuns)
                 {
                     // Recalculate position based on current screen row
                     var startX = Snap(run.StartX * _charWidth, scale);
@@ -2183,7 +2460,7 @@ namespace Iciclecreek.Terminal
             }
 
             // Build and cache text runs for this line
-            textRuns = new List<CachedTextRun>();
+            var textRuns = new List<CachedTextRun>();
 
             for (int x = 0; x < _terminal.Cols;)
             {
@@ -2260,7 +2537,36 @@ namespace Iciclecreek.Terminal
 
             // Cache the text runs (but not when ReverseVideo mode is active)
             if (!_terminal.ReverseVideo)
-                line.Cache = textRuns;
+                line.Cache = new CachedLineRender(fingerprint, textRuns);
+        }
+
+        private ulong GetLineRenderFingerprint(BufferLine line)
+        {
+            const ulong offset = 14695981039346656037UL;
+            const ulong prime = 1099511628211UL;
+            ulong hash = offset;
+
+            void Add(ulong value)
+            {
+                hash ^= value;
+                hash *= prime;
+            }
+
+            Add((ulong)_terminal.Cols);
+            Add((ulong)line.Length);
+            Add((ulong)line.LineAttribute);
+            Add(_cursorBlinkOn ? 1UL : 0UL);
+
+            int limit = Math.Min(line.Length, _terminal.Cols);
+            for (int x = 0; x < limit; x++)
+            {
+                BufferCell cell = line[x];
+                Add((ulong)cell.Width);
+                Add((ulong)cell.Attributes.GetHashCode());
+                Add((ulong)(cell.Content?.GetHashCode(StringComparison.Ordinal) ?? 0));
+            }
+
+            return hash;
         }
 
         /// <summary>

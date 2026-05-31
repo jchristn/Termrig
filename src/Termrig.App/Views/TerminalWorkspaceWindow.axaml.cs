@@ -10,7 +10,6 @@ namespace Termrig.App.Views
     using System;
     using System.Collections.Generic;
     using System.Linq;
-    using System.Reflection;
     using System.Threading;
     using System.Threading.Tasks;
     using Termrig.App.Models;
@@ -31,14 +30,9 @@ namespace Termrig.App.Views
         private readonly CrashLogStore _CrashLogStore = new CrashLogStore();
         private readonly List<ColorScheme> _ColorSchemes;
         private readonly List<TerminalSession> _Sessions = new List<TerminalSession>();
-        private readonly DispatcherTimer _TerminalRenderRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         private TerminalSession? _SelectedSession = null;
         private TerminalSession? _DraggedSession = null;
         private Control? _DropTargetHeader = null;
-        private static readonly FieldInfo? _TerminalViewField = typeof(TerminalControl).GetField("_terminalView", BindingFlags.Instance | BindingFlags.NonPublic);
-        private static readonly FieldInfo? _PtyConnectionField = typeof(TerminalView).GetField("_ptyConnection", BindingFlags.Instance | BindingFlags.NonPublic);
-        private static readonly FieldInfo? _ProcessCancellationField = typeof(TerminalView).GetField("_processCts", BindingFlags.Instance | BindingFlags.NonPublic);
-        private static readonly MethodInfo? _SendToPtyMethod = typeof(TerminalView).GetMethod("SendToPtyAsync", BindingFlags.Instance | BindingFlags.NonPublic);
         private bool _IsClosingWorkspace = false;
         private bool _SuppressNextShortcutTextInput = false;
         private const double TerminalFontZoomStep = 1;
@@ -111,8 +105,6 @@ namespace Termrig.App.Views
             AddHandler(KeyDownEvent, OnWindowPreviewKeyDown, RoutingStrategies.Tunnel, true);
             AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Bubble, true);
             AddHandler(TextInputEvent, OnWindowTextInput, RoutingStrategies.Tunnel, true);
-            _TerminalRenderRefreshTimer.Tick += OnTerminalRenderRefreshTick;
-            _TerminalRenderRefreshTimer.Start();
             Opened += OnWorkspaceOpened;
             Closing += OnWindowClosing;
             DragDrop.SetAllowDrop(TerminalTabHeaders, true);
@@ -274,9 +266,6 @@ namespace Termrig.App.Views
         {
             if (_IsClosingWorkspace) return;
             _IsClosingWorkspace = true;
-            _TerminalRenderRefreshTimer.Stop();
-            _TerminalRenderRefreshTimer.Tick -= OnTerminalRenderRefreshTick;
-
             foreach (TerminalSession session in _Sessions.ToList())
             {
                 session.IsClosingByTermrig = true;
@@ -342,7 +331,7 @@ namespace Termrig.App.Views
                 return;
             }
 
-            bool hasSelection = session.Terminal.Terminal.Selection.HasSelection;
+            bool hasSelection = session.Terminal.HasSelection;
             if (!hasSelection) return;
 
             if (e.Key == Key.LeftCtrl || e.Key == Key.RightCtrl)
@@ -354,7 +343,7 @@ namespace Termrig.App.Views
             if (e.Key != Key.C) return;
             if ((e.KeyModifiers & KeyModifiers.Control) != KeyModifiers.Control) return;
 
-            string selectedText = session.Terminal.Terminal.Selection.GetSelectionText();
+            string selectedText = session.Terminal.GetSelectedText();
             if (String.IsNullOrEmpty(selectedText)) return;
 
             e.Handled = true;
@@ -366,7 +355,7 @@ namespace Termrig.App.Views
                 await topLevel.Clipboard.SetDataAsync(data).ConfigureAwait(true);
             }
 
-            session.Terminal.Terminal.Selection.ClearSelection();
+            session.Terminal.ClearSelection();
         }
 
         private bool TryHandleTerminalControlShortcut(TerminalSession session, KeyEventArgs e)
@@ -441,8 +430,8 @@ namespace Termrig.App.Views
             double clamped = Math.Clamp(fontSize, MinimumTerminalFontSize, MaximumTerminalFontSize);
             session.Terminal.FontSize = clamped;
             UpdateProfileFontSize(session, clamped);
-            ClearTerminalLineCaches(session.Terminal);
-            InvalidateTerminalView(session.Terminal);
+            session.Terminal.ClearVisibleLineCaches();
+            session.Terminal.RequestRenderInvalidate();
         }
 
         private void UpdateProfileFontSize(TerminalSession session, double fontSize)
@@ -453,15 +442,6 @@ namespace Termrig.App.Views
             {
                 _ = _ProfileStore.UpsertAsync(_Profile, CancellationToken.None);
             }
-        }
-
-        private void OnTerminalRenderRefreshTick(object? sender, EventArgs e)
-        {
-            TerminalSession? session = GetSelectedSession();
-            if (session == null) return;
-
-            ClearTerminalLineCaches(session.Terminal);
-            InvalidateTerminalView(session.Terminal);
         }
 
         private Control BuildTabHeader(TerminalSession session)
@@ -836,10 +816,7 @@ namespace Termrig.App.Views
 
         private static async Task PasteIntoTerminalAsync(TerminalControl terminal)
         {
-            if (_TerminalViewField?.GetValue(terminal) is TerminalView terminalView)
-            {
-                await terminalView.PasteAsync().ConfigureAwait(true);
-            }
+            await terminal.PasteAsync().ConfigureAwait(true);
         }
 
         private async Task RunStartupCommandsAsync(TerminalSession session, List<string> startupCommands)
@@ -864,13 +841,7 @@ namespace Termrig.App.Views
 
         private static async Task SendToTerminalAsync(TerminalControl terminal, string text)
         {
-            if (_TerminalViewField?.GetValue(terminal) is TerminalView terminalView)
-            {
-                if (_SendToPtyMethod?.Invoke(terminalView, new object[] { text, CancellationToken.None }) is Task task)
-                {
-                    await task.ConfigureAwait(true);
-                }
-            }
+            await terminal.SendTextAsync(text, CancellationToken.None).ConfigureAwait(true);
         }
 
         private void QueueTerminalKill(TerminalSession session)
@@ -890,16 +861,7 @@ namespace Termrig.App.Views
 
         private static void KillTerminalProcess(TerminalControl terminal)
         {
-            if (!(_TerminalViewField?.GetValue(terminal) is TerminalView terminalView)) return;
-
-            if (_ProcessCancellationField?.GetValue(terminalView) is CancellationTokenSource cancellation)
-            {
-                cancellation.Cancel();
-            }
-
-            object? ptyConnection = _PtyConnectionField?.GetValue(terminalView);
-            MethodInfo? killMethod = ptyConnection?.GetType().GetMethod("Kill", BindingFlags.Instance | BindingFlags.Public);
-            killMethod?.Invoke(ptyConnection, Array.Empty<object>());
+            terminal.TerminateSession();
         }
 
         private void CaptureSessionDirectory(TerminalSession session)
@@ -931,7 +893,7 @@ namespace Termrig.App.Views
         {
             return new XTerm.Options.TerminalOptions
             {
-                ConvertEol = true,
+                ConvertEol = !OperatingSystem.IsWindows(),
                 Scrollback = ResolveTerminalBufferSize(tab),
                 TermName = "xterm-256color"
             };
@@ -960,39 +922,6 @@ namespace Termrig.App.Views
             if (OperatingSystem.IsWindows()) return "Consolas";
             if (OperatingSystem.IsMacOS()) return "Menlo";
             return "DejaVu Sans Mono";
-        }
-
-        private static void ClearTerminalLineCaches(TerminalControl terminal)
-        {
-            try
-            {
-                XTerm.Terminal xterm = terminal.Terminal;
-                int start = Math.Max(0, xterm.Buffer.ViewportY - 1);
-                int end = Math.Min(xterm.Buffer.Length - 1, xterm.Buffer.ViewportY + xterm.Rows + 1);
-                for (int index = start; index <= end; index++)
-                {
-                    XTerm.Buffer.BufferLine? line = xterm.Buffer.GetLine(index);
-                    if (line != null) line.Cache = null;
-                }
-            }
-            catch (InvalidOperationException)
-            {
-            }
-            catch (NullReferenceException)
-            {
-            }
-        }
-
-        private static void InvalidateTerminalView(TerminalControl terminal)
-        {
-            if (_TerminalViewField?.GetValue(terminal) is TerminalView terminalView)
-            {
-                terminalView.InvalidateVisual();
-            }
-            else
-            {
-                terminal.InvalidateVisual();
-            }
         }
 
         private async void ShowTerminalLaunchError(TerminalTabProfile tab, ShellLaunchPlan plan, Exception exception)
