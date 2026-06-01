@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="XTerm.NET" Version="1.0.14" />
+    <ProjectReference Include="C:\Code\Misc\XTerm.NET\src\XTerm.NET\XTerm.NET.csproj" />
   </ItemGroup>
 
 </Project>

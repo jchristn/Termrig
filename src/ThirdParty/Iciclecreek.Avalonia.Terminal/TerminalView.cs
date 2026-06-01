@@ -74,10 +74,6 @@ namespace Iciclecreek.Terminal
 
             private int _column;
 
-            private bool _originMode;
-
-            private int _scrollTop;
-
             public string Process(string output, int columns)
             {
                 if (output.Length == 0)
@@ -124,12 +120,6 @@ namespace Iciclecreek.Terminal
                             }
 
                             FlushTo(builder);
-                            if (TryNormalizeCsi(builder, parameters, final))
-                            {
-                                index = finalIndex;
-                                continue;
-                            }
-
                             if (final == 'C' && IsPaddingCount(parameters, columns))
                             {
                                 int count = ParseCsiCount(parameters, 1);
@@ -214,90 +204,6 @@ namespace Iciclecreek.Terminal
                 }
 
                 _column = Math.Min(Math.Max(0, _column), Int32.MaxValue);
-            }
-
-            private bool TryNormalizeCsi(StringBuilder builder, string parameters, char final)
-            {
-                if (final == 'r')
-                {
-                    int top = Math.Max(ParseCsiPart(parameters, 0, 1), 1) - 1;
-                    _scrollTop = Math.Max(0, top);
-                    builder.Append("\u001b[");
-                    builder.Append(parameters);
-                    builder.Append(final);
-                    AppendCursorPosition(builder, _originMode ? _scrollTop : 0, 0);
-                    _column = 0;
-                    return true;
-                }
-
-                if ((final == 'h' || final == 'l') && HasPrivateMode(parameters, 6))
-                {
-                    _originMode = final == 'h';
-                    builder.Append("\u001b[");
-                    builder.Append(parameters);
-                    builder.Append(final);
-                    AppendCursorPosition(builder, _originMode ? _scrollTop : 0, 0);
-                    _column = 0;
-                    return true;
-                }
-
-                if (_originMode && (final == 'H' || final == 'f'))
-                {
-                    int row = Math.Max(ParseCsiPart(parameters, 0, 1), 1) - 1;
-                    int column = Math.Max(ParseCsiPart(parameters, 1, 1), 1) - 1;
-                    AppendCursorPosition(builder, _scrollTop + row, column);
-                    _column = column;
-                    return true;
-                }
-
-                if (_originMode && final == 'd')
-                {
-                    int row = Math.Max(ParseCsiPart(parameters, 0, 1), 1) - 1;
-                    builder.Append("\u001b[");
-                    builder.Append(_scrollTop + row + 1);
-                    builder.Append('d');
-                    return true;
-                }
-
-                return false;
-            }
-
-            private static void AppendCursorPosition(StringBuilder builder, int row, int column)
-            {
-                builder.Append("\u001b[");
-                builder.Append(row + 1);
-                builder.Append(';');
-                builder.Append(column + 1);
-                builder.Append('H');
-            }
-
-            private static bool HasPrivateMode(string parameters, int mode)
-            {
-                if (!parameters.StartsWith("?", StringComparison.Ordinal))
-                    return false;
-
-                string[] parts = parameters[1..].Split(';');
-                foreach (string part in parts)
-                {
-                    if (int.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) && value == mode)
-                        return true;
-                }
-
-                return false;
-            }
-
-            private static int ParseCsiPart(string parameters, int index, int defaultValue)
-            {
-                if (string.IsNullOrWhiteSpace(parameters))
-                    return defaultValue;
-
-                string[] parts = parameters.TrimStart('?').Split(';');
-                if (index >= parts.Length || string.IsNullOrWhiteSpace(parts[index]))
-                    return defaultValue;
-
-                return int.TryParse(parts[index], NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
-                    ? value
-                    : defaultValue;
             }
 
             private static int ParseCsiCount(string parameters, int defaultValue)
