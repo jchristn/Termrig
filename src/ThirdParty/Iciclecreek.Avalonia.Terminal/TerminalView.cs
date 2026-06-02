@@ -784,6 +784,8 @@ namespace Iciclecreek.Terminal
             if (string.IsNullOrEmpty(text))
                 return;
 
+            text = NormalizePasteLineEndings(text);
+
             bool bracketedPasteMode;
             lock (_terminalLock)
             {
@@ -796,6 +798,11 @@ namespace Iciclecreek.Terminal
             }
 
             await SendToPtyAsync(text, ct).ConfigureAwait(false);
+        }
+
+        private static string NormalizePasteLineEndings(string text)
+        {
+            return text.Replace("\r\n", "\n").Replace("\r", "\n");
         }
 
         public Task SendTextAsync(string text, CancellationToken ct = default) => SendToPtyAsync(text, ct);
