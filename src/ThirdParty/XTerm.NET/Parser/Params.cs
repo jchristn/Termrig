@@ -1,0 +1,145 @@
+namespace XTerm.Parser;
+
+/// <summary>
+/// Manages parameters for escape sequences.
+/// </summary>
+public class Params : ICloneable
+{
+        private readonly List<int> _params;
+        private readonly List<int> _subParams;
+        private int _subParamsStart;
+        private string _rawText;
+
+        public int Length => _params.Count;
+
+        public string RawText => _rawText;
+
+    /// <summary>
+    /// Default constructor.
+    /// </summary>
+    public Params()
+    {
+            _params = new List<int>(32);
+            _subParams = new List<int>(32);
+            _subParamsStart = 0;
+            _rawText = string.Empty;
+        }
+
+    /// <summary>
+    /// Copy constructor for cloning.
+    /// </summary>
+    public Params(Params other)
+    {
+            _params = new List<int>(other._params);
+            _subParams = new List<int>(other._subParams);
+            _subParamsStart = other._subParamsStart;
+            _rawText = other._rawText;
+        }
+
+    /// <summary>
+    /// Gets a parameter at a specific index, or returns default value.
+    /// </summary>
+    public int GetParam(int index, int defaultValue = 0)
+    {
+        if (index >= 0 && index < _params.Count)
+        {
+            var value = _params[index];
+            return value == -1 ? defaultValue : value;
+        }
+        return defaultValue;
+    }
+
+    /// <summary>
+    /// Adds a parameter.
+    /// </summary>
+    public void AddParam(int value)
+    {
+        _params.Add(value);
+    }
+
+    /// <summary>
+    /// Updates the last parameter value.
+    /// </summary>
+    public void UpdateLastParam(int value)
+    {
+        if (_params.Count > 0)
+        {
+            _params[_params.Count - 1] = value;
+        }
+        else
+        {
+            _params.Add(value);
+        }
+    }
+
+    /// <summary>
+    /// Adds a sub-parameter.
+    /// </summary>
+        public void AddSubParam(int value)
+        {
+            _subParams.Add(value);
+        }
+
+        public void AppendRaw(char value)
+        {
+            _rawText += value;
+        }
+
+    /// <summary>
+    /// Gets sub-parameters for a specific parameter index.
+    /// </summary>
+    public List<int> GetSubParams(int index)
+    {
+        var result = new List<int>();
+        if (index >= 0 && index < _params.Count)
+        {
+            // Sub-parameters are stored contiguously
+            // This is a simplified version
+            return result;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Resets the parameters.
+    /// </summary>
+    public void Reset()
+    {
+            _params.Clear();
+            _subParams.Clear();
+            _subParamsStart = 0;
+            _rawText = string.Empty;
+        }
+
+    /// <summary>
+    /// Checks if a parameter exists at an index.
+    /// </summary>
+    public bool HasParam(int index)
+    {
+        return index >= 0 && index < _params.Count && _params[index] != -1;
+    }
+
+    /// <summary>
+    /// Gets all parameters as an array.
+    /// </summary>
+    public int[] ToArray()
+    {
+        return _params.ToArray();
+    }
+
+    /// <summary>
+    /// Creates a copy of this Params.
+    /// </summary>
+    public Params Clone()
+    {
+        return new Params(this);
+    }
+
+    /// <summary>
+    /// Explicit interface implementation for ICloneable.
+    /// </summary>
+    object ICloneable.Clone()
+    {
+        return Clone();
+    }
+}

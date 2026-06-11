@@ -48,6 +48,16 @@ namespace Termrig.Core.Models
         public ColorScheme GlobalColorScheme { get; set; } = new ColorScheme();
 
         /// <summary>
+        /// True to open this profile automatically when Termrig starts.
+        /// </summary>
+        public bool AutoOpen { get; set; } = false;
+
+        /// <summary>
+        /// Optional profile folder identifier. Empty value means the profile is not in a folder.
+        /// </summary>
+        public string FolderId { get; set; } = String.Empty;
+
+        /// <summary>
         /// Optional profile-wide terminal font family. Null means the system/default font is used.
         /// </summary>
         public string? FontFamily

@@ -48,5 +48,10 @@ namespace Termrig.App.Models
         /// Whether launch has been requested for this tab.
         /// </summary>
         public bool IsLaunchRequested { get; set; } = false;
+
+        /// <summary>
+        /// Whether this tab has requested user attention.
+        /// </summary>
+        public bool HasAttention { get; set; } = false;
     }
 }

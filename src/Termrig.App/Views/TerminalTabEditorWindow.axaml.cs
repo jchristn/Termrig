@@ -71,7 +71,9 @@ namespace Termrig.App.Views
 
         private static TerminalTabProfile CreateDefaultTab(List<ShellDescriptor> shells)
         {
-            ShellType shell = shells.Any() ? shells[0].Shell : ShellType.PowerShell;
+            ShellType shell = shells.FirstOrDefault(item => item.Shell == ShellType.Cmd)?.Shell
+                ?? shells.FirstOrDefault()?.Shell
+                ?? (OperatingSystem.IsWindows() ? ShellType.Cmd : ShellType.Bash);
             return new TerminalTabProfile
             {
                 Name = "Terminal",

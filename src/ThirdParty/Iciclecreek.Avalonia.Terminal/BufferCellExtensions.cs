@@ -76,9 +76,9 @@ namespace Iciclecreek.Avalonia.Terminal
 
             if (realColor != null)
             {
-                if (cell.Attributes.IsBold())
+                if (cell.Attributes.IsBold() && mode != 1 && color >= 0 && color <= 7)
                 {
-                    // Increase brightness for bold text
+                    // Increase brightness for the base ANSI palette only.
                     var c = realColor.Value;
                     byte r = (byte)Math.Min(255, c.R + 85);
                     byte g = (byte)Math.Min(255, c.G + 85);

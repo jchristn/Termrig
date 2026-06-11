@@ -37,6 +37,11 @@
             <Setter Property="MinHeight" Value="28"/>
             <Setter Property="Background" Value="#202A33"/>
         </Style>
+        <Style Selector="Button.destructive">
+            <Setter Property="Background" Value="#352329"/>
+            <Setter Property="BorderBrush" Value="#70404A"/>
+            <Setter Property="Foreground" Value="#FFD7D7"/>
+        </Style>
         <Style Selector="TextBox">
             <Setter Property="Background" Value="#141B22"/>
             <Setter Property="Foreground" Value="#E6EDF3"/>
@@ -54,6 +59,25 @@
             <Setter Property="Foreground" Value="#E6EDF3"/>
             <Setter Property="BorderBrush" Value="#283540"/>
             <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="ListBox.profileList">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.profileList ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        </Style>
+        <Style Selector="ListBox.profileList ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.profileList ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#203A50"/>
+            <Setter Property="BorderBrush" Value="#58A6FF"/>
+            <Setter Property="BorderThickness" Value="1"/>
         </Style>
         <Style Selector="ListBoxItem.draggingItem /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="#315E7A"/>

@@ -1,6 +1,7 @@
 namespace Termrig.App.Views
 {
     using Avalonia.Controls;
+    using Avalonia.Input;
     using Avalonia.Interactivity;
 
     /// <summary>
@@ -30,16 +31,29 @@ namespace Termrig.App.Views
             ValueBox.Text = value;
             SaveButton.Click += OnSaveClicked;
             CancelButton.Click += OnCancelClicked;
+            ValueBox.KeyDown += OnValueBoxKeyDown;
         }
 
         private void OnSaveClicked(object? sender, RoutedEventArgs e)
         {
-            Close(ValueBox.Text);
+            Save();
         }
 
         private void OnCancelClicked(object? sender, RoutedEventArgs e)
         {
             Close(null);
+        }
+
+        private void OnValueBoxKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter) return;
+            e.Handled = true;
+            Save();
+        }
+
+        private void Save()
+        {
+            Close(ValueBox.Text);
         }
     }
 }

@@ -46,6 +46,11 @@ namespace Termrig.Core
         public const string ProfilesFilename = "profiles.json";
 
         /// <summary>
+        /// Profile folder store filename.
+        /// </summary>
+        public const string ProfileFoldersFilename = "profile-folders.json";
+
+        /// <summary>
         /// Color scheme store filename.
         /// </summary>
         public const string ColorSchemesFilename = "color-schemes.json";

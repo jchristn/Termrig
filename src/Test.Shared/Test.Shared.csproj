@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Termrig.Core\Termrig.Core.csproj" />
+    <ProjectReference Include="..\ThirdParty\XTerm.NET\XTerm.NET.csproj" />
   </ItemGroup>
 
   <ItemGroup>

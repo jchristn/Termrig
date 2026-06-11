@@ -169,6 +169,7 @@ namespace Termrig.Core.Services
             {
                 if (profile == null) continue;
                 if (profile.GlobalColorScheme == null) profile.GlobalColorScheme = ColorSchemeCatalog.GetSchemes()[0];
+                profile.FolderId ??= String.Empty;
                 profile.Tabs ??= new List<TerminalTabProfile>();
 
                 List<TerminalTabProfile> tabs = new List<TerminalTabProfile>();

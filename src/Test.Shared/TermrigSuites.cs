@@ -27,7 +27,9 @@ namespace Test.Shared
                     CrashLogStoreSuite(),
                     ColorSchemeStoreSuite(),
                     ProfileStoreSuite(),
-                    ShellCatalogSuite()
+                    ProfileFolderStoreSuite(),
+                    ShellCatalogSuite(),
+                    XTermSuites.XTermNetRegressionSuite()
                 };
             }
         }
@@ -126,6 +128,31 @@ namespace Test.Shared
         }
 
         /// <summary>
+        /// Profile folder persistence suite.
+        /// </summary>
+        /// <returns>Test suite descriptor.</returns>
+        public static TestSuiteDescriptor ProfileFolderStoreSuite()
+        {
+            return new TestSuiteDescriptor(
+                suiteId: "ProfileFolderStore",
+                displayName: "Profile Folder Store",
+                cases: new List<TestCaseDescriptor>
+                {
+                    new TestCaseDescriptor(
+                        suiteId: "ProfileFolderStore",
+                        caseId: "MissingFolderStoreLoadsEmpty",
+                        displayName: "Missing profile folder store loads empty",
+                        executeAsync: MissingFolderStoreLoadsEmptyAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ProfileFolderStore",
+                        caseId: "SaveAndLoadProfileFolders",
+                        displayName: "Profile folders persist and load",
+                        executeAsync: SaveAndLoadProfileFoldersAsync)
+                });
+        }
+
+        /// <summary>
         /// Shell catalog suite.
         /// </summary>
         /// <returns>Test suite descriptor.</returns>
@@ -195,6 +222,12 @@ namespace Test.Shared
                         caseId: "WindowsDirectoryPathUsesFileSystemCasing",
                         displayName: "Windows directory paths use filesystem casing",
                         executeAsync: WindowsDirectoryPathUsesFileSystemCasingAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
+                        caseId: "TerminalTabProfileDefaultsToCmd",
+                        displayName: "Terminal tab profiles default to cmd.exe",
+                        executeAsync: TerminalTabProfileDefaultsToCmdAsync),
 
                     new TestCaseDescriptor(
                         suiteId: "ShellCatalog",
@@ -340,6 +373,8 @@ namespace Test.Shared
                     new TerminalProfile
                     {
                         Name = "Work",
+                        AutoOpen = true,
+                        FolderId = "folder1",
                         FontFamily = "Cascadia Code",
                         FontSize = 15,
                         Tabs = new List<TerminalTabProfile>
@@ -370,6 +405,8 @@ namespace Test.Shared
 
                 AssertEqual(1, loaded.Count, "Expected one loaded profile.");
                 AssertEqual("Work", loaded[0].Name, "Profile name mismatch.");
+                AssertEqual(true, loaded[0].AutoOpen, "Profile auto-open mismatch.");
+                AssertEqual("folder1", loaded[0].FolderId, "Profile folder id mismatch.");
                 AssertEqual("Cascadia Code", loaded[0].FontFamily, "Profile font family mismatch.");
                 AssertEqual(15, loaded[0].FontSize, "Profile font size mismatch.");
                 AssertEqual(2, loaded[0].Tabs.Count, "Expected two loaded tabs.");
@@ -427,10 +464,57 @@ namespace Test.Shared
 
                 AssertEqual(1, profiles.Count, "Expected one loaded profile.");
                 if (profiles[0].GlobalColorScheme == null) throw new InvalidOperationException("Expected global color scheme to be normalized.");
+                AssertEqual(false, profiles[0].AutoOpen, "Missing auto-open flag should default to false.");
+                AssertEqual(String.Empty, profiles[0].FolderId, "Missing folder id should default to empty.");
                 AssertEqual(1, profiles[0].Tabs.Count, "Expected one loaded tab.");
                 AssertEqual(String.Empty, profiles[0].Tabs[0].StartingDirectory, "Expected null starting directory to be normalized.");
                 AssertEqual(String.Empty, profiles[0].Tabs[0].StartupScript, "Expected null startup script to be normalized.");
                 AssertEqual<int?>(null, profiles[0].Tabs[0].ScrollbackBufferSize, "Missing scrollback buffer size should remain null.");
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
+        private static async Task MissingFolderStoreLoadsEmptyAsync(CancellationToken token)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                ProfileFolderStore store = new ProfileFolderStore(directory);
+                List<ProfileFolder> folders = await store.LoadAsync(token).ConfigureAwait(false);
+                AssertEqual(0, folders.Count, "Expected missing profile folder store to load empty.");
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
+        private static async Task SaveAndLoadProfileFoldersAsync(CancellationToken token)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                ProfileFolderStore store = new ProfileFolderStore(directory);
+                List<ProfileFolder> folders = new List<ProfileFolder>
+                {
+                    new ProfileFolder
+                    {
+                        Id = "folder1",
+                        Name = "My Apps",
+                        IsExpanded = false
+                    }
+                };
+
+                await store.SaveAsync(folders, token).ConfigureAwait(false);
+                List<ProfileFolder> loaded = await store.LoadAsync(token).ConfigureAwait(false);
+
+                AssertEqual(1, loaded.Count, "Expected one loaded profile folder.");
+                AssertEqual("folder1", loaded[0].Id, "Profile folder id mismatch.");
+                AssertEqual("My Apps", loaded[0].Name, "Profile folder name mismatch.");
+                AssertEqual(false, loaded[0].IsExpanded, "Profile folder expansion state mismatch.");
             }
             finally
             {
@@ -664,6 +748,14 @@ namespace Test.Shared
             AssertEqual("cmd.exe", new TerminalTabProfile { Shell = ShellType.Cmd }.ShellDisplayName, "cmd.exe display name mismatch.");
             AssertEqual("PowerShell", new TerminalTabProfile { Shell = ShellType.PowerShell }.ShellDisplayName, "PowerShell display name mismatch.");
             AssertEqual("bash", new TerminalTabProfile { Shell = ShellType.Bash }.ShellDisplayName, "bash display name mismatch.");
+            return Task.CompletedTask;
+        }
+
+        private static Task TerminalTabProfileDefaultsToCmdAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            AssertEqual(ShellType.Cmd, new TerminalTabProfile().Shell, "Terminal tab profile default shell mismatch.");
             return Task.CompletedTask;
         }
 

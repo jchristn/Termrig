@@ -13,6 +13,7 @@ namespace Termrig.App.Views
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Termrig.App.Models;
     using Termrig.Core.Enums;
     using Termrig.Core.Models;
     using Termrig.Core.Services;
@@ -25,9 +26,11 @@ namespace Termrig.App.Views
         #region Private-Members
 
         private readonly ProfileStore _ProfileStore = new ProfileStore();
+        private readonly ProfileFolderStore _ProfileFolderStore = new ProfileFolderStore();
         private readonly ColorSchemeStore _ColorSchemeStore = new ColorSchemeStore();
         private readonly ShellCatalog _ShellCatalog = new ShellCatalog();
         private const string RepositoryUrl = "https://github.com/jchristn/Termrig";
+        private const string NoFolderLabel = "No folder";
         private readonly List<string> _FontFamilies = new List<string>
         {
             "Default terminal font",
@@ -42,8 +45,11 @@ namespace Termrig.App.Views
             "Fira Code"
         };
         private List<ColorScheme> _ColorSchemes = ColorSchemeCatalog.GetSchemes();
+        private List<ProfileFolder> _ProfileFolders = new List<ProfileFolder>();
         private List<TerminalProfile> _Profiles = new List<TerminalProfile>();
+        private List<ProfileListItem> _ProfileItems = new List<ProfileListItem>();
         private TerminalProfile? _SelectedProfile = null;
+        private ProfileFolder? _SelectedFolder = null;
         private TerminalProfile? _DraggedProfile = null;
         private TerminalTabProfile? _DraggedTab = null;
         private TerminalProfile? _DraggedTabSourceProfile = null;
@@ -58,8 +64,11 @@ namespace Termrig.App.Views
         private bool _IsStartingDrag = false;
         private bool _DropHandled = false;
         private int? _LastProfileDropIndex = null;
+        private string _LastProfileDropTargetFolderId = String.Empty;
         private TerminalProfile? _LastProfileDropTargetProfile = null;
         private int? _LastTabDropIndex = null;
+        private bool _SuppressProfileSelectionChanged = false;
+        private bool _IsRefreshingProfileEditor = false;
         private const string DraggingItemClass = "draggingItem";
         private const string DropTargetItemClass = "dropTargetItem";
         private const double DragStartThreshold = 4;
@@ -89,6 +98,8 @@ namespace Termrig.App.Views
         {
             NewProfileButton.Click += OnNewProfileClicked;
             DeleteProfileButton.Click += OnDeleteProfileClicked;
+            NewFolderButton.Click += OnNewFolderClicked;
+            DeleteFolderButton.Click += OnDeleteFolderClicked;
             SaveProfileButton.Click += OnSaveProfileClicked;
             OpenProfileButton.Click += OnOpenProfileClicked;
             GitHubButton.Click += OnGitHubClicked;
@@ -103,8 +114,12 @@ namespace Termrig.App.Views
             MoveTabDownButton.Click += OnMoveTabDownClicked;
             ProfileList.DoubleTapped += OnProfileListDoubleTapped;
             TabsList.DoubleTapped += OnTabsListDoubleTapped;
+            ProfileList.ContextRequested += OnProfileListContextRequested;
+            TabsList.ContextRequested += OnTabsListContextRequested;
             ProfileList.SelectionChanged += OnProfileSelectionChanged;
             GlobalSchemeCombo.SelectionChanged += OnGlobalSchemeChanged;
+            ProfileFolderCombo.SelectionChanged += OnProfileFolderChanged;
+            AutoOpenProfileBox.IsCheckedChanged += OnAutoOpenProfileChanged;
             SchemeBackgroundPicker.ColorChanged += OnColorPickerChanged;
             SchemeForegroundPicker.ColorChanged += OnColorPickerChanged;
             ProfileList.AddHandler(PointerPressedEvent, OnProfileListPointerPressed, RoutingStrategies.Bubble, true);
@@ -126,6 +141,7 @@ namespace Termrig.App.Views
         private void InitializeLists()
         {
             RefreshColorSchemeList(null);
+            RefreshProfileFolderList(null);
             ProfileFontFamilyCombo.ItemsSource = _FontFamilies;
         }
 
@@ -136,15 +152,25 @@ namespace Termrig.App.Views
                 _ColorSchemes = await _ColorSchemeStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
                 RefreshColorSchemeList(null);
 
+                _ProfileFolders = await _ProfileFolderStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+                RefreshProfileFolderList(null);
+
                 _Profiles = await _ProfileStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+                bool profilesChanged = ReconcileProfileFolders();
                 if (!_Profiles.Any())
                 {
                     _Profiles.Add(CreateDefaultProfile());
+                    profilesChanged = true;
+                }
+
+                if (profilesChanged)
+                {
                     await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
                 }
 
                 RefreshProfiles();
-                ProfileList.SelectedIndex = 0;
+                SelectFirstProfileRow();
+                OpenAutoOpenProfiles();
                 _ProfilesLoaded.TrySetResult(true);
             }
             catch (Exception exception)
@@ -156,7 +182,7 @@ namespace Termrig.App.Views
 
         private static TerminalProfile CreateDefaultProfile()
         {
-            ShellType shell = OperatingSystem.IsWindows() ? ShellType.PowerShell : ShellType.Bash;
+            ShellType shell = OperatingSystem.IsWindows() ? ShellType.Cmd : ShellType.Bash;
             return new TerminalProfile
             {
                 Name = "Default",
@@ -172,29 +198,64 @@ namespace Termrig.App.Views
             };
         }
 
-        private void RefreshProfiles()
+        private void RefreshProfiles(string? selectedProfileId = null, string? selectedFolderId = null)
         {
-            ProfileList.ItemsSource = null;
-            ProfileList.ItemsSource = _Profiles;
+            if (!String.IsNullOrWhiteSpace(selectedProfileId))
+            {
+                EnsureProfileFolderExpanded(selectedProfileId);
+            }
+
+            _ProfileItems = BuildProfileListItems();
+
+            _SuppressProfileSelectionChanged = true;
+            try
+            {
+                ProfileList.ItemsSource = null;
+                ProfileList.ItemsSource = _ProfileItems;
+                if (!String.IsNullOrWhiteSpace(selectedProfileId))
+                {
+                    SelectProfileRowByProfileId(selectedProfileId);
+                }
+                else if (!String.IsNullOrWhiteSpace(selectedFolderId))
+                {
+                    SelectFolderRowByFolderId(selectedFolderId);
+                }
+            }
+            finally
+            {
+                _SuppressProfileSelectionChanged = false;
+            }
         }
 
         private void RefreshEditor()
         {
-            if (_SelectedProfile == null)
+            _IsRefreshingProfileEditor = true;
+            try
             {
-                ProfileNameBox.Text = String.Empty;
-                TabsList.ItemsSource = null;
-                return;
-            }
+                if (_SelectedProfile == null)
+                {
+                    ProfileNameBox.Text = String.Empty;
+                    ProfileFolderCombo.SelectedItem = NoFolderLabel;
+                    AutoOpenProfileBox.IsChecked = false;
+                    TabsList.ItemsSource = null;
+                    return;
+                }
 
-            ProfileNameBox.Text = _SelectedProfile.Name;
-            GlobalSchemeCombo.SelectedItem = _SelectedProfile.GlobalColorScheme.Name;
-            SchemeNameBox.Text = _SelectedProfile.GlobalColorScheme.Name;
-            SchemeBackgroundPicker.Color = ParseColor(_SelectedProfile.GlobalColorScheme.Background);
-            SchemeForegroundPicker.Color = ParseColor(_SelectedProfile.GlobalColorScheme.Foreground);
-            ProfileFontFamilyCombo.SelectedItem = _SelectedProfile.FontFamily ?? "Default terminal font";
-            ProfileFontSizeBox.Text = _SelectedProfile.FontSize.HasValue ? _SelectedProfile.FontSize.Value.ToString("0.##") : String.Empty;
-            RefreshTabs();
+                ProfileNameBox.Text = _SelectedProfile.Name;
+                GlobalSchemeCombo.SelectedItem = _SelectedProfile.GlobalColorScheme.Name;
+                SchemeNameBox.Text = _SelectedProfile.GlobalColorScheme.Name;
+                SchemeBackgroundPicker.Color = ParseColor(_SelectedProfile.GlobalColorScheme.Background);
+                SchemeForegroundPicker.Color = ParseColor(_SelectedProfile.GlobalColorScheme.Foreground);
+                ProfileFolderCombo.SelectedItem = GetFolderComboItem(_SelectedProfile.FolderId);
+                AutoOpenProfileBox.IsChecked = _SelectedProfile.AutoOpen;
+                ProfileFontFamilyCombo.SelectedItem = _SelectedProfile.FontFamily ?? "Default terminal font";
+                ProfileFontSizeBox.Text = _SelectedProfile.FontSize.HasValue ? _SelectedProfile.FontSize.Value.ToString("0.##") : String.Empty;
+                RefreshTabs();
+            }
+            finally
+            {
+                _IsRefreshingProfileEditor = false;
+            }
         }
 
         private void RefreshTabs()
@@ -220,6 +281,8 @@ namespace Termrig.App.Views
             if (!String.IsNullOrWhiteSpace(SchemeNameBox.Text)) _SelectedProfile.GlobalColorScheme.Name = SchemeNameBox.Text;
             _SelectedProfile.GlobalColorScheme.Background = ToHex(SchemeBackgroundPicker.Color);
             _SelectedProfile.GlobalColorScheme.Foreground = ToHex(SchemeForegroundPicker.Color);
+            _SelectedProfile.FolderId = GetSelectedProfileFolderId();
+            _SelectedProfile.AutoOpen = AutoOpenProfileBox.IsChecked == true;
             _SelectedProfile.FontFamily = ProfileFontFamilyCombo.SelectedItem is string fontFamily && fontFamily != "Default terminal font" ? fontFamily : null;
             if (String.IsNullOrWhiteSpace(ProfileFontSizeBox.Text))
             {
@@ -236,7 +299,7 @@ namespace Termrig.App.Views
             string? selectedProfileId = _SelectedProfile?.Id;
             ApplyEditorToProfile();
             await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
-            RefreshProfiles();
+            RefreshProfiles(selectedProfileId);
             RestoreSelectedProfile(selectedProfileId);
         }
 
@@ -244,19 +307,52 @@ namespace Termrig.App.Views
         {
             TerminalProfile profile = CreateDefaultProfile();
             profile.Name = "Profile " + (_Profiles.Count + 1);
+            profile.FolderId = GetNewProfileFolderId();
             _Profiles.Add(profile);
-            RefreshProfiles();
-            ProfileList.SelectedIndex = _Profiles.Count - 1;
+            RefreshProfiles(profile.Id);
+            RestoreSelectedProfile(profile.Id);
         }
 
         private async void OnDeleteProfileClicked(object? sender, RoutedEventArgs e)
         {
-            Int32 index = ProfileList.SelectedIndex;
-            if (index < 0 || index >= _Profiles.Count) return;
-            _Profiles.RemoveAt(index);
-            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
-            RefreshProfiles();
-            ProfileList.SelectedIndex = _Profiles.Count > 0 ? Math.Min(index, _Profiles.Count - 1) : -1;
+            TerminalProfile? profile = GetSelectedProfileListItem()?.Profile;
+            if (profile == null) return;
+            await DeleteProfileAsync(profile).ConfigureAwait(true);
+        }
+
+        private async void OnNewFolderClicked(object? sender, RoutedEventArgs e)
+        {
+            TextPromptWindow prompt = new TextPromptWindow("New folder", "Folder name", "New Folder");
+            string? value = await prompt.ShowDialog<string?>(this).ConfigureAwait(true);
+            if (value == null) return;
+
+            string name = GetUniqueFolderName(value, null);
+            if (String.IsNullOrWhiteSpace(name)) return;
+
+            ProfileFolder folder = new ProfileFolder
+            {
+                Name = name
+            };
+            _ProfileFolders.Add(folder);
+            await _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None).ConfigureAwait(true);
+            RefreshProfileFolderList(folder.Name);
+            RefreshProfiles(null, folder.Id);
+            _SelectedFolder = folder;
+            RefreshEditor();
+        }
+
+        private async void OnRenameFolderClicked(object? sender, RoutedEventArgs e)
+        {
+            ProfileFolder? folder = GetActiveFolder();
+            if (folder == null) return;
+            await RenameFolderAsync(folder).ConfigureAwait(true);
+        }
+
+        private async void OnDeleteFolderClicked(object? sender, RoutedEventArgs e)
+        {
+            ProfileFolder? folder = GetActiveFolder();
+            if (folder == null) return;
+            await DeleteFolderAsync(folder).ConfigureAwait(true);
         }
 
         private void OnOpenProfileClicked(object? sender, RoutedEventArgs e)
@@ -266,10 +362,20 @@ namespace Termrig.App.Views
             OpenWorkspace(_SelectedProfile);
         }
 
-        private void OnProfileListDoubleTapped(object? sender, TappedEventArgs e)
+        private async void OnProfileListDoubleTapped(object? sender, TappedEventArgs e)
         {
             if (!(e.Source is Control source)) return;
-            if (!(source is ListBoxItem) && source.FindAncestorOfType<ListBoxItem>() == null) return;
+            ListBoxItem? item = GetListBoxItem(source);
+            if (item == null) return;
+
+            if (item.DataContext is ProfileListItem profileItem && profileItem.Folder != null)
+            {
+                await ToggleFolderExpansionAsync(profileItem.Folder).ConfigureAwait(true);
+                e.Handled = true;
+                return;
+            }
+
+            if (GetSelectedProfileListItem()?.Profile == null) return;
 
             ApplyEditorToProfile();
             if (_SelectedProfile == null) return;
@@ -436,13 +542,229 @@ namespace Termrig.App.Views
             RefreshTabs();
         }
 
-        private void OnDeleteTabClicked(object? sender, RoutedEventArgs e)
+        private async void OnDeleteTabClicked(object? sender, RoutedEventArgs e)
         {
             if (_SelectedProfile == null) return;
             Int32 index = TabsList.SelectedIndex;
+            await DeleteTabAsync(index).ConfigureAwait(true);
+        }
+
+        private void OnProfileListContextRequested(object? sender, ContextRequestedEventArgs e)
+        {
+            if (!(e.Source is Control source)) return;
+            ListBoxItem? item = GetListBoxItem(source);
+            if (!(item?.DataContext is ProfileListItem profileItem)) return;
+
+            SelectProfileListItemForContext(profileItem);
+            ContextMenu? menu = profileItem.Profile != null
+                ? BuildProfileContextMenu(profileItem.Profile)
+                : profileItem.Folder != null
+                    ? BuildFolderContextMenu(profileItem.Folder)
+                    : null;
+            if (menu == null) return;
+
+            menu.Open(item);
+            e.Handled = true;
+        }
+
+        private void OnTabsListContextRequested(object? sender, ContextRequestedEventArgs e)
+        {
+            if (_SelectedProfile == null) return;
+            if (!(e.Source is Control source)) return;
+            ListBoxItem? item = GetListBoxItem(source);
+            if (!(item?.DataContext is TerminalTabProfile tab)) return;
+
+            Int32 index = _SelectedProfile.Tabs.IndexOf(tab);
+            if (index < 0) return;
+
+            TabsList.SelectedIndex = index;
+            BuildTabContextMenu(tab).Open(item);
+            e.Handled = true;
+        }
+
+        private async void OnProfileFolderTogglePointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (!e.GetCurrentPoint(ProfileList).Properties.IsLeftButtonPressed) return;
+            if (!((sender as Control)?.DataContext is ProfileListItem item) || item.Folder == null) return;
+
+            e.Handled = true;
+            await ToggleFolderExpansionAsync(item.Folder).ConfigureAwait(true);
+        }
+
+        private ContextMenu BuildProfileContextMenu(TerminalProfile profile)
+        {
+            return new ContextMenu
+            {
+                ItemsSource = new MenuItem[]
+                {
+                    CreateMenuItem("Open", delegate { OpenProfileFromContext(profile); }),
+                    CreateAsyncMenuItem("Rename", async delegate { await RenameProfileAsync(profile).ConfigureAwait(true); }),
+                    CreateAsyncMenuItem("Delete", async delegate { await DeleteProfileAsync(profile).ConfigureAwait(true); })
+                }
+            };
+        }
+
+        private ContextMenu BuildFolderContextMenu(ProfileFolder folder)
+        {
+            return new ContextMenu
+            {
+                ItemsSource = new MenuItem[]
+                {
+                    CreateAsyncMenuItem("Rename", async delegate { await RenameFolderAsync(folder).ConfigureAwait(true); }),
+                    CreateAsyncMenuItem("Delete", async delegate { await DeleteFolderAsync(folder).ConfigureAwait(true); })
+                }
+            };
+        }
+
+        private ContextMenu BuildTabContextMenu(TerminalTabProfile tab)
+        {
+            return new ContextMenu
+            {
+                ItemsSource = new MenuItem[]
+                {
+                    CreateAsyncMenuItem("Rename", async delegate { await RenameTabAsync(tab).ConfigureAwait(true); }),
+                    CreateAsyncMenuItem("Edit", async delegate { await EditSelectedTabAsync().ConfigureAwait(true); }),
+                    CreateAsyncMenuItem("Delete", async delegate
+                    {
+                        Int32 index = _SelectedProfile?.Tabs.IndexOf(tab) ?? -1;
+                        await DeleteTabAsync(index).ConfigureAwait(true);
+                    })
+                }
+            };
+        }
+
+        private static MenuItem CreateMenuItem(string header, Action onClick)
+        {
+            MenuItem item = new MenuItem { Header = header };
+            item.Click += delegate { onClick(); };
+            return item;
+        }
+
+        private static MenuItem CreateAsyncMenuItem(string header, Func<Task> onClick)
+        {
+            MenuItem item = new MenuItem { Header = header };
+            item.Click += async delegate { await onClick().ConfigureAwait(true); };
+            return item;
+        }
+
+        private void OpenProfileFromContext(TerminalProfile profile)
+        {
+            if (_SelectedProfile == profile)
+            {
+                ApplyEditorToProfile();
+            }
+
+            OpenWorkspace(profile);
+        }
+
+        private async Task RenameProfileAsync(TerminalProfile profile)
+        {
+            TextPromptWindow prompt = new TextPromptWindow("Rename profile", "Profile name", profile.Name);
+            string? value = await prompt.ShowDialog<string?>(this).ConfigureAwait(true);
+            if (String.IsNullOrWhiteSpace(value)) return;
+
+            profile.Name = value.Trim();
+            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+            RefreshProfiles(profile.Id);
+            RestoreSelectedProfile(profile.Id);
+        }
+
+        private async Task DeleteProfileAsync(TerminalProfile profile)
+        {
+            Int32 index = _Profiles.IndexOf(profile);
+            if (index < 0) return;
+            bool confirmed = await ConfirmDeleteProfileAsync(profile).ConfigureAwait(true);
+            if (!confirmed) return;
+
+            _Profiles.RemoveAt(index);
+            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+            RefreshProfiles();
+            TerminalProfile? nextProfile = _Profiles.Count > 0 ? _Profiles[Math.Min(index, _Profiles.Count - 1)] : null;
+            RestoreSelectedProfile(nextProfile?.Id);
+        }
+
+        private async Task RenameFolderAsync(ProfileFolder folder)
+        {
+            TextPromptWindow prompt = new TextPromptWindow("Rename folder", "Folder name", folder.Name);
+            string? value = await prompt.ShowDialog<string?>(this).ConfigureAwait(true);
+            if (String.IsNullOrWhiteSpace(value)) return;
+
+            folder.Name = GetUniqueFolderName(value, folder.Id);
+            await _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None).ConfigureAwait(true);
+            RefreshProfileFolderList(folder.Name);
+            RefreshProfiles(null, folder.Id);
+        }
+
+        private async Task DeleteFolderAsync(ProfileFolder folder)
+        {
+            bool confirmed = await ConfirmDeleteFolderAsync(folder).ConfigureAwait(true);
+            if (!confirmed) return;
+
+            _ProfileFolders.Remove(folder);
+            foreach (TerminalProfile profile in _Profiles.Where(item => item.FolderId == folder.Id))
+            {
+                profile.FolderId = String.Empty;
+            }
+
+            await _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None).ConfigureAwait(true);
+            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+            RefreshProfileFolderList(null);
+            RefreshProfiles();
+            SelectFirstProfileRow();
+        }
+
+        private async Task RenameTabAsync(TerminalTabProfile tab)
+        {
+            if (_SelectedProfile == null) return;
+            Int32 index = _SelectedProfile.Tabs.IndexOf(tab);
+            if (index < 0) return;
+
+            TextPromptWindow prompt = new TextPromptWindow("Rename tab", "Tab name", tab.Name);
+            string? value = await prompt.ShowDialog<string?>(this).ConfigureAwait(true);
+            if (String.IsNullOrWhiteSpace(value)) return;
+
+            tab.Name = value.Trim();
+            RefreshTabs();
+            TabsList.SelectedIndex = index;
+        }
+
+        private async Task DeleteTabAsync(Int32 index)
+        {
+            if (_SelectedProfile == null) return;
             if (index < 0 || index >= _SelectedProfile.Tabs.Count) return;
+
+            TerminalTabProfile tab = _SelectedProfile.Tabs[index];
+            bool confirmed = await ConfirmDeleteTabAsync(_SelectedProfile, tab).ConfigureAwait(true);
+            if (!confirmed) return;
+
             _SelectedProfile.Tabs.RemoveAt(index);
             RefreshTabs();
+            TabsList.SelectedIndex = Math.Min(index, _SelectedProfile.Tabs.Count - 1);
+        }
+
+        private async Task<bool> ConfirmDeleteProfileAsync(TerminalProfile profile)
+        {
+            DeleteConfirmationWindow confirmation = new DeleteConfirmationWindow(
+                "Delete profile",
+                "Delete profile?",
+                "This will delete the saved profile \"" + profile.Name + "\" and its " + BuildTabCountText(profile.Tabs.Count) + ".",
+                "Delete profile");
+            return await confirmation.ShowDialog<bool>(this).ConfigureAwait(true);
+        }
+
+        private async Task<bool> ConfirmDeleteTabAsync(TerminalProfile profile, TerminalTabProfile tab)
+        {
+            DeleteConfirmationWindow confirmation = new DeleteConfirmationWindow(
+                "Delete tab",
+                "Delete tab?",
+                "This will remove the tab \"" + tab.Name + "\" from profile \"" + profile.Name + "\".",
+                "Delete tab");
+            return await confirmation.ShowDialog<bool>(this).ConfigureAwait(true);
+        }
+
+        private static string BuildTabCountText(int tabCount)
+        {
+            return tabCount == 1 ? "1 tab" : tabCount + " tabs";
         }
 
         private void OnMoveTabUpClicked(object? sender, RoutedEventArgs e)
@@ -457,14 +779,41 @@ namespace Termrig.App.Views
 
         private void OnProfileSelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
-            Int32 index = ProfileList.SelectedIndex;
-            _SelectedProfile = index >= 0 && index < _Profiles.Count ? _Profiles[index] : null;
+            if (_SuppressProfileSelectionChanged) return;
+
+            ProfileListItem? item = GetSelectedProfileListItem();
+            if (item?.Folder != null)
+            {
+                _SelectedProfile = null;
+                _SelectedFolder = item.Folder;
+                RefreshEditor();
+                return;
+            }
+
+            _SelectedFolder = null;
+            _SelectedProfile = item?.Profile;
             RefreshEditor();
         }
 
         private void OnGlobalSchemeChanged(object? sender, SelectionChangedEventArgs e)
         {
             ApplySelectedGlobalScheme();
+        }
+
+        private void OnProfileFolderChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_IsRefreshingProfileEditor || _SelectedProfile == null) return;
+
+            ApplyEditorToProfile();
+            RefreshProfiles(_SelectedProfile.Id);
+        }
+
+        private void OnAutoOpenProfileChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_IsRefreshingProfileEditor || _SelectedProfile == null) return;
+
+            ApplyEditorToProfile();
+            RefreshProfiles(_SelectedProfile.Id);
         }
 
         private void ApplySelectedGlobalScheme()
@@ -491,7 +840,7 @@ namespace Termrig.App.Views
             if (!(e.Source is Control source)) return;
             if (source is Button || source.FindAncestorOfType<Button>() != null) return;
             ListBoxItem? item = GetListBoxItem(source);
-            if (!(item?.DataContext is TerminalProfile profile)) return;
+            if (!((item?.DataContext as ProfileListItem)?.Profile is TerminalProfile profile)) return;
 
             ClearPendingDrag();
             _PendingDraggedProfile = profile;
@@ -541,7 +890,7 @@ namespace Termrig.App.Views
                 DragDropEffects result = await DragDrop.DoDragDropAsync(triggerEvent, data, DragDropEffects.Move).ConfigureAwait(true);
                 if (!_DropHandled && result == DragDropEffects.Move && _LastProfileDropIndex.HasValue)
                 {
-                    await MoveDraggedProfileAsync(_LastProfileDropIndex.Value).ConfigureAwait(true);
+                    await MoveDraggedProfileAsync(_LastProfileDropIndex.Value, _LastProfileDropTargetFolderId).ConfigureAwait(true);
                 }
             }
             finally
@@ -610,13 +959,16 @@ namespace Termrig.App.Views
             if (_DraggedProfile != null)
             {
                 _LastProfileDropIndex = GetProfileDropIndex(e);
+                _LastProfileDropTargetFolderId = GetProfileDropFolderId(e);
                 _LastProfileDropTargetProfile = null;
                 _LastTabDropIndex = null;
             }
             else if (_DraggedTab != null)
             {
                 _LastProfileDropIndex = null;
-                _LastProfileDropTargetProfile = GetDropListBoxItem(e)?.DataContext as TerminalProfile;
+                _LastProfileDropTargetFolderId = String.Empty;
+                _LastProfileDropTargetProfile = GetProfileFromListBoxItem(GetDropListBoxItem(e));
+                e.DragEffects = _LastProfileDropTargetProfile == null ? DragDropEffects.None : DragDropEffects.Move;
                 _LastTabDropIndex = null;
             }
 
@@ -677,7 +1029,7 @@ namespace Termrig.App.Views
             }
 
             Int32 targetIndex = GetProfileDropIndex(e);
-            await MoveDraggedProfileAsync(targetIndex).ConfigureAwait(true);
+            await MoveDraggedProfileAsync(targetIndex, GetProfileDropFolderId(e)).ConfigureAwait(true);
             ClearDropTarget();
             e.Handled = true;
         }
@@ -691,7 +1043,8 @@ namespace Termrig.App.Views
             }
 
             ApplyEditorToProfile();
-            if (!(GetDropListBoxItem(e)?.DataContext is TerminalProfile targetProfile))
+            TerminalProfile? targetProfile = GetProfileFromListBoxItem(GetDropListBoxItem(e));
+            if (targetProfile == null)
             {
                 ClearDropTarget();
                 return;
@@ -708,7 +1061,7 @@ namespace Termrig.App.Views
             e.Handled = true;
         }
 
-        private async Task MoveDraggedProfileAsync(int targetIndex)
+        private async Task MoveDraggedProfileAsync(int targetIndex, string targetFolderId)
         {
             if (_DraggedProfile == null) return;
             ApplyEditorToProfile();
@@ -720,9 +1073,10 @@ namespace Termrig.App.Views
             _Profiles.RemoveAt(sourceIndex);
             if (sourceIndex < targetIndex) targetIndex--;
             targetIndex = Math.Clamp(targetIndex, 0, _Profiles.Count);
+            _DraggedProfile.FolderId = targetFolderId ?? String.Empty;
             _Profiles.Insert(targetIndex, _DraggedProfile);
 
-            RefreshProfiles();
+            RefreshProfiles(selectedProfileId);
             RestoreSelectedProfile(selectedProfileId);
             await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
             _DropHandled = true;
@@ -742,7 +1096,7 @@ namespace Termrig.App.Views
             targetIndex = Math.Clamp(targetIndex, 0, targetProfile.Tabs.Count);
             targetProfile.Tabs.Insert(targetIndex, _DraggedTab);
 
-            RefreshProfiles();
+            RefreshProfiles(targetProfile.Id);
             RestoreSelectedProfile(targetProfile.Id);
             RefreshTabs();
             TabsList.SelectedIndex = Math.Clamp(targetIndex, 0, Math.Max(0, targetProfile.Tabs.Count - 1));
@@ -830,6 +1184,7 @@ namespace Termrig.App.Views
         private void ClearLastDropTargets()
         {
             _LastProfileDropIndex = null;
+            _LastProfileDropTargetFolderId = String.Empty;
             _LastProfileDropTargetProfile = null;
             _LastTabDropIndex = null;
         }
@@ -837,11 +1192,22 @@ namespace Termrig.App.Views
         private Int32 GetProfileDropIndex(DragEventArgs e)
         {
             ListBoxItem? item = GetDropListBoxItem(e);
-            if (!(item?.DataContext is TerminalProfile profile)) return _Profiles.Count;
+            ProfileListItem? profileItem = item?.DataContext as ProfileListItem;
+            if (profileItem?.Folder != null) return GetProfileInsertIndexForFolder(profileItem.Folder.Id);
+            if (item == null || !(profileItem?.Profile is TerminalProfile profile)) return _Profiles.Count;
 
             Int32 index = _Profiles.IndexOf(profile);
             if (index < 0) return _Profiles.Count;
             return IsDropAfterItem(e, item) ? index + 1 : index;
+        }
+
+        private string GetProfileDropFolderId(DragEventArgs e)
+        {
+            ListBoxItem? item = GetDropListBoxItem(e);
+            ProfileListItem? profileItem = item?.DataContext as ProfileListItem;
+            if (profileItem?.Folder != null) return profileItem.Folder.Id;
+            if (profileItem?.Profile != null) return profileItem.Profile.FolderId ?? String.Empty;
+            return String.Empty;
         }
 
         private Int32 GetTabDropIndex(DragEventArgs e)
@@ -887,6 +1253,219 @@ namespace Termrig.App.Views
             _SelectedProfile.Tabs.Insert(newIndex, tab);
             RefreshTabs();
             TabsList.SelectedIndex = newIndex;
+        }
+
+        private List<ProfileListItem> BuildProfileListItems()
+        {
+            List<ProfileListItem> items = new List<ProfileListItem>();
+
+            foreach (TerminalProfile profile in _Profiles.Where(item => String.IsNullOrWhiteSpace(item.FolderId)))
+            {
+                items.Add(new ProfileListItem { Profile = profile });
+            }
+
+            foreach (ProfileFolder folder in _ProfileFolders)
+            {
+                items.Add(new ProfileListItem { Folder = folder });
+                if (!folder.IsExpanded) continue;
+
+                foreach (TerminalProfile profile in _Profiles.Where(item => item.FolderId == folder.Id))
+                {
+                    items.Add(new ProfileListItem { Profile = profile });
+                }
+            }
+
+            return items;
+        }
+
+        private void SelectFirstProfileRow()
+        {
+            TerminalProfile? firstProfile = _Profiles.FirstOrDefault();
+            RestoreSelectedProfile(firstProfile?.Id);
+        }
+
+        private void EnsureProfileFolderExpanded(string profileId)
+        {
+            TerminalProfile? profile = _Profiles.FirstOrDefault(item => item.Id == profileId);
+            ProfileFolder? folder = FindFolderById(profile?.FolderId);
+            if (folder == null || folder.IsExpanded) return;
+
+            folder.IsExpanded = true;
+            _ = _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None);
+        }
+
+        private void SelectProfileRowByProfileId(string profileId)
+        {
+            Int32 index = _ProfileItems.FindIndex(item => item.Profile?.Id == profileId);
+            ProfileList.SelectedIndex = index;
+            if (index >= 0)
+            {
+                _SelectedProfile = _ProfileItems[index].Profile;
+                _SelectedFolder = null;
+            }
+        }
+
+        private void SelectFolderRowByFolderId(string folderId)
+        {
+            Int32 index = _ProfileItems.FindIndex(item => item.Folder?.Id == folderId);
+            ProfileList.SelectedIndex = index;
+            if (index >= 0)
+            {
+                _SelectedProfile = null;
+                _SelectedFolder = _ProfileItems[index].Folder;
+            }
+        }
+
+        private ProfileListItem? GetSelectedProfileListItem()
+        {
+            return ProfileList.SelectedItem as ProfileListItem;
+        }
+
+        private void SelectProfileListItemForContext(ProfileListItem item)
+        {
+            _SuppressProfileSelectionChanged = true;
+            try
+            {
+                ProfileList.SelectedItem = item;
+            }
+            finally
+            {
+                _SuppressProfileSelectionChanged = false;
+            }
+
+            _SelectedProfile = item.Profile;
+            _SelectedFolder = item.Folder;
+            RefreshEditor();
+        }
+
+        private async Task ToggleFolderExpansionAsync(ProfileFolder folder)
+        {
+            folder.IsExpanded = !folder.IsExpanded;
+            await _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None).ConfigureAwait(true);
+            RefreshProfiles(null, folder.Id);
+            RefreshEditor();
+        }
+
+        private static TerminalProfile? GetProfileFromListBoxItem(ListBoxItem? item)
+        {
+            return (item?.DataContext as ProfileListItem)?.Profile;
+        }
+
+        private int GetProfileInsertIndexForFolder(string folderId)
+        {
+            Int32 lastIndex = _Profiles.FindLastIndex(item => item.FolderId == folderId);
+            return lastIndex >= 0 ? lastIndex + 1 : _Profiles.Count;
+        }
+
+        private void RefreshProfileFolderList(string? selectedName)
+        {
+            List<string> folders = new List<string> { NoFolderLabel };
+            folders.AddRange(_ProfileFolders.Select(item => item.Name));
+            ProfileFolderCombo.ItemsSource = folders;
+            if (!String.IsNullOrWhiteSpace(selectedName) && folders.Any(item => item.Equals(selectedName, StringComparison.OrdinalIgnoreCase)))
+            {
+                ProfileFolderCombo.SelectedItem = folders.First(item => item.Equals(selectedName, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        private string GetFolderComboItem(string? folderId)
+        {
+            if (String.IsNullOrWhiteSpace(folderId)) return NoFolderLabel;
+
+            ProfileFolder? folder = FindFolderById(folderId);
+            return folder == null ? NoFolderLabel : folder.Name;
+        }
+
+        private string GetSelectedProfileFolderId()
+        {
+            if (!(ProfileFolderCombo.SelectedItem is string selectedFolder) || selectedFolder == NoFolderLabel) return String.Empty;
+
+            ProfileFolder? folder = _ProfileFolders.FirstOrDefault(item => item.Name.Equals(selectedFolder, StringComparison.OrdinalIgnoreCase));
+            return folder?.Id ?? String.Empty;
+        }
+
+        private string GetNewProfileFolderId()
+        {
+            if (_SelectedFolder != null) return _SelectedFolder.Id;
+            if (!String.IsNullOrWhiteSpace(_SelectedProfile?.FolderId)) return _SelectedProfile.FolderId;
+            return String.Empty;
+        }
+
+        private ProfileFolder? GetActiveFolder()
+        {
+            ProfileListItem? selectedItem = GetSelectedProfileListItem();
+            if (selectedItem?.Folder != null) return selectedItem.Folder;
+            if (!String.IsNullOrWhiteSpace(_SelectedProfile?.FolderId)) return FindFolderById(_SelectedProfile.FolderId);
+            return _SelectedFolder;
+        }
+
+        private ProfileFolder? FindFolderById(string? folderId)
+        {
+            if (String.IsNullOrWhiteSpace(folderId)) return null;
+            return _ProfileFolders.FirstOrDefault(item => item.Id == folderId);
+        }
+
+        private bool ReconcileProfileFolders()
+        {
+            HashSet<string> folderIds = _ProfileFolders.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            bool changed = false;
+            foreach (TerminalProfile profile in _Profiles)
+            {
+                if (profile.FolderId == null)
+                {
+                    profile.FolderId = String.Empty;
+                    changed = true;
+                    continue;
+                }
+
+                if (!String.IsNullOrWhiteSpace(profile.FolderId) && !folderIds.Contains(profile.FolderId))
+                {
+                    profile.FolderId = String.Empty;
+                    changed = true;
+                }
+            }
+
+            return changed;
+        }
+
+        private void OpenAutoOpenProfiles()
+        {
+            foreach (TerminalProfile profile in _Profiles.Where(item => item.AutoOpen))
+            {
+                OpenWorkspace(profile);
+            }
+        }
+
+        private async Task<bool> ConfirmDeleteFolderAsync(ProfileFolder folder)
+        {
+            Int32 profileCount = _Profiles.Count(item => item.FolderId == folder.Id);
+            DeleteConfirmationWindow confirmation = new DeleteConfirmationWindow(
+                "Remove folder",
+                "Remove folder?",
+                "This will remove the folder \"" + folder.Name + "\" and move its " + BuildProfileCountText(profileCount) + " to No folder.",
+                "Remove folder");
+            return await confirmation.ShowDialog<bool>(this).ConfigureAwait(true);
+        }
+
+        private string GetUniqueFolderName(string requestedName, string? editingFolderId)
+        {
+            string baseName = String.IsNullOrWhiteSpace(requestedName) ? "New Folder" : requestedName.Trim();
+            string candidate = baseName;
+            Int32 suffix = 2;
+            while (_ProfileFolders.Any(item =>
+                item.Id != editingFolderId &&
+                item.Name.Equals(candidate, StringComparison.OrdinalIgnoreCase)))
+            {
+                candidate = baseName + " " + suffix;
+                suffix++;
+            }
+
+            return candidate;
+        }
+
+        private static string BuildProfileCountText(int profileCount)
+        {
+            return profileCount == 1 ? "1 profile" : profileCount + " profiles";
         }
 
         private void RefreshColorSchemeList(string? selectedName)
@@ -946,12 +1525,52 @@ namespace Termrig.App.Views
 
         private void RestoreSelectedProfile(string? profileId)
         {
-            if (String.IsNullOrWhiteSpace(profileId)) return;
+            if (String.IsNullOrWhiteSpace(profileId))
+            {
+                _SuppressProfileSelectionChanged = true;
+                try
+                {
+                    ProfileList.SelectedIndex = -1;
+                }
+                finally
+                {
+                    _SuppressProfileSelectionChanged = false;
+                }
 
-            Int32 index = _Profiles.FindIndex(item => item.Id == profileId);
-            if (index < 0) return;
-            ProfileList.SelectedIndex = index;
-            _SelectedProfile = _Profiles[index];
+                _SelectedProfile = null;
+                _SelectedFolder = null;
+                RefreshEditor();
+                return;
+            }
+
+            TerminalProfile? profile = _Profiles.FirstOrDefault(item => item.Id == profileId);
+            if (profile == null)
+            {
+                RestoreSelectedProfile(null);
+                return;
+            }
+
+            ProfileFolder? folder = FindFolderById(profile.FolderId);
+            if (folder != null && !folder.IsExpanded)
+            {
+                folder.IsExpanded = true;
+                _ = _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None);
+                RefreshProfiles(profile.Id);
+                RefreshEditor();
+                return;
+            }
+
+            _SuppressProfileSelectionChanged = true;
+            try
+            {
+                SelectProfileRowByProfileId(profileId);
+            }
+            finally
+            {
+                _SuppressProfileSelectionChanged = false;
+            }
+
+            RefreshEditor();
         }
 
         private void ReconcileProfilesWithAvailableSchemes(ColorScheme fallback)

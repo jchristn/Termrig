@@ -30,7 +30,7 @@ namespace Termrig.Core.Models
         /// <summary>
         /// Shell type launched in this tab.
         /// </summary>
-        public ShellType Shell { get; set; } = ShellType.PowerShell;
+        public ShellType Shell { get; set; } = ShellType.Cmd;
 
         /// <summary>
         /// Shell display name.

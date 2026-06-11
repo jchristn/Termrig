@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:appModels="using:Termrig.App.Models"
         xmlns:models="using:Termrig.Core.Models"
         x:Class="Termrig.App.Views.MainWindow"
         Icon="/Assets/termrig-logo.ico"
@@ -34,15 +35,58 @@
                             <Button x:Name="NewProfileButton" Classes="compact">
                                 <TextBlock Text="+ New" VerticalAlignment="Center" LineHeight="14"/>
                             </Button>
-                            <Button x:Name="DeleteProfileButton" Classes="compact">
-                                <TextBlock Text="&#x1F5D1; Delete" VerticalAlignment="Center" LineHeight="14"/>
+                            <Button x:Name="NewFolderButton" Classes="compact" ToolTip.Tip="New folder">
+                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                    <TextBlock Text="+" VerticalAlignment="Center" LineHeight="14"/>
+                                    <PathIcon Width="14" Height="14" Foreground="#E6EDF3" Data="M3 6C3 4.895 3.895 4 5 4H10L12 6H19C20.105 6 21 6.895 21 8V18C21 19.105 20.105 20 19 20H5C3.895 20 3 19.105 3 18V6Z"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="DeleteProfileButton" Classes="icon destructive" ToolTip.Tip="Delete profile">
+                                <PathIcon Width="14" Height="14" Foreground="#FFD7D7" Data="M9 3H15L16 5H21V7H19L18.25 20C18.19 21.1 17.29 22 16.18 22H7.82C6.71 22 5.81 21.1 5.75 20L5 7H3V5H8L9 3ZM8 8L8.7 20H15.3L16 8H8Z"/>
+                            </Button>
+                            <Button x:Name="DeleteFolderButton" Classes="compact destructive" Width="52" MinWidth="52" ToolTip.Tip="Delete folder">
+                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                    <PathIcon Width="14" Height="14" Foreground="#FFD7D7" Data="M9 3H15L16 5H21V7H19L18.25 20C18.19 21.1 17.29 22 16.18 22H7.82C6.71 22 5.81 21.1 5.75 20L5 7H3V5H8L9 3ZM8 8L8.7 20H15.3L16 8H8Z"/>
+                                    <PathIcon Width="14" Height="14" Foreground="#FFD7D7" Data="M3 6C3 4.895 3.895 4 5 4H10L12 6H19C20.105 6 21 6.895 21 8V18C21 19.105 20.105 20 19 20H5C3.895 20 3 19.105 3 18V6Z"/>
+                                </StackPanel>
                             </Button>
                         </StackPanel>
                     </StackPanel>
-                    <ListBox x:Name="ProfileList" Margin="0,14,0,0">
+                    <ListBox x:Name="ProfileList" Classes="profileList" Margin="0,14,0,0">
                         <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="models:TerminalProfile">
-                                <TextBlock Text="{Binding Name}"/>
+                            <DataTemplate x:DataType="appModels:ProfileListItem">
+                                <Border Padding="6,3"
+                                        CornerRadius="5"
+                                        Background="{Binding RowBackground}"
+                                        BorderBrush="{Binding RowBorderBrush}"
+                                        BorderThickness="1">
+                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="{Binding RowMargin}" ColumnSpacing="7">
+                                        <PathIcon Grid.Column="0"
+                                                  Width="11"
+                                                  Height="11"
+                                                  Data="{Binding ExpandIconData}"
+                                                  Foreground="#9AB7CE"
+                                                  IsVisible="{Binding IsFolder}"
+                                                  VerticalAlignment="Center"
+                                                  PointerPressed="OnProfileFolderTogglePointerPressed"/>
+                                        <PathIcon Grid.Column="1"
+                                                  Width="14"
+                                                  Height="14"
+                                                  Data="{Binding FolderIconData}"
+                                                  Foreground="#D5A94A"
+                                                  IsVisible="{Binding IsFolder}"
+                                                  VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding DisplayName}"
+                                                   FontWeight="{Binding RowFontWeight}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="3"
+                                                   Text="{Binding StatusText}"
+                                                   Foreground="#8FB6D8"
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
@@ -84,6 +128,17 @@
                         <TextBlock Text="Profile font" FontWeight="SemiBold" Margin="0,8,0,0"/>
                         <ComboBox x:Name="ProfileFontFamilyCombo" PlaceholderText="Default terminal font"/>
                     </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="420,320,*" ColumnSpacing="16" Margin="0,14,0,0">
+                    <StackPanel Grid.Column="0" Spacing="6">
+                        <TextBlock Text="Profile folder" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="ProfileFolderCombo"/>
+                    </StackPanel>
+                    <CheckBox x:Name="AutoOpenProfileBox"
+                              Grid.Column="1"
+                              Content="Auto-open on Termrig start"
+                              VerticalAlignment="Bottom"/>
                 </Grid>
 
                 <Grid Grid.Row="2" RowDefinitions="Auto,*" Margin="0,22,0,0">

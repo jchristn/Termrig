@@ -40,6 +40,7 @@ namespace Termrig.App.Views
         private const double TerminalFontZoomStep = 1;
         private const double MinimumTerminalFontSize = 8;
         private const double MaximumTerminalFontSize = 36;
+        private const string AttentionIndicatorTag = "TerminalAttentionIndicator";
 
         #endregion
 
@@ -108,6 +109,7 @@ namespace Termrig.App.Views
             AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Bubble, true);
             AddHandler(TextInputEvent, OnWindowTextInput, RoutingStrategies.Tunnel, true);
             Opened += OnWorkspaceOpened;
+            Activated += OnWorkspaceActivated;
             Closing += OnWindowClosing;
             DragDrop.SetAllowDrop(TerminalTabHeaders, true);
             DragDrop.AddDragOverHandler(TerminalTabHeaders, OnTabHeadersDragOver);
@@ -128,6 +130,11 @@ namespace Termrig.App.Views
         private void OnWorkspaceOpened(object? sender, EventArgs e)
         {
             _ = LaunchAllSessionsAsync();
+        }
+
+        private void OnWorkspaceActivated(object? sender, EventArgs e)
+        {
+            ClearAttention(GetSelectedSession());
         }
 
         private async Task LaunchAllSessionsAsync()
@@ -168,7 +175,7 @@ namespace Termrig.App.Views
             };
 
             session.Header = BuildTabHeader(session);
-            terminal.ProcessExited += OnTerminalProcessExited;
+            WireTerminalSessionEvents(session);
             _Sessions.Add(session);
             TerminalTabHeaders.Children.Add(session.Header);
             TerminalSurface.Children.Add(terminal);
@@ -199,7 +206,7 @@ namespace Termrig.App.Views
                 TerminalTabHeaders.Children.Remove(session.Header);
                 TerminalSurface.Children.Remove(session.Terminal);
                 _Sessions.Remove(session);
-                session.Terminal.ProcessExited -= OnTerminalProcessExited;
+                UnwireTerminalSessionEvents(session);
                 if (wasSelected)
                 {
                     _SelectedSession = null;
@@ -288,7 +295,7 @@ namespace Termrig.App.Views
             foreach (TerminalSession session in _Sessions.ToList())
             {
                 session.IsClosingByTermrig = true;
-                session.Terminal.ProcessExited -= OnTerminalProcessExited;
+                UnwireTerminalSessionEvents(session);
                 QueueTerminalKill(session);
             }
 
@@ -483,6 +490,21 @@ namespace Termrig.App.Views
                 Orientation = Avalonia.Layout.Orientation.Horizontal,
                 Spacing = 4
             };
+
+            TextBlock attentionIndicator = new TextBlock
+            {
+                Text = "!",
+                FontSize = 11,
+                FontWeight = FontWeight.Bold,
+                Foreground = Brush.Parse("#F85149"),
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                Width = 8,
+                IsVisible = session.HasAttention,
+                Tag = AttentionIndicatorTag
+            };
+            ToolTip.SetTip(attentionIndicator, "Terminal bell");
+            panel.Children.Add(attentionIndicator);
 
             TextBlock title = new TextBlock
             {
@@ -748,7 +770,7 @@ namespace Termrig.App.Views
             if (_IsClosingWorkspace) return;
             int removedIndex = _Sessions.IndexOf(session);
             session.IsClosingByTermrig = true;
-            session.Terminal.ProcessExited -= OnTerminalProcessExited;
+            UnwireTerminalSessionEvents(session);
 
             _Sessions.Remove(session);
             TerminalTabHeaders.Children.Remove(session.Header);
@@ -776,6 +798,7 @@ namespace Termrig.App.Views
         {
             if (!_Sessions.Contains(session)) return;
             _SelectedSession = session;
+            session.HasAttention = false;
 
             foreach (TerminalSession item in _Sessions)
             {
@@ -819,10 +842,95 @@ namespace Termrig.App.Views
                 if (session.Header is Border border)
                 {
                     bool selected = session == _SelectedSession;
-                    border.Background = Brush.Parse(selected ? "#1F6FEB" : "#121820");
-                    border.BorderBrush = Brush.Parse(selected ? "#58A6FF" : "#35424F");
+                    border.Background = Brush.Parse(selected ? "#1F6FEB" : session.HasAttention ? "#27161A" : "#121820");
+                    border.BorderBrush = Brush.Parse(selected ? "#58A6FF" : session.HasAttention ? "#F85149" : "#35424F");
+                    SetAttentionIndicatorVisibility(border, session.HasAttention);
                 }
             }
+        }
+
+        private static void SetAttentionIndicatorVisibility(Border header, bool isVisible)
+        {
+            if (!(header.Child is StackPanel panel)) return;
+
+            foreach (Control child in panel.Children)
+            {
+                if (child.Tag as string == AttentionIndicatorTag)
+                {
+                    child.IsVisible = isVisible;
+                    return;
+                }
+            }
+        }
+
+        private void OnTerminalBellRang(object? sender, RoutedEventArgs e)
+        {
+            TerminalSession? session = FindSessionForTerminalEvent(sender, e);
+            if (session == null) return;
+
+            if (session == _SelectedSession && IsActive)
+            {
+                ClearAttention(session);
+            }
+            else
+            {
+                MarkAttention(session);
+            }
+
+            e.Handled = true;
+        }
+
+        private TerminalSession? FindSessionForTerminalEvent(object? sender, RoutedEventArgs e)
+        {
+            if (sender is TerminalControl terminal)
+            {
+                return _Sessions.FirstOrDefault(item => item.Terminal == terminal);
+            }
+
+            if (e.Source is TerminalControl sourceTerminal)
+            {
+                return _Sessions.FirstOrDefault(item => item.Terminal == sourceTerminal);
+            }
+
+            if (e.Source is Control sourceControl)
+            {
+                TerminalControl? parentTerminal = sourceControl.FindAncestorOfType<TerminalControl>();
+                if (parentTerminal != null)
+                {
+                    return _Sessions.FirstOrDefault(item => item.Terminal == parentTerminal);
+                }
+            }
+
+            return null;
+        }
+
+        private void MarkAttention(TerminalSession session)
+        {
+            if (session.HasAttention) return;
+
+            session.HasAttention = true;
+            UpdateTabHeaderStates();
+        }
+
+        private void ClearAttention(TerminalSession? session)
+        {
+            if (session == null) return;
+            if (!session.HasAttention) return;
+
+            session.HasAttention = false;
+            UpdateTabHeaderStates();
+        }
+
+        private void WireTerminalSessionEvents(TerminalSession session)
+        {
+            session.Terminal.ProcessExited += OnTerminalProcessExited;
+            TerminalView.AddBellRangHandler(session.Terminal, OnTerminalBellRang);
+        }
+
+        private void UnwireTerminalSessionEvents(TerminalSession session)
+        {
+            session.Terminal.ProcessExited -= OnTerminalProcessExited;
+            TerminalView.RemoveBellRangHandler(session.Terminal, OnTerminalBellRang);
         }
 
         private static void FocusTerminal(TerminalSession session)

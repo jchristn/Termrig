@@ -22,6 +22,15 @@ namespace Test.Terminal
         bool IsAlternateBuffer,
         IReadOnlyList<TerminalRowSnapshot> VisibleRows);
 
+    internal sealed record TerminalReplayOptions(
+        int Columns,
+        int Rows,
+        bool ConvertEol = false,
+        bool TrimLineEndingPadding = false,
+        int Scrollback = 1000,
+        string TermName = "xterm-256color",
+        bool PinViewportToBottomAfterWrite = false);
+
     internal static class TerminalReplay
     {
         public static TerminalSnapshot Replay(
@@ -31,15 +40,26 @@ namespace Test.Terminal
             bool convertEol = false,
             bool trimLineEndingPadding = false)
         {
+            return Replay(
+                new TerminalReplayOptions(
+                    Columns: columns,
+                    Rows: rows,
+                    ConvertEol: convertEol,
+                    TrimLineEndingPadding: trimLineEndingPadding),
+                chunks);
+        }
+
+        public static TerminalSnapshot Replay(TerminalReplayOptions options, IReadOnlyList<byte[]> chunks)
+        {
             bool isAlternateBuffer = false;
             var terminal = new Terminal(new TerminalOptions
             {
-                ConvertEol = convertEol,
-                Scrollback = 1000,
-                TermName = "xterm-256color"
+                ConvertEol = options.ConvertEol,
+                Scrollback = options.Scrollback,
+                TermName = options.TermName
             });
             terminal.BufferChanged += (_, e) => isAlternateBuffer = e.Buffer == XTerm.Common.BufferType.Alternate;
-            terminal.Resize(columns, rows);
+            terminal.Resize(options.Columns, options.Rows);
 
             Decoder decoder = Encoding.UTF8.GetDecoder();
             var lineEndingPaddingNormalizer = new LineEndingPaddingNormalizer();
@@ -56,7 +76,8 @@ namespace Test.Terminal
                 if (chars > 0)
                 {
                     string text = new string(charBuffer, 0, chars);
-                    terminal.Write(trimLineEndingPadding ? lineEndingPaddingNormalizer.Process(text, columns) : text);
+                    terminal.Write(options.TrimLineEndingPadding ? lineEndingPaddingNormalizer.Process(text, options.Columns) : text);
+                    ScrollToBottomIfRequested(terminal, isAlternateBuffer, options);
                 }
             }
 
@@ -64,19 +85,32 @@ namespace Test.Terminal
             if (trailingChars > 0)
             {
                 string text = new string(charBuffer, 0, trailingChars);
-                terminal.Write(trimLineEndingPadding ? lineEndingPaddingNormalizer.Process(text, columns) : text);
+                terminal.Write(options.TrimLineEndingPadding ? lineEndingPaddingNormalizer.Process(text, options.Columns) : text);
+                ScrollToBottomIfRequested(terminal, isAlternateBuffer, options);
             }
 
-            if (trimLineEndingPadding)
+            if (options.TrimLineEndingPadding)
             {
                 string pendingText = lineEndingPaddingNormalizer.Flush();
                 if (pendingText.Length > 0)
                 {
                     terminal.Write(pendingText);
+                    ScrollToBottomIfRequested(terminal, isAlternateBuffer, options);
                 }
             }
 
             return Capture(terminal, isAlternateBuffer);
+        }
+
+        private static void ScrollToBottomIfRequested(Terminal terminal, bool isAlternateBuffer, TerminalReplayOptions options)
+        {
+            if (!options.PinViewportToBottomAfterWrite)
+                return;
+
+            if (!isAlternateBuffer || terminal.Buffer.ViewportY != terminal.Buffer.BaseY)
+            {
+                terminal.Buffer.ScrollToBottom();
+            }
         }
 
         private static TerminalSnapshot Capture(Terminal terminal, bool isAlternateBuffer)

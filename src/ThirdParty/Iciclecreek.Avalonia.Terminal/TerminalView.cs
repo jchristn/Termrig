@@ -17,6 +17,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using XTerm.Buffer;
@@ -68,6 +69,67 @@ namespace Iciclecreek.Terminal
 
         private sealed record CachedTextRun(FormattedText Text, int StartX, int CellCount, IBrush Background);
         private sealed record CachedLineRender(ulong Fingerprint, List<CachedTextRun> TextRuns);
+        private sealed class PtyRecordingMetadata
+        {
+            public int FormatVersion { get; set; } = 1;
+            public string RecordingFile { get; set; } = String.Empty;
+            public string StartedAtUtc { get; set; } = String.Empty;
+            public string? EndedAtUtc { get; set; }
+            public string Process { get; set; } = String.Empty;
+            public string[] Arguments { get; set; } = Array.Empty<string>();
+            public string StartingDirectory { get; set; } = String.Empty;
+            public int Columns { get; set; }
+            public int Rows { get; set; }
+            public int Scrollback { get; set; }
+            public bool ConvertEol { get; set; }
+            public string? TermName { get; set; }
+            public bool UsesLineEndingPaddingNormalizer { get; set; }
+            public bool PinsViewportToBottomAfterWrite { get; set; }
+            public string OSDescription { get; set; } = String.Empty;
+            public string OSArchitecture { get; set; } = String.Empty;
+            public string FrameworkDescription { get; set; } = String.Empty;
+            public string? TermEnvironment { get; set; }
+            public string? ColorTermEnvironment { get; set; }
+            public long ByteCount { get; set; }
+            public List<int> ChunkSizes { get; set; } = new List<int>();
+        }
+
+        private sealed class PtyRecording : IAsyncDisposable
+        {
+            private readonly string _metadataPath;
+            private readonly PtyRecordingMetadata _metadata;
+            private bool _disposed;
+
+            public PtyRecording(FileStream stream, string metadataPath, PtyRecordingMetadata metadata)
+            {
+                Stream = stream;
+                _metadataPath = metadataPath;
+                _metadata = metadata;
+            }
+
+            public FileStream Stream { get; }
+
+            public void AddChunk(int byteCount)
+            {
+                _metadata.ByteCount += byteCount;
+                _metadata.ChunkSizes.Add(byteCount);
+            }
+
+            public async ValueTask DisposeAsync()
+            {
+                if (_disposed)
+                    return;
+
+                _disposed = true;
+                _metadata.EndedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                await Stream.DisposeAsync();
+
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                string json = JsonSerializer.Serialize(_metadata, options);
+                await File.WriteAllTextAsync(_metadataPath, json, Utf8NoBom);
+            }
+        }
+
         private sealed class LineEndingPaddingNormalizer
         {
             private int _pendingSpaces;
@@ -2202,7 +2264,8 @@ namespace Iciclecreek.Terminal
                     Cols = launchCols,
                     Rows = launchRows,
                     Cwd = currentDirectory,
-                    App = processToLaunch
+                    App = processToLaunch,
+                    Environment = BuildTerminalEnvironment()
                 };
 
 
@@ -2229,6 +2292,28 @@ namespace Iciclecreek.Terminal
             }
         }
 
+        private IDictionary<string, string> BuildTerminalEnvironment()
+        {
+            string termName;
+            lock (_terminalLock)
+            {
+                termName = _terminal.Options.TermName;
+            }
+
+            Dictionary<string, string> environment = new Dictionary<string, string>
+            {
+                ["COLORTERM"] = "truecolor",
+                ["TERM_PROGRAM"] = "Termrig"
+            };
+
+            if (!String.IsNullOrWhiteSpace(termName))
+            {
+                environment["TERM"] = termName;
+            }
+
+            return environment;
+        }
+
         /// <summary>
         /// Launch the terminal process with the specified parameters, updating the Process, Args, and StartingDirectory properties. 
         /// If the process is already running, it will be terminated and replaced with a new instance using the updated properties.
@@ -2253,7 +2338,7 @@ namespace Iciclecreek.Terminal
                 var decoder = Utf8NoBom.GetDecoder();
                 var charBuffer = new char[Utf8NoBom.GetMaxCharCount(buffer.Length)];
                 var lineEndingPaddingNormalizer = new LineEndingPaddingNormalizer();
-                await using FileStream? ptyRecordingStream = OpenPtyRecordingStream();
+                await using PtyRecording? ptyRecording = OpenPtyRecording();
                 while (!cancellationToken.IsCancellationRequested && _ptyConnection != null)
                 {
                     var bytesRead = await _ptyConnection.ReaderStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
@@ -2281,9 +2366,10 @@ namespace Iciclecreek.Terminal
                         break;
                     }
 
-                    if (ptyRecordingStream != null)
+                    if (ptyRecording != null)
                     {
-                        await ptyRecordingStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                        ptyRecording.AddChunk(bytesRead);
+                        await ptyRecording.Stream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
                     }
 
                     int normalizeColumns;
@@ -2301,23 +2387,25 @@ namespace Iciclecreek.Terminal
                     int oldY;
                     int newMax = 0;
                     int newY = 0;
+                    bool shouldFollowOutput;
                     bool scrollChanged = false;
                     lock (_terminalLock)
                     {
                         oldMax = GetMaxScrollbackUnderLock();
                         oldY = _terminal.Buffer.ViewportY;
+                        shouldFollowOutput = _isAlternateBuffer || oldY >= oldMax;
                         _terminal.Write(output);
 
-                        // Keep the active display pinned to the current screen. In normal
-                        // buffer this follows scrollback growth; in alternate buffer it
-                        // prevents full-screen TUIs from exposing stale rewrite frames.
-                        if (!_isAlternateBuffer || _terminal.Buffer.ViewportY != GetMaxScrollbackUnderLock())
+                        // Follow live output only when the user was already at the bottom.
+                        // Manual scrollback should stay put while new process output arrives.
+                        if (shouldFollowOutput)
                         {
                             _terminal.Buffer.ScrollToBottom();
-                            newY = _terminal.Buffer.ViewportY;
-                            newMax = GetMaxScrollbackUnderLock();
-                            scrollChanged = oldMax != newMax || oldY != newY;
                         }
+
+                        newY = _terminal.Buffer.ViewportY;
+                        newMax = GetMaxScrollbackUnderLock();
+                        scrollChanged = oldMax != newMax || oldY != newY;
                     }
 
                     if (scrollChanged)
@@ -2357,7 +2445,7 @@ namespace Iciclecreek.Terminal
             }
         }
 
-        private FileStream? OpenPtyRecordingStream()
+        private PtyRecording? OpenPtyRecording()
         {
             if (!_recordCurrentPtyOutput || String.IsNullOrWhiteSpace(_currentPtyRecordingDirectory))
                 return null;
@@ -2369,7 +2457,46 @@ namespace Iciclecreek.Terminal
                 string processName = SanitizeFileName(Path.GetFileNameWithoutExtension(_currentPtyRecordingProcessName) ?? "terminal");
                 string instance = _instanceId.ToString("N")[..8];
                 string path = Path.Combine(_currentPtyRecordingDirectory, $"{timestamp}-{processName}-{instance}.pty.bin");
-                return new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 81920, useAsync: true);
+                string metadataPath = path[..^".pty.bin".Length] + ".pty.json";
+                int columns;
+                int rows;
+                int scrollback;
+                bool convertEol;
+                string? termName;
+                lock (_terminalLock)
+                {
+                    columns = _terminal.Cols;
+                    rows = _terminal.Rows;
+                    scrollback = _terminal.Options.Scrollback;
+                    convertEol = _terminal.Options.ConvertEol;
+                    termName = _terminal.Options.TermName;
+                }
+
+                var metadata = new PtyRecordingMetadata
+                {
+                    RecordingFile = Path.GetFileName(path),
+                    StartedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                    Process = _currentPtyRecordingProcessName ?? String.Empty,
+                    Arguments = Args?.ToArray() ?? Array.Empty<string>(),
+                    StartingDirectory = StartingDirectory ?? Environment.CurrentDirectory,
+                    Columns = columns,
+                    Rows = rows,
+                    Scrollback = scrollback,
+                    ConvertEol = convertEol,
+                    TermName = termName,
+                    UsesLineEndingPaddingNormalizer = true,
+                    PinsViewportToBottomAfterWrite = false,
+                    OSDescription = RuntimeInformation.OSDescription,
+                    OSArchitecture = RuntimeInformation.OSArchitecture.ToString(),
+                    FrameworkDescription = RuntimeInformation.FrameworkDescription,
+                    TermEnvironment = Environment.GetEnvironmentVariable("TERM"),
+                    ColorTermEnvironment = Environment.GetEnvironmentVariable("COLORTERM")
+                };
+
+                return new PtyRecording(
+                    new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 81920, useAsync: true),
+                    metadataPath,
+                    metadata);
             }
             catch (Exception ex)
             {
