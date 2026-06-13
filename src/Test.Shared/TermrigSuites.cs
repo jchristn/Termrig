@@ -25,6 +25,9 @@ namespace Test.Shared
                 return new List<TestSuiteDescriptor>
                 {
                     CrashLogStoreSuite(),
+                    WorkspaceRecoverySuites.ApplicationCrashLogStoreSuite(),
+                    WorkspaceRecoverySuites.WorkspaceRecoveryStoreSuite(),
+                    WorkspaceRecoverySuites.WorkspaceRecoveryPlannerSuite(),
                     ColorSchemeStoreSuite(),
                     ProfileStoreSuite(),
                     ProfileFolderStoreSuite(),

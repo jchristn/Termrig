@@ -6,6 +6,7 @@ namespace Termrig.App
     using Avalonia.Markup.Xaml;
     using Avalonia.Threading;
     using System;
+    using System.Threading;
     using System.Threading.Tasks;
     using Termrig.App.Services;
     using Termrig.Core.Services;
@@ -21,6 +22,7 @@ namespace Termrig.App
         private readonly CrashLogStore _CrashLogStore = new CrashLogStore();
         private TermrigCommandServer? _CommandServer = null;
         private MainWindow? _MainWindow = null;
+        private bool _CrashDetected = false;
 
         #endregion
 
@@ -60,6 +62,18 @@ namespace Termrig.App
                 desktop.MainWindow = splash;
                 desktop.Exit += delegate
                 {
+                    if (!_CrashDetected && _MainWindow != null)
+                    {
+                        try
+                        {
+                            _MainWindow.MarkCleanShutdownAsync(CancellationToken.None).GetAwaiter().GetResult();
+                        }
+                        catch (Exception exception)
+                        {
+                            _CrashLogStore.Write("Termrig", "application", "Workspace recovery clean shutdown update failed.", exception.ToString());
+                        }
+                    }
+
                     _CommandServer?.Dispose();
                 };
             }
@@ -101,9 +115,10 @@ namespace Termrig.App
 
         private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
+            _CrashDetected = true;
             Exception? exception = e.ExceptionObject as Exception;
             string details = exception == null ? e.ExceptionObject?.ToString() ?? "Unknown application crash." : exception.ToString();
-            _CrashLogStore.Write("Termrig", "application", "Unhandled application exception.", details);
+            ApplicationCrashLogWriter.TryWrite("Unhandled application exception.", details);
         }
 
         private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)

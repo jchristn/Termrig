@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Termrig.App.Views.CrashRecoveryPromptWindow"
+        Icon="/Assets/termrig-logo.ico"
+        Title="Restore previous workspaces?"
+        Width="480"
+        Height="220"
+        MinWidth="480"
+        MinHeight="220"
+        MaxWidth="560"
+        MaxHeight="260"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <Grid RowDefinitions="*,Auto" Margin="18">
+        <StackPanel Grid.Row="0" Spacing="8">
+            <TextBlock Text="Restore previous workspaces?"
+                       FontSize="16"
+                       FontWeight="SemiBold"
+                       Foreground="#FFFFFF"/>
+            <TextBlock x:Name="MessageText"
+                       TextWrapping="Wrap"
+                       Foreground="#C9D1D9"
+                       LineHeight="18"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button x:Name="DontRestoreButton" Content="Don't Restore" MinWidth="112"/>
+            <Button x:Name="RestoreButton"
+                    Content="Restore"
+                    MinWidth="96"
+                    Background="#1F6FEB"
+                    BorderBrush="#58A6FF"/>
+        </StackPanel>
+    </Grid>
+</Window>

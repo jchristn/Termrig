@@ -57,6 +57,22 @@ namespace Termrig.App.Views
             }
         }
 
+        /// <summary>
+        /// Profile identifier for this workspace.
+        /// </summary>
+        public string ProfileId
+        {
+            get
+            {
+                return _Profile.Id;
+            }
+        }
+
+        /// <summary>
+        /// Runtime workspace instance identifier.
+        /// </summary>
+        public string WorkspaceId { get; }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -78,16 +94,32 @@ namespace Termrig.App.Views
         /// <param name="colorSchemes">Available color schemes.</param>
         /// <exception cref="ArgumentNullException">Thrown when required inputs are null.</exception>
         public TerminalWorkspaceWindow(TerminalProfile profile, ProfileStore profileStore, ShellCatalog shellCatalog, List<ColorScheme> colorSchemes)
+            : this(profile, profileStore, shellCatalog, colorSchemes, Guid.NewGuid().ToString("N"))
+        {
+        }
+
+        /// <summary>
+        /// Instantiate the terminal workspace window.
+        /// </summary>
+        /// <param name="profile">Profile to open.</param>
+        /// <param name="profileStore">Profile store used for save operations.</param>
+        /// <param name="shellCatalog">Shell catalog.</param>
+        /// <param name="colorSchemes">Available color schemes.</param>
+        /// <param name="workspaceId">Runtime workspace instance identifier.</param>
+        /// <exception cref="ArgumentNullException">Thrown when required inputs are null.</exception>
+        public TerminalWorkspaceWindow(TerminalProfile profile, ProfileStore profileStore, ShellCatalog shellCatalog, List<ColorScheme> colorSchemes, string workspaceId)
         {
             ArgumentNullException.ThrowIfNull(profile);
             ArgumentNullException.ThrowIfNull(profileStore);
             ArgumentNullException.ThrowIfNull(shellCatalog);
             ArgumentNullException.ThrowIfNull(colorSchemes);
+            if (String.IsNullOrWhiteSpace(workspaceId)) throw new ArgumentNullException(nameof(workspaceId));
 
             _Profile = profile;
             _ProfileStore = profileStore;
             _ShellCatalog = shellCatalog;
             _ColorSchemes = colorSchemes;
+            WorkspaceId = workspaceId;
 
             InitializeComponent();
             Title = profile.Name + " | Termrig Workspace";

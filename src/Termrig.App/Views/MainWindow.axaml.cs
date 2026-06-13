@@ -29,6 +29,10 @@ namespace Termrig.App.Views
         private readonly ProfileFolderStore _ProfileFolderStore = new ProfileFolderStore();
         private readonly ColorSchemeStore _ColorSchemeStore = new ColorSchemeStore();
         private readonly ShellCatalog _ShellCatalog = new ShellCatalog();
+        private readonly WorkspaceRecoveryStore _WorkspaceRecoveryStore = new WorkspaceRecoveryStore();
+        private readonly WorkspaceRecoveryPlanner _WorkspaceRecoveryPlanner = new WorkspaceRecoveryPlanner();
+        private readonly CrashLogStore _CrashLogStore = new CrashLogStore();
+        private readonly string _RecoveryRunId = Guid.NewGuid().ToString("N");
         private const string RepositoryUrl = "https://github.com/jchristn/Termrig";
         private const string NoFolderLabel = "No folder";
         private readonly List<string> _FontFamilies = new List<string>
@@ -74,6 +78,7 @@ namespace Termrig.App.Views
         private const double DragStartThreshold = 4;
         private readonly List<TerminalWorkspaceWindow> _WorkspaceWindows = new List<TerminalWorkspaceWindow>();
         private readonly TaskCompletionSource<bool> _ProfilesLoaded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _RecoveryRunStarted = false;
 
         #endregion
 
@@ -87,7 +92,7 @@ namespace Termrig.App.Views
             InitializeComponent();
             WireEvents();
             InitializeLists();
-            LoadProfilesAsync();
+            Dispatcher.UIThread.Post(LoadProfilesAsync, DispatcherPriority.Background);
         }
 
         #endregion
@@ -149,6 +154,8 @@ namespace Termrig.App.Views
         {
             try
             {
+                WorkspaceRecoveryState? pendingCrashState = await GetPendingCrashStateAsync().ConfigureAwait(true);
+
                 _ColorSchemes = await _ColorSchemeStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
                 RefreshColorSchemeList(null);
 
@@ -170,7 +177,17 @@ namespace Termrig.App.Views
 
                 RefreshProfiles();
                 SelectFirstProfileRow();
-                OpenAutoOpenProfiles();
+                bool restoreAccepted = await PromptForCrashRecoveryAsync(pendingCrashState).ConfigureAwait(true);
+                await EnsureRecoveryRunStartedAsync().ConfigureAwait(true);
+                if (restoreAccepted && pendingCrashState != null)
+                {
+                    await RestoreCrashWorkspacesAsync(pendingCrashState).ConfigureAwait(true);
+                }
+                else
+                {
+                    await OpenAutoOpenProfilesAsync().ConfigureAwait(true);
+                }
+
                 _ProfilesLoaded.TrySetResult(true);
             }
             catch (Exception exception)
@@ -355,11 +372,11 @@ namespace Termrig.App.Views
             await DeleteFolderAsync(folder).ConfigureAwait(true);
         }
 
-        private void OnOpenProfileClicked(object? sender, RoutedEventArgs e)
+        private async void OnOpenProfileClicked(object? sender, RoutedEventArgs e)
         {
             ApplyEditorToProfile();
             if (_SelectedProfile == null) return;
-            OpenWorkspace(_SelectedProfile);
+            await OpenWorkspaceAsync(_SelectedProfile).ConfigureAwait(true);
         }
 
         private async void OnProfileListDoubleTapped(object? sender, TappedEventArgs e)
@@ -379,7 +396,7 @@ namespace Termrig.App.Views
 
             ApplyEditorToProfile();
             if (_SelectedProfile == null) return;
-            OpenWorkspace(_SelectedProfile);
+            await OpenWorkspaceAsync(_SelectedProfile).ConfigureAwait(true);
         }
 
         /// <summary>
@@ -395,7 +412,7 @@ namespace Termrig.App.Views
             TerminalProfile? profile = _Profiles.FirstOrDefault(item => item.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
             if (profile == null) return false;
 
-            OpenWorkspace(profile);
+            await OpenWorkspaceAsync(profile).ConfigureAwait(true);
             return true;
         }
 
@@ -419,15 +436,139 @@ namespace Termrig.App.Views
             return windows.Count > 0;
         }
 
-        private void OpenWorkspace(TerminalProfile profile)
+        /// <summary>
+        /// Mark the current Termrig run as a clean shutdown for workspace recovery.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task representing the clean shutdown update.</returns>
+        public async Task MarkCleanShutdownAsync(CancellationToken token = default)
         {
-            TerminalWorkspaceWindow window = new TerminalWorkspaceWindow(profile, _ProfileStore, _ShellCatalog, _ColorSchemes);
+            if (!_RecoveryRunStarted) return;
+            await _WorkspaceRecoveryStore.MarkCleanShutdownAsync(_RecoveryRunId, token).ConfigureAwait(false);
+        }
+
+        private async Task<WorkspaceRecoveryState?> GetPendingCrashStateAsync()
+        {
+            try
+            {
+                return await _WorkspaceRecoveryStore.GetPendingCrashAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception exception)
+            {
+                WriteRecoveryDiagnostic("Workspace recovery state load failed.", exception);
+                return null;
+            }
+        }
+
+        private async Task<bool> PromptForCrashRecoveryAsync(WorkspaceRecoveryState? pendingCrashState)
+        {
+            if (pendingCrashState == null) return false;
+
+            CrashRecoveryPromptWindow prompt = new CrashRecoveryPromptWindow(pendingCrashState.OpenWorkspaces.Count);
+            bool restoreAccepted = await prompt.ShowDialog<bool>(this).ConfigureAwait(true);
+
+            try
+            {
+                await _WorkspaceRecoveryStore.MarkRestorePromptHandledAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception exception)
+            {
+                WriteRecoveryDiagnostic("Workspace recovery prompt state update failed.", exception);
+            }
+
+            return restoreAccepted;
+        }
+
+        private async Task RestoreCrashWorkspacesAsync(WorkspaceRecoveryState pendingCrashState)
+        {
+            WorkspaceRecoveryRestorePlan plan = _WorkspaceRecoveryPlanner.BuildRestorePlan(pendingCrashState, _Profiles);
+            foreach (WorkspaceRecoveryRestoreAction action in plan.RestoreActions)
+            {
+                await OpenWorkspaceAsync(action.Profile).ConfigureAwait(true);
+            }
+
+            if (plan.SkippedWorkspaces.Count > 0)
+            {
+                WriteRecoveryDiagnostic(
+                    "Workspace recovery skipped profiles.",
+                    new InvalidOperationException("Skipped " + plan.SkippedWorkspaces.Count + " workspace recovery entries because their profiles were missing or ambiguous."));
+            }
+        }
+
+        private async Task EnsureRecoveryRunStartedAsync()
+        {
+            if (_RecoveryRunStarted) return;
+
+            try
+            {
+                await _WorkspaceRecoveryStore.MarkRunStartedAsync(_RecoveryRunId, Environment.ProcessId, CancellationToken.None).ConfigureAwait(true);
+                _RecoveryRunStarted = true;
+            }
+            catch (Exception exception)
+            {
+                WriteRecoveryDiagnostic("Workspace recovery run start failed.", exception);
+            }
+        }
+
+        private async Task OpenWorkspaceAsync(TerminalProfile profile)
+        {
+            string workspaceId = Guid.NewGuid().ToString("N");
+            TerminalWorkspaceWindow window = new TerminalWorkspaceWindow(profile, _ProfileStore, _ShellCatalog, _ColorSchemes, workspaceId);
             _WorkspaceWindows.Add(window);
-            window.Closed += delegate
+            window.Closed += async delegate
             {
                 _WorkspaceWindows.Remove(window);
+                await RegisterWorkspaceClosedAsync(window.WorkspaceId).ConfigureAwait(true);
             };
+            await RegisterWorkspaceOpenedAsync(window).ConfigureAwait(true);
             window.Show();
+        }
+
+        private async Task RegisterWorkspaceOpenedAsync(TerminalWorkspaceWindow window)
+        {
+            try
+            {
+                await EnsureRecoveryRunStartedAsync().ConfigureAwait(true);
+                if (!_RecoveryRunStarted) return;
+
+                WorkspaceRecoveryWorkspace workspace = new WorkspaceRecoveryWorkspace
+                {
+                    WorkspaceId = window.WorkspaceId,
+                    ProfileId = window.ProfileId,
+                    ProfileName = window.ProfileName,
+                    OpenedUtc = DateTime.UtcNow
+                };
+                await _WorkspaceRecoveryStore.RegisterWorkspaceOpenedAsync(_RecoveryRunId, workspace, CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception exception)
+            {
+                WriteRecoveryDiagnostic("Workspace recovery open update failed.", exception);
+            }
+        }
+
+        private async Task RegisterWorkspaceClosedAsync(string workspaceId)
+        {
+            if (!_RecoveryRunStarted) return;
+
+            try
+            {
+                await _WorkspaceRecoveryStore.RegisterWorkspaceClosedAsync(_RecoveryRunId, workspaceId, CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception exception)
+            {
+                WriteRecoveryDiagnostic("Workspace recovery close update failed.", exception);
+            }
+        }
+
+        private void WriteRecoveryDiagnostic(string summary, Exception exception)
+        {
+            try
+            {
+                _CrashLogStore.Write("Termrig", "application", summary, exception.ToString());
+            }
+            catch
+            {
+            }
         }
 
         private void OnGitHubClicked(object? sender, RoutedEventArgs e)
@@ -597,7 +738,7 @@ namespace Termrig.App.Views
             {
                 ItemsSource = new MenuItem[]
                 {
-                    CreateMenuItem("Open", delegate { OpenProfileFromContext(profile); }),
+                    CreateAsyncMenuItem("Open", async delegate { await OpenProfileFromContextAsync(profile).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Rename", async delegate { await RenameProfileAsync(profile).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Delete", async delegate { await DeleteProfileAsync(profile).ConfigureAwait(true); })
                 }
@@ -647,14 +788,14 @@ namespace Termrig.App.Views
             return item;
         }
 
-        private void OpenProfileFromContext(TerminalProfile profile)
+        private async Task OpenProfileFromContextAsync(TerminalProfile profile)
         {
             if (_SelectedProfile == profile)
             {
                 ApplyEditorToProfile();
             }
 
-            OpenWorkspace(profile);
+            await OpenWorkspaceAsync(profile).ConfigureAwait(true);
         }
 
         private async Task RenameProfileAsync(TerminalProfile profile)
@@ -1428,11 +1569,11 @@ namespace Termrig.App.Views
             return changed;
         }
 
-        private void OpenAutoOpenProfiles()
+        private async Task OpenAutoOpenProfilesAsync()
         {
             foreach (TerminalProfile profile in _Profiles.Where(item => item.AutoOpen))
             {
-                OpenWorkspace(profile);
+                await OpenWorkspaceAsync(profile).ConfigureAwait(true);
             }
         }
 

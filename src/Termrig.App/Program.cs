@@ -45,7 +45,7 @@ namespace Termrig.App
             }
 
             string[] avaloniaArgs = args.Where(argument => argument != DetachedChildArgument).ToArray();
-            BuildAvaloniaApp().StartWithClassicDesktopLifetime(avaloniaArgs);
+            RunAvaloniaApp(avaloniaArgs);
         }
 
         /// <summary>
@@ -76,7 +76,7 @@ namespace Termrig.App
             string? executable = Environment.ProcessPath;
             if (String.IsNullOrWhiteSpace(executable))
             {
-                BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+                RunAvaloniaApp(args);
                 return;
             }
 
@@ -95,6 +95,19 @@ namespace Termrig.App
  
             Process? process = Process.Start(startInfo);
             process?.Dispose();
+        }
+
+        private static void RunAvaloniaApp(string[] args)
+        {
+            try
+            {
+                BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            }
+            catch (Exception exception)
+            {
+                ApplicationCrashLogWriter.TryWrite("Unhandled application exception.", exception.ToString());
+                throw;
+            }
         }
 
         #endregion
