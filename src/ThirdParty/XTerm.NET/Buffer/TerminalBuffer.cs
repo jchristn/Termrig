@@ -17,6 +17,7 @@ public class TerminalBuffer
     private int _scrollTop;
     private int _cols;
     private int _rows;
+    private bool _isPendingWrap;
 
     /// <summary>
     /// The absolute line index of the top of the viewport in the buffer.
@@ -62,6 +63,7 @@ public class TerminalBuffer
     public int X => _x;
     public int ScrollTop => _scrollTop;
     public int ScrollBottom => _scrollBottom;
+    public bool IsPendingWrap => _isPendingWrap;
 
     public CircularList<BufferLine> Lines => _lines;
 
@@ -331,6 +333,7 @@ public class TerminalBuffer
         // Clamp cursor within new bounds
         _x = Math.Clamp(_x, 0, _cols - 1);
         _y = Math.Clamp(_y, 0, _rows - 1);
+        _isPendingWrap = false;
     }
 
     /// <summary>
@@ -340,6 +343,7 @@ public class TerminalBuffer
     {
         _x = Math.Clamp(x, 0, _cols - 1);
         _y = Math.Clamp(y, 0, _rows - 1);
+        _isPendingWrap = false;
     }
 
     /// <summary>
@@ -349,6 +353,16 @@ public class TerminalBuffer
     {
         _x = x;
         _y = y;
+    }
+
+    public void SetPendingWrap()
+    {
+        _isPendingWrap = true;
+    }
+
+    public void ClearPendingWrap()
+    {
+        _isPendingWrap = false;
     }
 
     public string PrintViewport()

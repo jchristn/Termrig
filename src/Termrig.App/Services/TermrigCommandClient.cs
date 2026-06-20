@@ -3,6 +3,7 @@ namespace Termrig.App.Services
     using System;
     using System.IO;
     using System.IO.Pipes;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -33,13 +34,11 @@ namespace Termrig.App.Services
                         await pipe.ConnectAsync(timeout.Token).ConfigureAwait(false);
                     }
 
-                    using (StreamWriter writer = new StreamWriter(pipe) { AutoFlush = true })
-                    using (StreamReader reader = new StreamReader(pipe))
-                    {
-                        await writer.WriteLineAsync(command.Serialize()).ConfigureAwait(false);
-                        await reader.ReadLineAsync().ConfigureAwait(false);
-                        return true;
-                    }
+                    StreamWriter writer = new StreamWriter(pipe, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), 1024, leaveOpen: true) { AutoFlush = true };
+                    StreamReader reader = new StreamReader(pipe, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, 1024, leaveOpen: true);
+                    await writer.WriteLineAsync(command.Serialize()).ConfigureAwait(false);
+                    string? response = await reader.ReadLineAsync().ConfigureAwait(false);
+                    return String.Equals(response, "OK", StringComparison.OrdinalIgnoreCase);
                 }
             }
             catch (OperationCanceledException)
@@ -47,6 +46,10 @@ namespace Termrig.App.Services
                 return false;
             }
             catch (IOException)
+            {
+                return false;
+            }
+            catch (ObjectDisposedException)
             {
                 return false;
             }

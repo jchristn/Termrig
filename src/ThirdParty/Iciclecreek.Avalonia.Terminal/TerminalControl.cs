@@ -278,6 +278,7 @@ namespace Iciclecreek.Terminal
             if (_terminalView == null)
                 throw new InvalidOperationException("TerminalControl template has not been applied yet.");
 
+            ApplyPropertiesToTerminalView();
             await _terminalView.LaunchProcess();
 
             Dispatcher.UIThread.Post(() =>
@@ -323,6 +324,21 @@ namespace Iciclecreek.Terminal
             }
         }
 
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+
+            if (change.Property == ProcessProperty ||
+                change.Property == ArgsProperty ||
+                change.Property == StartingDirectoryProperty ||
+                change.Property == OptionsProperty ||
+                change.Property == RecordPtyOutputProperty ||
+                change.Property == PtyRecordingDirectoryProperty)
+            {
+                ApplyPropertiesToTerminalView();
+            }
+        }
+
         protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
         {
             // Ensure styles are loaded (handles case where static constructor ran before Application was ready)
@@ -352,12 +368,25 @@ namespace Iciclecreek.Terminal
             if (_scrollBar != null && _terminalView != null)
             {
                 _scrollBar.Scroll += OnScrollBarScroll;
-                _terminalView.Options = Options ?? new XTerm.Options.TerminalOptions();
+                ApplyPropertiesToTerminalView();
                 _terminalView.PropertyChanged += OnTerminalViewPropertyChanged;
                 _terminalView.ProcessExited += OnTerminalViewProcessExited;
                 SetCurrentDirectory(_terminalView.CurrentDirectory);
                 // (no window event hooking needed)
             }
+        }
+
+        private void ApplyPropertiesToTerminalView()
+        {
+            if (_terminalView == null)
+                return;
+
+            _terminalView.Process = Process;
+            _terminalView.Args = Args;
+            _terminalView.StartingDirectory = StartingDirectory;
+            _terminalView.Options = Options ?? new XTerm.Options.TerminalOptions();
+            _terminalView.RecordPtyOutput = RecordPtyOutput;
+            _terminalView.PtyRecordingDirectory = PtyRecordingDirectory;
         }
 
         private void OnScrollBarScroll(object? sender, ScrollEventArgs e)

@@ -571,6 +571,7 @@ public class Terminal
                 break;
 
             case 0x08: // BS - Backspace
+                _inputHandler.ClearPendingWrapState();
                 if (_buffer.X > 0)
                 {
                     _buffer.SetCursor(_buffer.X - 1, _buffer.Y);
@@ -579,6 +580,7 @@ public class Terminal
 
             case 0x09: // HT - Tab
                 {
+                    _inputHandler.ClearPendingWrapState();
                     var nextTabStop = ((_buffer.X + 8) / 8) * 8;
                     _buffer.SetCursor(Math.Min(nextTabStop, Cols - 1), _buffer.Y);
                 }
@@ -591,6 +593,7 @@ public class Terminal
                 break;
 
             case 0x0D: // CR - Carriage Return
+                _inputHandler.ClearPendingWrapState();
                 _buffer.SetCursor(0, _buffer.Y);
                 break;
 
@@ -609,6 +612,8 @@ public class Terminal
     /// </summary>
     private void LineFeed()
     {
+        _inputHandler.ClearPendingWrapState();
+
         if (_buffer.Y == _buffer.ScrollBottom)
         {
             // Scroll up

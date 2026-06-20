@@ -10,7 +10,9 @@ namespace Termrig.App.Views
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.IO;
     using System.Linq;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Termrig.App.Models;
@@ -79,6 +81,10 @@ namespace Termrig.App.Views
         private readonly List<TerminalWorkspaceWindow> _WorkspaceWindows = new List<TerminalWorkspaceWindow>();
         private readonly TaskCompletionSource<bool> _ProfilesLoaded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private bool _RecoveryRunStarted = false;
+        private FileSystemWatcher? _ConfigAssetWatcher;
+        private CancellationTokenSource? _ConfigAssetReloadCts;
+        private readonly object _ConfigAssetReloadGate = new object();
+        private const int ConfigAssetReloadDebounceMilliseconds = 300;
 
         #endregion
 
@@ -101,6 +107,7 @@ namespace Termrig.App.Views
 
         private void WireEvents()
         {
+            Closed += OnMainWindowClosed;
             NewProfileButton.Click += OnNewProfileClicked;
             DeleteProfileButton.Click += OnDeleteProfileClicked;
             NewFolderButton.Click += OnNewFolderClicked;
@@ -141,6 +148,11 @@ namespace Termrig.App.Views
             DragDrop.AddDragOverHandler(TabsList, OnTabsListDragOver);
             DragDrop.AddDropHandler(TabsList, OnTabsListDrop);
             DragDrop.AddDragLeaveHandler(TabsList, OnListDragLeave);
+        }
+
+        private void OnMainWindowClosed(object? sender, EventArgs e)
+        {
+            StopConfigAssetWatcher();
         }
 
         private void InitializeLists()
@@ -188,6 +200,7 @@ namespace Termrig.App.Views
                     await OpenAutoOpenProfilesAsync().ConfigureAwait(true);
                 }
 
+                StartConfigAssetWatcher();
                 _ProfilesLoaded.TrySetResult(true);
             }
             catch (Exception exception)
@@ -408,12 +421,192 @@ namespace Termrig.App.Views
         {
             if (String.IsNullOrWhiteSpace(profileName)) return false;
             await _ProfilesLoaded.Task.ConfigureAwait(true);
+            await ReloadProfilesFromStoreAsync().ConfigureAwait(true);
 
             TerminalProfile? profile = _Profiles.FirstOrDefault(item => item.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
             if (profile == null) return false;
 
             await OpenWorkspaceAsync(profile).ConfigureAwait(true);
             return true;
+        }
+
+        private async Task ReloadProfilesFromStoreAsync()
+        {
+            await ReloadConfigAssetsFromStoreAsync("Profile reload before command open failed.").ConfigureAwait(true);
+        }
+
+        private void StartConfigAssetWatcher()
+        {
+            if (_ConfigAssetWatcher != null)
+                return;
+
+            try
+            {
+                Directory.CreateDirectory(_ProfileStore.DirectoryPath);
+                var watcher = new FileSystemWatcher(_ProfileStore.DirectoryPath)
+                {
+                    Filter = "*.json",
+                    IncludeSubdirectories = false,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.CreationTime
+                };
+
+                watcher.Changed += OnConfigAssetChanged;
+                watcher.Created += OnConfigAssetChanged;
+                watcher.Deleted += OnConfigAssetChanged;
+                watcher.Renamed += OnConfigAssetRenamed;
+                watcher.Error += OnConfigAssetWatcherError;
+                _ConfigAssetWatcher = watcher;
+                watcher.EnableRaisingEvents = true;
+            }
+            catch (Exception exception)
+            {
+                WriteRecoveryDiagnostic("Config asset watcher start failed.", exception);
+            }
+        }
+
+        private void StopConfigAssetWatcher()
+        {
+            lock (_ConfigAssetReloadGate)
+            {
+                _ConfigAssetReloadCts?.Cancel();
+                _ConfigAssetReloadCts?.Dispose();
+                _ConfigAssetReloadCts = null;
+            }
+
+            if (_ConfigAssetWatcher == null)
+                return;
+
+            _ConfigAssetWatcher.EnableRaisingEvents = false;
+            _ConfigAssetWatcher.Dispose();
+            _ConfigAssetWatcher = null;
+        }
+
+        private void OnConfigAssetChanged(object sender, FileSystemEventArgs e)
+        {
+            if (!IsManagedConfigAsset(e.FullPath))
+                return;
+
+            ScheduleConfigAssetReload();
+        }
+
+        private void OnConfigAssetRenamed(object sender, RenamedEventArgs e)
+        {
+            if (!IsManagedConfigAsset(e.FullPath) && !IsManagedConfigAsset(e.OldFullPath))
+                return;
+
+            ScheduleConfigAssetReload();
+        }
+
+        private void OnConfigAssetWatcherError(object sender, ErrorEventArgs e)
+        {
+            WriteRecoveryDiagnostic("Config asset watcher error.", e.GetException());
+        }
+
+        private bool IsManagedConfigAsset(string path)
+        {
+            string fileName = Path.GetFileName(path);
+            return fileName.Equals(Path.GetFileName(_ProfileStore.FilePath), StringComparison.OrdinalIgnoreCase) ||
+                   fileName.Equals(Path.GetFileName(_ProfileFolderStore.FilePath), StringComparison.OrdinalIgnoreCase) ||
+                   fileName.Equals(Path.GetFileName(_ColorSchemeStore.FilePath), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ScheduleConfigAssetReload()
+        {
+            CancellationTokenSource cts;
+            lock (_ConfigAssetReloadGate)
+            {
+                _ConfigAssetReloadCts?.Cancel();
+                _ConfigAssetReloadCts?.Dispose();
+                _ConfigAssetReloadCts = new CancellationTokenSource();
+                cts = _ConfigAssetReloadCts;
+            }
+
+            _ = ReloadConfigAssetsAfterDelayAsync(cts.Token);
+        }
+
+        private async Task ReloadConfigAssetsAfterDelayAsync(CancellationToken token)
+        {
+            try
+            {
+                await Task.Delay(ConfigAssetReloadDebounceMilliseconds, token).ConfigureAwait(false);
+                Dispatcher.UIThread.Post(
+                    async () => await ReloadConfigAssetsFromStoreAsync("Config asset reload failed.").ConfigureAwait(true),
+                    DispatcherPriority.Background);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private async Task ReloadConfigAssetsFromStoreAsync(string failureSummary)
+        {
+            string? selectedProfileId = _SelectedProfile?.Id;
+            string? selectedFolderId = _SelectedFolder?.Id;
+            string? selectedSchemeName = GlobalSchemeCombo.SelectedItem as string;
+
+            try
+            {
+                _ColorSchemes = await LoadConfigAssetWithRetryAsync(_ColorSchemeStore.LoadAsync, CancellationToken.None).ConfigureAwait(true);
+                _ProfileFolders = await LoadConfigAssetWithRetryAsync(_ProfileFolderStore.LoadAsync, CancellationToken.None).ConfigureAwait(true);
+                _Profiles = await LoadConfigAssetWithRetryAsync(_ProfileStore.LoadAsync, CancellationToken.None).ConfigureAwait(true);
+
+                bool profilesChanged = ReconcileProfileFolders();
+                if (!_Profiles.Any())
+                {
+                    _Profiles.Add(CreateDefaultProfile());
+                    profilesChanged = true;
+                }
+
+                if (profilesChanged)
+                {
+                    await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+                }
+
+                RefreshColorSchemeList(selectedSchemeName);
+                string? selectedFolderName = _ProfileFolders.FirstOrDefault(item => item.Id == selectedFolderId)?.Name;
+                RefreshProfileFolderList(selectedFolderName);
+                RefreshProfiles(selectedProfileId, selectedFolderId);
+                if (!String.IsNullOrWhiteSpace(selectedProfileId))
+                {
+                    RestoreSelectedProfile(selectedProfileId);
+                }
+                else if (!String.IsNullOrWhiteSpace(selectedFolderId))
+                {
+                    SelectFolderRowByFolderId(selectedFolderId);
+                    RefreshEditor();
+                }
+                else
+                {
+                    RestoreSelectedProfile(null);
+                }
+            }
+            catch (Exception exception)
+            {
+                WriteRecoveryDiagnostic(failureSummary, exception);
+            }
+        }
+
+        private static async Task<T> LoadConfigAssetWithRetryAsync<T>(Func<CancellationToken, Task<T>> loadAsync, CancellationToken token)
+        {
+            const int attempts = 4;
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    return await loadAsync(token).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (attempt < attempts && IsTransientConfigLoadException(exception))
+                {
+                    await Task.Delay(150, token).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static bool IsTransientConfigLoadException(Exception exception)
+        {
+            return exception is IOException ||
+                   exception is UnauthorizedAccessException ||
+                   exception is JsonException;
         }
 
         /// <summary>

@@ -77,8 +77,7 @@ namespace Test.Terminal
                 80,
                 6,
                 new[] { Encoding.UTF8.GetBytes(output) },
-                convertEol,
-                trimLineEndingPadding: true);
+                convertEol);
 
             Assert.Contains("docker-partio-server-1", snapshot.VisibleRows[0].Text);
             Assert.Contains("docker-litegraph-1", snapshot.VisibleRows[1].Text);
@@ -101,13 +100,99 @@ namespace Test.Terminal
                     Encoding.UTF8.GetBytes("\r\n"),
                     Encoding.UTF8.GetBytes(row2),
                     Encoding.UTF8.GetBytes("\r\n")
-                },
-                trimLineEndingPadding: true);
+                });
 
             Assert.Contains("docker-documentatom-ui-1", snapshot.VisibleRows[0].Text);
             Assert.Contains("docker-documentatom-mcp-1", snapshot.VisibleRows[1].Text);
             Assert.DoesNotContain("docker-documentatom-ui-1", snapshot.VisibleRows[1].Text);
             Assert.DoesNotContain("docker-documentatom-mcp-1", snapshot.VisibleRows[2].Text);
+        }
+
+        [Fact]
+        public void FullWidthLineEndingCancelsPendingWrap()
+        {
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                5,
+                4,
+                new[] { Encoding.UTF8.GetBytes("abcde\r\nnext") });
+
+            Assert.Equal("abcde", snapshot.VisibleRows[0].Text);
+            Assert.Equal("next", snapshot.VisibleRows[1].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[2].Text);
+        }
+
+        [Fact]
+        public void PaddingSpaceAfterFullWidthLineIsDiscardedBeforeLineEnding()
+        {
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                5,
+                4,
+                new[] { Encoding.UTF8.GetBytes("abcde \r\nnext") });
+
+            Assert.Equal("abcde", snapshot.VisibleRows[0].Text);
+            Assert.Equal("next", snapshot.VisibleRows[1].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[2].Text);
+        }
+
+        [Fact]
+        public void PrintableAfterFullWidthLineWrapsExactlyOnce()
+        {
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                5,
+                4,
+                new[] { Encoding.UTF8.GetBytes("abcdeZ") });
+
+            Assert.Equal("abcde", snapshot.VisibleRows[0].Text);
+            Assert.Equal("Z", snapshot.VisibleRows[1].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[2].Text);
+        }
+
+        [Fact]
+        public void CarriageReturnAfterFullWidthLineCancelsPendingWrap()
+        {
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                5,
+                4,
+                new[] { Encoding.UTF8.GetBytes("abcde\rXY") });
+
+            Assert.Equal("XYcde", snapshot.VisibleRows[0].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[1].Text);
+        }
+
+        [Fact]
+        public void CursorMovementAfterFullWidthLineCancelsPendingWrap()
+        {
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                5,
+                4,
+                new[] { Encoding.UTF8.GetBytes("abcde\u001b[1;1HZ") });
+
+            Assert.Equal("Zbcde", snapshot.VisibleRows[0].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[1].Text);
+        }
+
+        [Fact]
+        public void GraphicRenditionAfterFullWidthLinePreservesPendingWrap()
+        {
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                5,
+                4,
+                new[] { Encoding.UTF8.GetBytes("abcde\u001b[31mZ") });
+
+            Assert.Equal("abcde", snapshot.VisibleRows[0].Text);
+            Assert.Equal("Z", snapshot.VisibleRows[1].Text);
+        }
+
+        [Fact]
+        public void WideCharacterAtRightEdgeWrapsBeforePrinting()
+        {
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                5,
+                4,
+                new[] { Encoding.UTF8.GetBytes("abcd\u754c") });
+
+            Assert.Equal("abcd", snapshot.VisibleRows[0].Text);
+            Assert.Equal("\u754c", snapshot.VisibleRows[1].Text);
         }
 
         [Fact]
@@ -118,7 +203,7 @@ namespace Test.Terminal
                 " \u001b[32m\u2714 \u001b[mContainer docker-documentatom-ui-1  \u001b[32mCreated\u001b[130X\u001b[34m\u001b[130C0.3s \u001b[m\r\n" +
                 " \u001b[32m\u2714 \u001b[mContainer docker-documentatom-mcp-1 \u001b[32mCreated\u001b[130X\u001b[34m\u001b[130C0.3s \u001b[m\r\n";
 
-            TerminalSnapshot snapshot = TerminalReplay.Replay(180, 8, new[] { Encoding.UTF8.GetBytes(output) }, trimLineEndingPadding: true);
+            TerminalSnapshot snapshot = TerminalReplay.Replay(180, 8, new[] { Encoding.UTF8.GetBytes(output) });
 
             Assert.Contains("docker-documentatom-ui-1", snapshot.VisibleRows[1].Text);
             Assert.Contains("docker-documentatom-mcp-1", snapshot.VisibleRows[2].Text);
@@ -132,7 +217,7 @@ namespace Test.Terminal
             string output =
                 " \u001b[32m\u2714 \u001b[mNetwork docker_default\u001b[14X\u001b[32m\u001b[14CCreated\u001b[130X\u001b[34m\u001b[130C0.1s \u001b[m\r\n";
 
-            TerminalSnapshot snapshot = TerminalReplay.Replay(180, 4, new[] { Encoding.UTF8.GetBytes(output) }, trimLineEndingPadding: true);
+            TerminalSnapshot snapshot = TerminalReplay.Replay(180, 4, new[] { Encoding.UTF8.GetBytes(output) });
 
             Assert.Contains("Network docker_default              Created", snapshot.VisibleRows[0].Text);
         }
@@ -145,7 +230,7 @@ namespace Test.Terminal
                 "\r\u001b[2KWorking... (123 esc to interrupt)" +
                 "\r\u001b[2KWorking...\u001b[4C43279 esc to interrupt)";
 
-            TerminalSnapshot snapshot = TerminalReplay.Replay(80, 4, new[] { Encoding.UTF8.GetBytes(output) }, trimLineEndingPadding: true);
+            TerminalSnapshot snapshot = TerminalReplay.Replay(80, 4, new[] { Encoding.UTF8.GetBytes(output) });
 
             Assert.Contains("Working...    43279 esc to interrupt)", snapshot.VisibleRows[0].Text);
             Assert.DoesNotContain("Workkingg", snapshot.VisibleRows[0].Text);
@@ -162,8 +247,7 @@ namespace Test.Terminal
             TerminalSnapshot snapshot = TerminalReplay.Replay(
                 20,
                 5,
-                new[] { Encoding.UTF8.GetBytes(output) },
-                trimLineEndingPadding: true);
+                new[] { Encoding.UTF8.GetBytes(output) });
 
             Assert.StartsWith("content", snapshot.VisibleRows[0].Text);
             Assert.Equal("\u203a", snapshot.VisibleRows[4].Text);
@@ -181,8 +265,7 @@ namespace Test.Terminal
             TerminalSnapshot snapshot = TerminalReplay.Replay(
                 20,
                 5,
-                new[] { Encoding.UTF8.GetBytes(output) },
-                trimLineEndingPadding: true);
+                new[] { Encoding.UTF8.GetBytes(output) });
 
             Assert.Equal(string.Empty, snapshot.VisibleRows[0].Text);
             Assert.StartsWith("top", snapshot.VisibleRows[1].Text);

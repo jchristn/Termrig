@@ -19,6 +19,8 @@ public class InputHandler
     private AttributeData _curAttr;
     private readonly Dictionary<CharsetMode, Dictionary<char, string>?> _charsets;
     private CharsetMode _currentCharset;
+    private readonly List<AttributeData> _pendingWrapSpaceAttributes = new();
+    private bool _flushingPendingWrapSpaces;
 
     // Variation selector and combining character constants
     private const int VariationSelectorEmojiSymbol = 0xFE0F;  // Emoji presentation selector
@@ -117,33 +119,6 @@ public class InputHandler
             }
         }
 
-
-        // Handle autowrap
-        if (_buffer.X >= _terminal.Cols)
-        {
-            if (_terminal.Options.Wraparound)
-            {
-                if (_buffer.Y == _buffer.ScrollBottom)
-                {
-                    _buffer.SetCursor(0, _buffer.Y);
-                    _buffer.ScrollUp(1, true);
-                }
-                else
-                {
-                    _buffer.SetCursor(0, _buffer.Y + 1);
-                }
-                _buffer.Lines[_buffer.Y + _buffer.YBase]!.IsWrapped = true;
-            }
-            else
-            {
-                return; // Don't print beyond line edge
-            }
-        }
-
-        var line = _buffer.Lines[_buffer.Y + _buffer.YBase]; 
-        if (line == null)
-            return;
-
         // Translate character through active charset
         var translatedData = data;
         if (data.Length == 1)
@@ -154,6 +129,30 @@ public class InputHandler
 
         // Get character width
         var width = GetStringCellWidth(translatedData);
+
+        if (!_flushingPendingWrapSpaces && _buffer.IsPendingWrap && width == 1 && translatedData == " ")
+        {
+            _pendingWrapSpaceAttributes.Add(_curAttr);
+            return;
+        }
+
+        FlushPendingWrapSpaces();
+        CommitPendingWrap();
+
+        if (width == 2 && _buffer.X == _terminal.Cols - 1)
+        {
+            if (!_terminal.Options.Wraparound)
+                return;
+
+            var space = BufferCell.Space;
+            space.Attributes = _curAttr;
+            _buffer.Lines[_buffer.Y + _buffer.YBase]?.SetCell(_buffer.X, ref space);
+            WrapToNextLine();
+        }
+
+        var line = _buffer.Lines[_buffer.Y + _buffer.YBase]; 
+        if (line == null)
+            return;
 
         // Create cell
         var cell = new BufferCell
@@ -186,8 +185,75 @@ public class InputHandler
             }
         }
 
-        // Use MoveCursor to allow X to be one past the last column (pending wrap)
-        _buffer.SetCursorRaw(_buffer.X + width, _buffer.Y);
+        int nextX = _buffer.X + width;
+        if (nextX >= _terminal.Cols)
+        {
+            _buffer.SetCursor(_terminal.Cols - 1, _buffer.Y);
+            if (_terminal.Options.Wraparound)
+            {
+                _buffer.SetPendingWrap();
+            }
+        }
+        else
+        {
+            _buffer.SetCursor(nextX, _buffer.Y);
+        }
+    }
+
+    private void CommitPendingWrap()
+    {
+        if (!_buffer.IsPendingWrap)
+            return;
+
+        ClearPendingWrapState();
+        if (_terminal.Options.Wraparound)
+        {
+            WrapToNextLine();
+        }
+    }
+
+    internal void ClearPendingWrapState()
+    {
+        _pendingWrapSpaceAttributes.Clear();
+        _buffer.ClearPendingWrap();
+    }
+
+    private void FlushPendingWrapSpaces()
+    {
+        if (_pendingWrapSpaceAttributes.Count == 0)
+            return;
+
+        AttributeData savedAttr = _curAttr;
+        AttributeData[] spaceAttributes = _pendingWrapSpaceAttributes.ToArray();
+        _pendingWrapSpaceAttributes.Clear();
+        _flushingPendingWrapSpaces = true;
+        try
+        {
+            foreach (AttributeData attr in spaceAttributes)
+            {
+                _curAttr = attr;
+                Print(" ");
+            }
+        }
+        finally
+        {
+            _curAttr = savedAttr;
+            _flushingPendingWrapSpaces = false;
+        }
+    }
+
+    private void WrapToNextLine()
+    {
+        if (_buffer.Y == _buffer.ScrollBottom)
+        {
+            _buffer.SetCursor(0, _buffer.Y);
+            _buffer.ScrollUp(1, true);
+        }
+        else
+        {
+            _buffer.SetCursor(0, _buffer.Y + 1);
+            _buffer.Lines[_buffer.Y + _buffer.YBase]!.IsWrapped = true;
+        }
     }
 
     /// <summary>
@@ -202,8 +268,9 @@ public class InputHandler
         if (line == null)
             return false;
 
-        // Find the previous cell position
-        int prevX = _buffer.X - 1;
+        // A combining character after a right-margin printable belongs to the
+        // cell that set pending-wrap; the wrap is not committed by combining.
+        int prevX = _buffer.IsPendingWrap ? _buffer.X : _buffer.X - 1;
 
         // If we're at the start of a line, we might need to look at the previous line
         if (prevX < 0)
@@ -326,7 +393,7 @@ public class InputHandler
         if (line == null)
             return false;
 
-        int prevX = _buffer.X - 1;
+        int prevX = _buffer.IsPendingWrap ? _buffer.X : _buffer.X - 1;
         if (prevX < 0)
             return false;
 
@@ -875,6 +942,7 @@ public class InputHandler
 
     private void EraseInDisplay(Params parameters)
     {
+        ClearPendingWrapState();
         var mode = parameters.GetParam(0, 0);
         var emptyCell = BufferCell.Space;
         emptyCell.Attributes = _curAttr;
@@ -907,6 +975,7 @@ public class InputHandler
 
     private void EraseInLine(Params parameters)
     {
+        ClearPendingWrapState();
         var mode = parameters.GetParam(0, 0);
         var line = _buffer.Lines[_buffer.Y + _buffer.YBase];
         if (line == null)
@@ -931,6 +1000,7 @@ public class InputHandler
 
     private void InsertLines(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         // Only works in scroll region
         if (_buffer.Y < _buffer.ScrollTop || _buffer.Y > _buffer.ScrollBottom)
@@ -946,6 +1016,7 @@ public class InputHandler
 
     private void DeleteLines(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         // Only works in scroll region
         if (_buffer.Y < _buffer.ScrollTop || _buffer.Y > _buffer.ScrollBottom)
@@ -961,6 +1032,7 @@ public class InputHandler
 
     private void InsertChars(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         var line = _buffer.Lines[_buffer.Y + _buffer.YBase];
         if (line == null)
@@ -978,6 +1050,7 @@ public class InputHandler
 
     private void DeleteChars(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         var line = _buffer.Lines[_buffer.Y + _buffer.YBase];
         if (line == null)
@@ -998,6 +1071,7 @@ public class InputHandler
 
     private void EraseChars(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         var line = _buffer.Lines[_buffer.Y + _buffer.YBase];
 
@@ -1009,12 +1083,14 @@ public class InputHandler
 
     private void ScrollUp(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.ScrollUp(count);
     }
 
     private void ScrollDown(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.ScrollDown(count);
     }
@@ -1474,6 +1550,7 @@ public class InputHandler
 
     private void SetScrollRegion(Params parameters)
     {
+        ClearPendingWrapState();
         var top = Math.Max(parameters.GetParam(0, 1), 1) - 1;
         var bottom = Math.Max(parameters.GetParam(1, _terminal.Rows), 1) - 1;
         _buffer.SetScrollRegion(top, bottom);
@@ -1757,6 +1834,7 @@ public class InputHandler
                 case TerminalMode.Wraparound:
                     // Mode 7: Wraparound mode
                     // Wraparound and AutoWrapMode share value 7 in the enum
+                    ClearPendingWrapState();
                     _terminal.Options.Wraparound = true;
                     break;
 
@@ -1891,6 +1969,7 @@ public class InputHandler
                     break;
 
                 case TerminalMode.AutoWrapMode:
+                    ClearPendingWrapState();
                     _terminal.Options.Wraparound = true;
                     break;
 
@@ -1945,6 +2024,7 @@ public class InputHandler
 
                 case TerminalMode.Wraparound:
                     // Mode 7: Wraparound mode
+                    ClearPendingWrapState();
                     _terminal.Options.Wraparound = false;
                     break;
 
@@ -2052,6 +2132,7 @@ public class InputHandler
                     break;
 
                 case TerminalMode.AutoWrapMode:
+                    ClearPendingWrapState();
                     _terminal.Options.Wraparound = false;
                     break;
 
@@ -2066,6 +2147,7 @@ public class InputHandler
 
     private void IndexDown()
     {
+        ClearPendingWrapState();
         if (_buffer.Y == _buffer.ScrollBottom)
         {
             _buffer.ScrollUp(1);
@@ -2084,6 +2166,7 @@ public class InputHandler
 
     private void ReverseIndex()
     {
+        ClearPendingWrapState();
         if (_buffer.Y == _buffer.ScrollTop)
         {
             _buffer.ScrollDown(1);
@@ -2239,5 +2322,6 @@ public class InputHandler
     public void SetBuffer(Buffer.TerminalBuffer buffer)
     {
         _buffer = buffer;
+        ClearPendingWrapState();
     }
 }

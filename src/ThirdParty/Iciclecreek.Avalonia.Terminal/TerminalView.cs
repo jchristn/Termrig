@@ -46,6 +46,14 @@ namespace Iciclecreek.Terminal
         private bool _recordCurrentPtyOutput;
         private string? _currentPtyRecordingDirectory;
         private string? _currentPtyRecordingProcessName;
+        private string[] _currentPtyRecordingArguments = Array.Empty<string>();
+        private string _currentPtyRecordingStartingDirectory = String.Empty;
+        private int _currentPtyRecordingColumns;
+        private int _currentPtyRecordingRows;
+        private int _currentPtyRecordingScrollback;
+        private bool _currentPtyRecordingConvertEol;
+        private string? _currentPtyRecordingTermName;
+        private const string PtyRecordingDiagnosticsEnvironmentVariable = "TERMRIG_PTY_RECORDING_DIAGNOSTICS";
 
         // Cursor blinking
         private DispatcherTimer _cursorBlinkTimer;
@@ -127,164 +135,6 @@ namespace Iciclecreek.Terminal
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 string json = JsonSerializer.Serialize(_metadata, options);
                 await File.WriteAllTextAsync(_metadataPath, json, Utf8NoBom);
-            }
-        }
-
-        private sealed class LineEndingPaddingNormalizer
-        {
-            private int _pendingSpaces;
-
-            private int _column;
-
-            public string Process(string output, int columns)
-            {
-                if (output.Length == 0)
-                    return output;
-
-                var builder = new StringBuilder(output.Length + _pendingSpaces);
-                for (int index = 0; index < output.Length; index++)
-                {
-                    char ch = output[index];
-                    if (ch == ' ')
-                    {
-                        _pendingSpaces++;
-                        continue;
-                    }
-
-                    if (ch == '\r' || ch == '\n')
-                    {
-                        _pendingSpaces = 0;
-                        builder.Append(ch);
-                        if (ch == '\r')
-                        {
-                            _column = 0;
-                        }
-                        continue;
-                    }
-
-                    if (ch == '\u001b' && index + 1 < output.Length && output[index + 1] == '[')
-                    {
-                        int finalIndex = index + 2;
-                        while (finalIndex < output.Length && (output[finalIndex] < '@' || output[finalIndex] > '~'))
-                        {
-                            finalIndex++;
-                        }
-
-                        if (finalIndex < output.Length)
-                        {
-                            string parameters = output.Substring(index + 2, finalIndex - index - 2);
-                            char final = output[finalIndex];
-                            if (final == 'm')
-                            {
-                                builder.Append(output, index, finalIndex - index + 1);
-                                index = finalIndex;
-                                continue;
-                            }
-
-                            FlushTo(builder);
-                            if (final == 'C' && IsPaddingCount(parameters, columns))
-                            {
-                                int count = ParseCsiCount(parameters, 1);
-                                int targetColumn = Math.Min(Math.Max(0, columns - 1), _column + count);
-                                builder.Append("\u001b[");
-                                builder.Append(targetColumn + 1);
-                                builder.Append('G');
-                                _column = targetColumn;
-                                index = finalIndex;
-                                continue;
-                            }
-                            else if (final == 'X' && IsPaddingCount(parameters, columns))
-                            {
-                                builder.Append("\u001b[K");
-                                index = finalIndex;
-                                continue;
-                            }
-
-                            builder.Append(output, index, finalIndex - index + 1);
-                            TrackCsiPosition(parameters, final);
-                            index = finalIndex;
-                            continue;
-                        }
-                    }
-
-                    FlushTo(builder);
-                    builder.Append(ch);
-                    if (!char.IsControl(ch))
-                    {
-                        _column = Math.Min(Math.Max(0, columns - 1), _column + 1);
-                    }
-                }
-
-                return builder.ToString();
-            }
-
-            public string Flush()
-            {
-                if (_pendingSpaces == 0)
-                    return string.Empty;
-
-                string output = new string(' ', _pendingSpaces);
-                _pendingSpaces = 0;
-                return output;
-            }
-
-            private void FlushTo(StringBuilder builder)
-            {
-                if (_pendingSpaces == 0)
-                    return;
-
-                builder.Append(' ', _pendingSpaces);
-                _column += _pendingSpaces;
-                _pendingSpaces = 0;
-            }
-
-            private void TrackCsiPosition(string parameters, char final)
-            {
-                if (final == 'G')
-                {
-                    _column = Math.Max(0, ParseCsiCount(parameters, 1) - 1);
-                }
-                else if (final == 'C')
-                {
-                    _column += ParseCsiCount(parameters, 1);
-                }
-                else if (final == 'D')
-                {
-                    _column = Math.Max(0, _column - ParseCsiCount(parameters, 1));
-                }
-                else if (final == 'H' || final == 'f')
-                {
-                    string[] parts = parameters.Split(';');
-                    if (parts.Length >= 2 && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int column))
-                    {
-                        _column = Math.Max(0, column - 1);
-                    }
-                    else
-                    {
-                        _column = 0;
-                    }
-                }
-
-                _column = Math.Min(Math.Max(0, _column), Int32.MaxValue);
-            }
-
-            private static int ParseCsiCount(string parameters, int defaultValue)
-            {
-                if (string.IsNullOrWhiteSpace(parameters))
-                    return defaultValue;
-
-                string first = parameters.Split(';')[0];
-                return int.TryParse(first.TrimStart('?'), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
-                    ? Math.Max(1, value)
-                    : defaultValue;
-            }
-
-            private static bool IsPaddingCount(string parameters, int columns)
-            {
-                if (columns <= 0)
-                    return false;
-
-                return ParseCsiCount(parameters, 1) > columns / 2;
             }
         }
 
@@ -2245,18 +2095,39 @@ namespace Iciclecreek.Terminal
                 }
 
                 string currentDirectory = StartingDirectory ?? Environment.CurrentDirectory;
+                string[] launchArguments = Args?.ToArray() ?? Array.Empty<string>();
                 SetAndRaise(CurrentDirectoryProperty, ref _currentDirectory, currentDirectory);
                 _recordCurrentPtyOutput = RecordPtyOutput;
                 _currentPtyRecordingDirectory = PtyRecordingDirectory;
                 _currentPtyRecordingProcessName = processToLaunch;
+                _currentPtyRecordingArguments = launchArguments;
+                _currentPtyRecordingStartingDirectory = currentDirectory;
+                WritePtyRecordingDiagnostic(
+                    "Launch snapshot: " +
+                    $"record={_recordCurrentPtyOutput}, " +
+                    $"directory='{_currentPtyRecordingDirectory}', " +
+                    $"process='{_currentPtyRecordingProcessName}', " +
+                    $"startingDirectory='{currentDirectory}'.");
 
                 int launchCols;
                 int launchRows;
+                int launchScrollback;
+                bool launchConvertEol;
+                string? launchTermName;
                 lock (_terminalLock)
                 {
                     launchCols = _terminal.Cols;
                     launchRows = _terminal.Rows;
+                    launchScrollback = _terminal.Options.Scrollback;
+                    launchConvertEol = _terminal.Options.ConvertEol;
+                    launchTermName = _terminal.Options.TermName;
                 }
+
+                _currentPtyRecordingColumns = launchCols;
+                _currentPtyRecordingRows = launchRows;
+                _currentPtyRecordingScrollback = launchScrollback;
+                _currentPtyRecordingConvertEol = launchConvertEol;
+                _currentPtyRecordingTermName = launchTermName;
 
                 var options = new PtyOptions
                 {
@@ -2270,9 +2141,9 @@ namespace Iciclecreek.Terminal
 
 
                 // Add arguments if provided
-                if (Args != null && Args.Count > 0)
+                if (launchArguments.Length > 0)
                 {
-                    options.CommandLine = Args.ToArray();
+                    options.CommandLine = launchArguments;
                 }
 
                 _ptyConnection = await PtyProvider.SpawnAsync(options, _processCts.Token);
@@ -2337,14 +2208,12 @@ namespace Iciclecreek.Terminal
                 var buffer = new byte[0x40000];
                 var decoder = Utf8NoBom.GetDecoder();
                 var charBuffer = new char[Utf8NoBom.GetMaxCharCount(buffer.Length)];
-                var lineEndingPaddingNormalizer = new LineEndingPaddingNormalizer();
                 await using PtyRecording? ptyRecording = OpenPtyRecording();
                 while (!cancellationToken.IsCancellationRequested && _ptyConnection != null)
                 {
                     var bytesRead = await _ptyConnection.ReaderStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
                     if (bytesRead == 0)
                     {
-                        string pendingOutput = lineEndingPaddingNormalizer.Flush();
                         // Process has exited — fallback in case OnPtyProcessExited didn't fire first.
                         if (Interlocked.Exchange(ref _processExitHandled, 1) == 0)
                         {
@@ -2352,11 +2221,6 @@ namespace Iciclecreek.Terminal
 
                             lock (_terminalLock)
                             {
-                                if (pendingOutput.Length > 0)
-                                {
-                                    _terminal.Write(pendingOutput);
-                                }
-
                                 _terminal.WriteLine($"\nProcess exited with code: {exitCode}\n");
                                 _terminal.Buffer.ScrollToBottom();
                             }
@@ -2372,14 +2236,8 @@ namespace Iciclecreek.Terminal
                         await ptyRecording.Stream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
                     }
 
-                    int normalizeColumns;
-                    lock (_terminalLock)
-                    {
-                        normalizeColumns = _terminal.Cols;
-                    }
-
                     int charsRead = decoder.GetChars(buffer, 0, bytesRead, charBuffer, 0, flush: false);
-                    var output = lineEndingPaddingNormalizer.Process(new string(charBuffer, 0, charsRead), normalizeColumns);
+                    var output = new string(charBuffer, 0, charsRead);
                     if (output.Length == 0)
                         continue;
 
@@ -2447,6 +2305,12 @@ namespace Iciclecreek.Terminal
 
         private PtyRecording? OpenPtyRecording()
         {
+            WritePtyRecordingDiagnostic(
+                "OpenPtyRecording: " +
+                $"record={_recordCurrentPtyOutput}, " +
+                $"directory='{_currentPtyRecordingDirectory}', " +
+                $"process='{_currentPtyRecordingProcessName}'.");
+
             if (!_recordCurrentPtyOutput || String.IsNullOrWhiteSpace(_currentPtyRecordingDirectory))
                 return null;
 
@@ -2458,33 +2322,20 @@ namespace Iciclecreek.Terminal
                 string instance = _instanceId.ToString("N")[..8];
                 string path = Path.Combine(_currentPtyRecordingDirectory, $"{timestamp}-{processName}-{instance}.pty.bin");
                 string metadataPath = path[..^".pty.bin".Length] + ".pty.json";
-                int columns;
-                int rows;
-                int scrollback;
-                bool convertEol;
-                string? termName;
-                lock (_terminalLock)
-                {
-                    columns = _terminal.Cols;
-                    rows = _terminal.Rows;
-                    scrollback = _terminal.Options.Scrollback;
-                    convertEol = _terminal.Options.ConvertEol;
-                    termName = _terminal.Options.TermName;
-                }
 
                 var metadata = new PtyRecordingMetadata
                 {
                     RecordingFile = Path.GetFileName(path),
                     StartedAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                     Process = _currentPtyRecordingProcessName ?? String.Empty,
-                    Arguments = Args?.ToArray() ?? Array.Empty<string>(),
-                    StartingDirectory = StartingDirectory ?? Environment.CurrentDirectory,
-                    Columns = columns,
-                    Rows = rows,
-                    Scrollback = scrollback,
-                    ConvertEol = convertEol,
-                    TermName = termName,
-                    UsesLineEndingPaddingNormalizer = true,
+                    Arguments = _currentPtyRecordingArguments,
+                    StartingDirectory = _currentPtyRecordingStartingDirectory,
+                    Columns = _currentPtyRecordingColumns,
+                    Rows = _currentPtyRecordingRows,
+                    Scrollback = _currentPtyRecordingScrollback,
+                    ConvertEol = _currentPtyRecordingConvertEol,
+                    TermName = _currentPtyRecordingTermName,
+                    UsesLineEndingPaddingNormalizer = false,
                     PinsViewportToBottomAfterWrite = false,
                     OSDescription = RuntimeInformation.OSDescription,
                     OSArchitecture = RuntimeInformation.OSArchitecture.ToString(),
@@ -2492,6 +2343,8 @@ namespace Iciclecreek.Terminal
                     TermEnvironment = Environment.GetEnvironmentVariable("TERM"),
                     ColorTermEnvironment = Environment.GetEnvironmentVariable("COLORTERM")
                 };
+
+                WritePtyRecordingDiagnostic($"Opening PTY recording '{path}'.");
 
                 return new PtyRecording(
                     new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 81920, useAsync: true),
@@ -2501,7 +2354,33 @@ namespace Iciclecreek.Terminal
             catch (Exception ex)
             {
                 Debug.WriteLine($"[{_instanceId}] Failed to open PTY recording: {ex.Message}");
+                WritePtyRecordingDiagnostic($"Failed to open PTY recording: {ex}");
                 return null;
+            }
+        }
+
+        private static void WritePtyRecordingDiagnostic(string message)
+        {
+            if (!String.Equals(
+                    Environment.GetEnvironmentVariable(PtyRecordingDiagnosticsEnvironmentVariable),
+                    "1",
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            try
+            {
+                string directory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Termrig");
+                Directory.CreateDirectory(directory);
+                string path = Path.Combine(directory, "pty-recording-diagnostics.log");
+                string line = DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture) + " " + message + Environment.NewLine;
+                File.AppendAllText(path, line, Utf8NoBom);
+            }
+            catch
+            {
             }
         }
 
