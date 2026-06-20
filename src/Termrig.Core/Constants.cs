@@ -61,6 +61,11 @@ namespace Termrig.Core
         public const string WorkspaceRecoveryFilename = "workspace-recovery.json";
 
         /// <summary>
+        /// Preferred profile font for cmd.exe terminal tabs.
+        /// </summary>
+        public const string CmdTerminalFontFamily = "Cascadia Mono";
+
+        /// <summary>
         /// Default terminal font size used when no tab or profile font size is set.
         /// </summary>
         public const double DefaultTerminalFontSize = 12;

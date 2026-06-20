@@ -16,6 +16,7 @@ namespace Termrig.App.Views
     using System.Threading;
     using System.Threading.Tasks;
     using Termrig.App.Models;
+    using Termrig.Core;
     using Termrig.Core.Enums;
     using Termrig.Core.Models;
     using Termrig.Core.Services;
@@ -213,7 +214,7 @@ namespace Termrig.App.Views
         private static TerminalProfile CreateDefaultProfile()
         {
             ShellType shell = OperatingSystem.IsWindows() ? ShellType.Cmd : ShellType.Bash;
-            return new TerminalProfile
+            TerminalProfile profile = new TerminalProfile
             {
                 Name = "Default",
                 Tabs = new List<TerminalTabProfile>
@@ -226,6 +227,8 @@ namespace Termrig.App.Views
                     }
                 }
             };
+            TerminalProfileDefaults.ApplyShellFontDefaults(profile, shell);
+            return profile;
         }
 
         private void RefreshProfiles(string? selectedProfileId = null, string? selectedFolderId = null)
@@ -846,6 +849,7 @@ namespace Termrig.App.Views
             TerminalTabProfile? tab = await editor.ShowDialog<TerminalTabProfile?>(this).ConfigureAwait(true);
             if (tab == null) return;
             _SelectedProfile.Tabs.Add(tab);
+            ApplyProfileFontDefaultForShell(tab.Shell);
             RefreshTabs();
             TabsList.SelectedIndex = _SelectedProfile.Tabs.Count - 1;
         }
@@ -873,7 +877,17 @@ namespace Termrig.App.Views
             TerminalTabProfile? tab = await editor.ShowDialog<TerminalTabProfile?>(this).ConfigureAwait(true);
             if (tab == null) return;
             _SelectedProfile.Tabs[index] = tab;
+            ApplyProfileFontDefaultForShell(tab.Shell);
             RefreshTabs();
+        }
+
+        private void ApplyProfileFontDefaultForShell(ShellType shell)
+        {
+            if (_SelectedProfile == null) return;
+            if (TerminalProfileDefaults.ApplyShellFontDefaults(_SelectedProfile, shell))
+            {
+                ProfileFontFamilyCombo.SelectedItem = Constants.CmdTerminalFontFamily;
+            }
         }
 
         private async void OnDeleteTabClicked(object? sender, RoutedEventArgs e)

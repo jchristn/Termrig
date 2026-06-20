@@ -261,6 +261,7 @@ namespace Termrig.App.Views
             TerminalTabEditorWindow editor = new TerminalTabEditorWindow(null, _ShellCatalog.GetSupportedShells(), _ColorSchemes);
             TerminalTabProfile? tab = await editor.ShowDialog<TerminalTabProfile?>(this).ConfigureAwait(true);
             if (tab == null) return;
+            TerminalProfileDefaults.ApplyShellFontDefaults(_Profile, tab.Shell);
             AddTerminalTab(tab, false);
         }
 
@@ -288,6 +289,7 @@ namespace Termrig.App.Views
             }
 
             session.TabProfile = updated;
+            TerminalProfileDefaults.ApplyShellFontDefaults(_Profile, updated.Shell);
             ApplyTerminalAppearance(session.Terminal, _Profile, updated, updated.ColorSchemeOverride ?? _Profile.GlobalColorScheme);
             ReplaceTabHeader(session);
         }

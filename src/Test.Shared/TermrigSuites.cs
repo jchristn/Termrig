@@ -5,6 +5,7 @@ namespace Test.Shared
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
+    using Termrig.Core;
     using Termrig.Core.Enums;
     using Termrig.Core.Models;
     using Termrig.Core.Services;
@@ -231,6 +232,12 @@ namespace Test.Shared
                         caseId: "TerminalTabProfileDefaultsToCmd",
                         displayName: "Terminal tab profiles default to cmd.exe",
                         executeAsync: TerminalTabProfileDefaultsToCmdAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
+                        caseId: "CmdShellDefaultsProfileFont",
+                        displayName: "cmd.exe defaults profile font",
+                        executeAsync: CmdShellDefaultsProfileFontAsync),
 
                     new TestCaseDescriptor(
                         suiteId: "ShellCatalog",
@@ -759,6 +766,28 @@ namespace Test.Shared
             token.ThrowIfCancellationRequested();
 
             AssertEqual(ShellType.Cmd, new TerminalTabProfile().Shell, "Terminal tab profile default shell mismatch.");
+            return Task.CompletedTask;
+        }
+
+        private static Task CmdShellDefaultsProfileFontAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            TerminalProfile profile = new TerminalProfile();
+            bool changed = TerminalProfileDefaults.ApplyShellFontDefaults(profile, ShellType.Cmd);
+            AssertEqual(true, changed, "cmd.exe shell should set a profile font when one is not configured.");
+            AssertEqual(Constants.CmdTerminalFontFamily, profile.FontFamily, "cmd.exe profile font mismatch.");
+
+            profile.FontFamily = "Cascadia Code";
+            changed = TerminalProfileDefaults.ApplyShellFontDefaults(profile, ShellType.Cmd);
+            AssertEqual(false, changed, "cmd.exe shell should not override an explicit profile font.");
+            AssertEqual("Cascadia Code", profile.FontFamily, "Explicit profile font should be preserved.");
+
+            TerminalProfile powerShellProfile = new TerminalProfile();
+            changed = TerminalProfileDefaults.ApplyShellFontDefaults(powerShellProfile, ShellType.PowerShell);
+            AssertEqual(false, changed, "PowerShell should not set the cmd.exe profile font.");
+            AssertEqual<string?>(null, powerShellProfile.FontFamily, "PowerShell profile font should remain unset.");
+
             return Task.CompletedTask;
         }
 
