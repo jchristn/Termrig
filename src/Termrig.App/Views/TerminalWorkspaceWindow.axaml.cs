@@ -179,7 +179,7 @@ namespace Termrig.App.Views
             FocusSelectedTerminal();
         }
 
-        private void AddTerminalTab(TerminalTabProfile tab, bool isProfileMember, bool selectTab = true)
+        private TerminalSession AddTerminalTab(TerminalTabProfile tab, bool isProfileMember, bool selectTab = true, int? insertIndex = null)
         {
             ShellLaunchPlan plan = _ShellCatalog.BuildLaunchPlan(tab);
             ColorScheme scheme = tab.ColorSchemeOverride ?? _Profile.GlobalColorScheme;
@@ -208,13 +208,16 @@ namespace Termrig.App.Views
 
             session.Header = BuildTabHeader(session);
             WireTerminalSessionEvents(session);
-            _Sessions.Add(session);
-            TerminalTabHeaders.Children.Add(session.Header);
+            int targetIndex = insertIndex.HasValue ? Math.Clamp(insertIndex.Value, 0, _Sessions.Count) : _Sessions.Count;
+            _Sessions.Insert(targetIndex, session);
+            TerminalTabHeaders.Children.Insert(targetIndex, session.Header);
             TerminalSurface.Children.Add(terminal);
             if (selectTab || _SelectedSession == null)
             {
                 SelectSession(session);
             }
+
+            return session;
         }
 
         private async Task LaunchTerminalAsync(TerminalSession session, ShellLaunchPlan plan)
@@ -517,6 +520,7 @@ namespace Termrig.App.Views
             };
             container.Tag = session;
             container.PointerPressed += OnTabHeaderPointerPressed;
+            container.ContextRequested += OnTabHeaderContextRequested;
             container.DoubleTapped += OnTabHeaderDoubleTapped;
 
             StackPanel panel = new StackPanel
@@ -593,11 +597,40 @@ namespace Termrig.App.Views
             await EditSessionTabAsync(session).ConfigureAwait(true);
         }
 
+        private void OnTabHeaderContextRequested(object? sender, ContextRequestedEventArgs e)
+        {
+            if (!(sender is Control control)) return;
+            if (!(control.Tag is TerminalSession session)) return;
+
+            SelectSession(session);
+            BuildTabHeaderContextMenu(session).Open(control);
+            e.Handled = true;
+        }
+
+        private ContextMenu BuildTabHeaderContextMenu(TerminalSession session)
+        {
+            return new ContextMenu
+            {
+                ItemsSource = new MenuItem[]
+                {
+                    CreateAsyncMenuItem("Duplicate", async delegate { await DuplicateSessionTabAsync(session).ConfigureAwait(true); })
+                }
+            };
+        }
+
+        private static MenuItem CreateAsyncMenuItem(string header, Func<Task> onClick)
+        {
+            MenuItem item = new MenuItem { Header = header };
+            item.Click += async delegate { await onClick().ConfigureAwait(true); };
+            return item;
+        }
+
         private async void OnTabHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             if (e.Source is Control source && (source is Button || source.FindAncestorOfType<Button>() != null)) return;
             if (!(sender is Control control)) return;
             if (!(control.Tag is TerminalSession session)) return;
+            if (!e.GetCurrentPoint(control).Properties.IsLeftButtonPressed) return;
 
             SelectSession(session);
             _DraggedSession = session;
@@ -729,6 +762,31 @@ namespace Termrig.App.Views
             if (_DropTargetHeader != _DraggedSession?.Header) _DropTargetHeader.Opacity = 1;
             _DropTargetHeader.Cursor = null;
             _DropTargetHeader = null;
+        }
+
+        private async Task DuplicateSessionTabAsync(TerminalSession session)
+        {
+            Int32 sessionIndex = _Sessions.IndexOf(session);
+            if (sessionIndex < 0) return;
+
+            CaptureSessionDirectory(session);
+            TerminalTabProfile duplicate = session.TabProfile.Clone();
+            TerminalProfileDefaults.ApplyShellFontDefaults(_Profile, duplicate.Shell);
+
+            Int32 profileIndex = _Profile.Tabs.IndexOf(session.TabProfile);
+            if (profileIndex >= 0)
+            {
+                _Profile.Tabs.Insert(profileIndex + 1, duplicate);
+            }
+            else
+            {
+                _Profile.Tabs.Add(duplicate);
+            }
+
+            TerminalSession duplicateSession = AddTerminalTab(duplicate, true, true, sessionIndex + 1);
+            CaptureCurrentDirectories();
+            await _ProfileStore.UpsertAsync(_Profile, CancellationToken.None).ConfigureAwait(true);
+            await LaunchTerminalAsync(duplicateSession, duplicateSession.LaunchPlan).ConfigureAwait(true);
         }
 
         private async Task PersistProfileTabOrderAsync()

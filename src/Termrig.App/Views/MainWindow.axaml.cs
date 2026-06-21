@@ -971,6 +971,7 @@ namespace Termrig.App.Views
                 ItemsSource = new MenuItem[]
                 {
                     CreateAsyncMenuItem("Rename", async delegate { await RenameTabAsync(tab).ConfigureAwait(true); }),
+                    CreateAsyncMenuItem("Duplicate", async delegate { await DuplicateTabAsync(tab).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Edit", async delegate { await EditSelectedTabAsync().ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Delete", async delegate
                     {
@@ -1059,6 +1060,21 @@ namespace Termrig.App.Views
             RefreshProfileFolderList(null);
             RefreshProfiles();
             SelectFirstProfileRow();
+        }
+
+        private async Task DuplicateTabAsync(TerminalTabProfile tab)
+        {
+            if (_SelectedProfile == null) return;
+            Int32 index = _SelectedProfile.Tabs.IndexOf(tab);
+            if (index < 0) return;
+
+            ApplyEditorToProfile();
+            TerminalTabProfile duplicate = tab.Clone();
+            _SelectedProfile.Tabs.Insert(index + 1, duplicate);
+            ApplyProfileFontDefaultForShell(duplicate.Shell);
+            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
+            RefreshTabs();
+            TabsList.SelectedIndex = index + 1;
         }
 
         private async Task RenameTabAsync(TerminalTabProfile tab)
