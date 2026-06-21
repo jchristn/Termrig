@@ -127,7 +127,13 @@ namespace Test.Shared
                         suiteId: "ProfileStore",
                         caseId: "TabScrollbackBufferSizeIsClamped",
                         displayName: "Tab scrollback buffer size is clamped",
-                        executeAsync: TabScrollbackBufferSizeIsClampedAsync)
+                        executeAsync: TabScrollbackBufferSizeIsClampedAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ProfileStore",
+                        caseId: "TerminalTabProfileCloneCopiesSettings",
+                        displayName: "Terminal tab profile clone copies settings independently",
+                        executeAsync: TerminalTabProfileCloneCopiesSettingsAsync)
                 });
         }
 
@@ -547,6 +553,51 @@ namespace Test.Shared
 
             tab.ScrollbackBufferSize = null;
             AssertEqual<int?>(null, tab.ScrollbackBufferSize, "Expected null scrollback buffer size to remain null.");
+            return Task.CompletedTask;
+        }
+
+        private static Task TerminalTabProfileCloneCopiesSettingsAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            TerminalTabProfile original = new TerminalTabProfile
+            {
+                Name = "API",
+                Shell = ShellType.PowerShell,
+                StartingDirectory = "C:\\Code",
+                StartupScript = "Write-Host ready",
+                FontFamily = "Cascadia Code",
+                FontSize = 15,
+                ScrollbackBufferSize = 8000,
+                RecordPtyOutput = true,
+                PtyRecordingDirectory = "C:\\Recordings",
+                ColorSchemeOverride = new ColorScheme
+                {
+                    Name = "Custom",
+                    Background = "#112233",
+                    Foreground = "#DDEEFF"
+                }
+            };
+
+            TerminalTabProfile duplicate = original.Clone();
+
+            if (Object.ReferenceEquals(original, duplicate)) throw new InvalidOperationException("Expected clone to create a new tab profile instance.");
+            if (Object.ReferenceEquals(original.ColorSchemeOverride, duplicate.ColorSchemeOverride)) throw new InvalidOperationException("Expected color scheme override to be cloned independently.");
+            AssertEqual(original.Name, duplicate.Name, "Name mismatch.");
+            AssertEqual(original.Shell, duplicate.Shell, "Shell mismatch.");
+            AssertEqual(original.StartingDirectory, duplicate.StartingDirectory, "Starting directory mismatch.");
+            AssertEqual(original.StartupScript, duplicate.StartupScript, "Startup script mismatch.");
+            AssertEqual(original.FontFamily, duplicate.FontFamily, "Font family mismatch.");
+            AssertEqual(original.FontSize, duplicate.FontSize, "Font size mismatch.");
+            AssertEqual(original.ScrollbackBufferSize, duplicate.ScrollbackBufferSize, "Scrollback buffer size mismatch.");
+            AssertEqual(original.RecordPtyOutput, duplicate.RecordPtyOutput, "PTY recording flag mismatch.");
+            AssertEqual(original.PtyRecordingDirectory, duplicate.PtyRecordingDirectory, "PTY recording directory mismatch.");
+            AssertEqual(original.ColorSchemeOverride?.Name, duplicate.ColorSchemeOverride?.Name, "Color scheme name mismatch.");
+            AssertEqual(original.ColorSchemeOverride?.Background, duplicate.ColorSchemeOverride?.Background, "Color scheme background mismatch.");
+            AssertEqual(original.ColorSchemeOverride?.Foreground, duplicate.ColorSchemeOverride?.Foreground, "Color scheme foreground mismatch.");
+
+            duplicate.ColorSchemeOverride!.Background = "#000000";
+            AssertEqual("#112233", original.ColorSchemeOverride!.Background, "Original color scheme should not change when duplicate changes.");
             return Task.CompletedTask;
         }
 

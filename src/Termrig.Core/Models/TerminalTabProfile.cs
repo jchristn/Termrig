@@ -120,6 +120,36 @@ namespace Termrig.Core.Models
 
         #endregion
 
+        #region Public-Methods
+
+        /// <summary>
+        /// Create an independent copy of this tab profile.
+        /// </summary>
+        /// <returns>Cloned tab profile.</returns>
+        public TerminalTabProfile Clone()
+        {
+            return new TerminalTabProfile
+            {
+                Name = Name,
+                Shell = Shell,
+                StartingDirectory = StartingDirectory,
+                StartupScript = StartupScript,
+                FontFamily = FontFamily,
+                FontSize = FontSize,
+                ScrollbackBufferSize = ScrollbackBufferSize,
+                RecordPtyOutput = RecordPtyOutput,
+                PtyRecordingDirectory = PtyRecordingDirectory,
+                ColorSchemeOverride = ColorSchemeOverride == null ? null : new ColorScheme
+                {
+                    Name = ColorSchemeOverride.Name,
+                    Background = ColorSchemeOverride.Background,
+                    Foreground = ColorSchemeOverride.Foreground
+                }
+            };
+        }
+
+        #endregion
+
         #region Private-Members
 
         private string _Name = "Terminal";

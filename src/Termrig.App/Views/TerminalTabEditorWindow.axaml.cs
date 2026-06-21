@@ -84,24 +84,7 @@ namespace Termrig.App.Views
 
         private static TerminalTabProfile Clone(TerminalTabProfile tab)
         {
-            return new TerminalTabProfile
-            {
-                Name = tab.Name,
-                Shell = tab.Shell,
-                StartingDirectory = tab.StartingDirectory,
-                StartupScript = tab.StartupScript,
-                FontFamily = tab.FontFamily,
-                FontSize = tab.FontSize,
-                ScrollbackBufferSize = tab.ScrollbackBufferSize,
-                RecordPtyOutput = tab.RecordPtyOutput,
-                PtyRecordingDirectory = tab.PtyRecordingDirectory,
-                ColorSchemeOverride = tab.ColorSchemeOverride == null ? null : new ColorScheme
-                {
-                    Name = tab.ColorSchemeOverride.Name,
-                    Background = tab.ColorSchemeOverride.Background,
-                    Foreground = tab.ColorSchemeOverride.Foreground
-                }
-            };
+            return tab.Clone();
         }
 
         private void InitializeForm()
