@@ -379,15 +379,20 @@ namespace Test.Shared
         {
             token.ThrowIfCancellationRequested();
             Terminal terminal = CreateTerminal();
-            var urls = new List<string?>();
+            var urls = new List<string>();
+            var clearStates = new List<bool>();
             terminal.HyperlinkChanged += (_, e) => urls.Add(e.Url);
+            terminal.HyperlinkChanged += (_, e) => clearStates.Add(e.IsCleared);
 
             terminal.Write("\x1B]8;;http://example.com\x07");
             terminal.Write("\x1B]8;;\x07");
 
             AssertEqual(2, urls.Count, "Hyperlink change event count mismatch.");
             AssertEqual("http://example.com", urls[0], "Hyperlink start URL mismatch.");
-            AssertEqual<string?>(null, urls[1], "Hyperlink clear URL mismatch.");
+            AssertEqual(String.Empty, urls[1], "Hyperlink clear URL mismatch.");
+            AssertEqual(2, clearStates.Count, "Hyperlink clear state event count mismatch.");
+            AssertEqual(false, clearStates[0], "Hyperlink start clear state mismatch.");
+            AssertEqual(true, clearStates[1], "Hyperlink clear state mismatch.");
             AssertEqual<string?>(null, terminal.CurrentHyperlink, "Current hyperlink should be cleared.");
             return Task.CompletedTask;
         }
