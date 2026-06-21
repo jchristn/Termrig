@@ -1561,7 +1561,8 @@ public class InputHandler
     {
         if (_terminal.OriginMode)
         {
-            return Math.Clamp(_buffer.ScrollTop + row, _buffer.ScrollTop, _buffer.ScrollBottom);
+            long absoluteRow = (long)_buffer.ScrollTop + row;
+            return (int)Math.Clamp(absoluteRow, _buffer.ScrollTop, _buffer.ScrollBottom);
         }
 
         return Math.Clamp(row, 0, _terminal.Rows - 1);
