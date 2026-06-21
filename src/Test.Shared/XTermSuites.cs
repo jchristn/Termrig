@@ -8,6 +8,7 @@ namespace Test.Shared
     using XTerm;
     using XTerm.Buffer;
     using XTerm.Options;
+    using XTerm.Parser;
 
     /// <summary>
     /// Touchstone descriptors for Termrig-owned XTerm.NET regression coverage.
@@ -84,6 +85,12 @@ namespace Test.Shared
                         caseId: "OriginModeCursorPositionUsesScrollRegion",
                         displayName: "Origin mode cursor position uses scroll region",
                         executeAsync: OriginModeCursorPositionUsesScrollRegionAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "XTermNET",
+                        caseId: "OriginModeLargeCursorPositionClampsToScrollBottom",
+                        displayName: "Origin mode large cursor position clamps to scroll bottom",
+                        executeAsync: OriginModeLargeCursorPositionClampsToScrollBottomAsync),
 
                     new TestCaseDescriptor(
                         suiteId: "XTermNET",
@@ -283,6 +290,24 @@ namespace Test.Shared
             return Task.CompletedTask;
         }
 
+        private static Task OriginModeLargeCursorPositionClampsToScrollBottomAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            Terminal terminal = CreateTerminal();
+            InputHandler handler = new InputHandler(terminal);
+            terminal.Buffer.SetScrollRegion(4, 19);
+            terminal.OriginMode = true;
+            Params parameters = new Params();
+            parameters.AddParam(Int32.MaxValue);
+            parameters.AddParam(20);
+
+            handler.HandleCsi("H", parameters);
+
+            AssertEqual(19, terminal.Buffer.X, "Cursor column mismatch.");
+            AssertEqual(19, terminal.Buffer.Y, "Cursor row mismatch.");
+            return Task.CompletedTask;
+        }
+
         private static Task OriginModeLinePositionUsesScrollRegionAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
@@ -341,6 +366,12 @@ namespace Test.Shared
             terminal.Selection.UpdateSelection(30, 0);
             terminal.Selection.EndSelection();
             AssertStartsWith("alpha", terminal.Selection.GetSelectionText(), "Past-edge selection column was not clamped.");
+
+            Terminal zeroColumnTerminal = new Terminal(new TerminalOptions { Rows = 3, Cols = 0, Scrollback = 20 });
+            zeroColumnTerminal.Selection.StartSelection(0, 0);
+            zeroColumnTerminal.Selection.UpdateSelection(0, 0);
+            zeroColumnTerminal.Selection.EndSelection();
+            AssertEqual(String.Empty, zeroColumnTerminal.Selection.GetSelectionText(), "Zero-column selection text should be empty.");
             return Task.CompletedTask;
         }
 
