@@ -1211,6 +1211,12 @@ namespace Iciclecreek.Terminal
                     return;
                 }
 
+                if (IsModifierOnlyKey(e.Key))
+                {
+                    base.OnKeyDown(e);
+                    return;
+                }
+
                 var modifiers = ConvertAvaloniaModifiers(e.KeyModifiers);
                 var hasAlt = (modifiers & XT.Input.KeyModifiers.Alt) != 0;
 
@@ -1301,6 +1307,12 @@ namespace Iciclecreek.Terminal
 
             try
             {
+                if (IsModifierOnlyKey(e.Key))
+                {
+                    base.OnKeyUp(e);
+                    return;
+                }
+
                 // Windows ConPTY limitation: Always send ESCAPE key in Win32 format
                 bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
                 bool isEscapeKey = e.Key == Key.Escape;
@@ -1979,6 +1991,18 @@ namespace Iciclecreek.Terminal
 
             // Handle selection if app doesn't want mouse, OR if Shift override is active
             return !appWantsMouse || shiftHeld;
+        }
+
+        private static bool IsModifierOnlyKey(Key key)
+        {
+            return key switch
+            {
+                Key.LeftShift or Key.RightShift or
+                Key.LeftCtrl or Key.RightCtrl or
+                Key.LeftAlt or Key.RightAlt or
+                Key.LWin or Key.RWin => true,
+                _ => false
+            };
         }
 
         private bool TryGetPrintableChar(KeyEventArgs e, out char character)
@@ -3007,6 +3031,9 @@ namespace Iciclecreek.Terminal
         /// </summary>
         private string GenerateWin32InputSequence(KeyEventArgs e, bool isKeyDown)
         {
+            if (IsModifierOnlyKey(e.Key))
+                return string.Empty;
+
             var vk = ConvertAvaloniaKeyToVirtualKey(e.Key);
 
             // If we can't get a virtual key code, we can't generate a Win32 sequence

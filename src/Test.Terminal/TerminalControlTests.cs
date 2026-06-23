@@ -1,5 +1,6 @@
 namespace Test.Terminal
 {
+    using Avalonia.Input;
     using Iciclecreek.Terminal;
     using System;
     using System.Collections.Generic;
@@ -106,6 +107,56 @@ namespace Test.Terminal
             {
                 Directory.Delete(directory, recursive: true);
             }
+        }
+
+        [Theory]
+        [InlineData(Key.LeftShift, KeyModifiers.Shift)]
+        [InlineData(Key.RightShift, KeyModifiers.Shift)]
+        [InlineData(Key.LeftCtrl, KeyModifiers.Control)]
+        [InlineData(Key.RightCtrl, KeyModifiers.Control)]
+        [InlineData(Key.LeftAlt, KeyModifiers.Alt)]
+        [InlineData(Key.RightAlt, KeyModifiers.Alt)]
+        [InlineData(Key.LWin, KeyModifiers.Meta)]
+        [InlineData(Key.RWin, KeyModifiers.Meta)]
+        public void Win32InputSequenceSuppressesModifierOnlyKeys(Key key, KeyModifiers modifiers)
+        {
+            var view = new TerminalView();
+            var args = new KeyEventArgs
+            {
+                Key = key,
+                KeyModifiers = modifiers
+            };
+
+            string keyDown = GenerateWin32InputSequence(view, args, true);
+            string keyUp = GenerateWin32InputSequence(view, args, false);
+
+            Assert.Equal(String.Empty, keyDown);
+            Assert.Equal(String.Empty, keyUp);
+        }
+
+        [Fact]
+        public void Win32InputSequencePreservesShiftedPrintableCharacters()
+        {
+            var view = new TerminalView();
+            var args = new KeyEventArgs
+            {
+                Key = Key.D4,
+                KeyModifiers = KeyModifiers.Shift,
+                KeySymbol = "$"
+            };
+
+            string keyDown = GenerateWin32InputSequence(view, args, true);
+            string keyUp = GenerateWin32InputSequence(view, args, false);
+
+            Assert.Equal("\u001b[52;0;36;1;16;1_", keyDown);
+            Assert.Equal("\u001b[52;0;36;0;16;1_", keyUp);
+        }
+
+        private static string GenerateWin32InputSequence(TerminalView view, KeyEventArgs args, bool isKeyDown)
+        {
+            return (string)typeof(TerminalView)
+                .GetMethod("GenerateWin32InputSequence", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(view, new object[] { args, isKeyDown })!;
         }
 
         private static void SetPrivateField<T>(object instance, string name, T value)
