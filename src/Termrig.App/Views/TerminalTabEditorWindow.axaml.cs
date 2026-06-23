@@ -1,7 +1,9 @@
 namespace Termrig.App.Views
 {
     using Avalonia.Controls;
+    using Avalonia.Input;
     using Avalonia.Interactivity;
+    using Avalonia.VisualTree;
     using System;
     using System.Collections.Generic;
     using System.Linq;
@@ -87,6 +89,12 @@ namespace Termrig.App.Views
             return tab.Clone();
         }
 
+        private static bool HasTextBoxFocus(object? source)
+        {
+            return source is TextBox
+                || source is Control control && control.GetVisualAncestors().OfType<TextBox>().Any();
+        }
+
         private void InitializeForm()
         {
             ShellCombo.ItemsSource = _Shells.Select(item => item.Name).ToList();
@@ -119,6 +127,7 @@ namespace Termrig.App.Views
             SaveButton.Click += OnSaveClicked;
             CancelButton.Click += OnCancelClicked;
             RecordPtyOutputBox.IsCheckedChanged += OnRecordPtyOutputChanged;
+            KeyDown += OnKeyDown;
         }
 
         private void OnSaveClicked(object? sender, RoutedEventArgs e)
@@ -163,6 +172,15 @@ namespace Termrig.App.Views
 
         private void OnCancelClicked(object? sender, RoutedEventArgs e)
         {
+            Close(null);
+        }
+
+        private void OnKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape) return;
+            if (HasTextBoxFocus(e.Source)) return;
+
+            e.Handled = true;
             Close(null);
         }
 

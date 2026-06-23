@@ -38,6 +38,8 @@ namespace Termrig.App.Views
         private readonly string _RecoveryRunId = Guid.NewGuid().ToString("N");
         private const string RepositoryUrl = "https://github.com/jchristn/Termrig";
         private const string NoFolderLabel = "No folder";
+        private const string SaveSuccessButtonClass = "saveSuccess";
+        private const int SaveSuccessFeedbackMilliseconds = 900;
         private readonly List<string> _FontFamilies = new List<string>
         {
             "Default terminal font",
@@ -86,6 +88,8 @@ namespace Termrig.App.Views
         private CancellationTokenSource? _ConfigAssetReloadCts;
         private readonly object _ConfigAssetReloadGate = new object();
         private const int ConfigAssetReloadDebounceMilliseconds = 300;
+        private object? _SaveProfileButtonContent = null;
+        private CancellationTokenSource? _SaveProfileFeedbackCts = null;
 
         #endregion
 
@@ -97,6 +101,7 @@ namespace Termrig.App.Views
         public MainWindow()
         {
             InitializeComponent();
+            _SaveProfileButtonContent = SaveProfileButton.Content;
             WireEvents();
             InitializeLists();
             Dispatcher.UIThread.Post(LoadProfilesAsync, DispatcherPriority.Background);
@@ -153,6 +158,7 @@ namespace Termrig.App.Views
 
         private void OnMainWindowClosed(object? sender, EventArgs e)
         {
+            CancelSaveProfileFeedback();
             StopConfigAssetWatcher();
         }
 
@@ -334,6 +340,61 @@ namespace Termrig.App.Views
             await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
             RefreshProfiles(selectedProfileId);
             RestoreSelectedProfile(selectedProfileId);
+            ShowSaveProfileSuccessFeedback();
+        }
+
+        private void ShowSaveProfileSuccessFeedback()
+        {
+            CancelSaveProfileFeedback();
+
+            CancellationTokenSource cts = new CancellationTokenSource();
+            _SaveProfileFeedbackCts = cts;
+            SaveProfileButton.Content = CreateSaveProfileSuccessIcon();
+            if (!SaveProfileButton.Classes.Contains(SaveSuccessButtonClass))
+            {
+                SaveProfileButton.Classes.Add(SaveSuccessButtonClass);
+            }
+
+            _ = RestoreSaveProfileButtonAsync(cts);
+        }
+
+        private void CancelSaveProfileFeedback()
+        {
+            _SaveProfileFeedbackCts?.Cancel();
+            _SaveProfileFeedbackCts = null;
+        }
+
+        private async Task RestoreSaveProfileButtonAsync(CancellationTokenSource cts)
+        {
+            try
+            {
+                await Task.Delay(SaveSuccessFeedbackMilliseconds, cts.Token).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            finally
+            {
+                cts.Dispose();
+            }
+
+            if (_SaveProfileFeedbackCts != cts) return;
+
+            SaveProfileButton.Classes.Remove(SaveSuccessButtonClass);
+            SaveProfileButton.Content = _SaveProfileButtonContent;
+            _SaveProfileFeedbackCts = null;
+        }
+
+        private static PathIcon CreateSaveProfileSuccessIcon()
+        {
+            return new PathIcon
+            {
+                Width = 16,
+                Height = 16,
+                Foreground = Brushes.White,
+                Data = Geometry.Parse("M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z")
+            };
         }
 
         private void OnNewProfileClicked(object? sender, RoutedEventArgs e)

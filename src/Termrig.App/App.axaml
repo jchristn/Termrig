@@ -37,6 +37,21 @@
             <Setter Property="MinHeight" Value="28"/>
             <Setter Property="Background" Value="#202A33"/>
         </Style>
+        <Style Selector="Button.saveSuccess">
+            <Setter Property="Background" Value="#238636"/>
+            <Setter Property="BorderBrush" Value="#2EA043"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+        </Style>
+        <Style Selector="Button.saveSuccess:pointerover">
+            <Setter Property="Background" Value="#238636"/>
+            <Setter Property="BorderBrush" Value="#2EA043"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+        </Style>
+        <Style Selector="Button.saveSuccess:pressed">
+            <Setter Property="Background" Value="#1F7A31"/>
+            <Setter Property="BorderBrush" Value="#2EA043"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+        </Style>
         <Style Selector="Button.destructive">
             <Setter Property="Background" Value="#352329"/>
             <Setter Property="BorderBrush" Value="#70404A"/>
