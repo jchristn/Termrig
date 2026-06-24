@@ -119,6 +119,18 @@ namespace Test.Shared
 
                     new TestCaseDescriptor(
                         suiteId: "ProfileStore",
+                        caseId: "UpsertPreservesExistingProfileFolderWhenUnspecified",
+                        displayName: "Upsert preserves existing profile folder when unspecified",
+                        executeAsync: UpsertPreservesExistingProfileFolderWhenUnspecifiedAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ProfileStore",
+                        caseId: "UpsertAppliesProvidedProfileFolder",
+                        displayName: "Upsert applies provided profile folder",
+                        executeAsync: UpsertAppliesProvidedProfileFolderAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ProfileStore",
                         caseId: "LoadNormalizesNullableProfileFields",
                         displayName: "Load normalizes nullable profile fields",
                         executeAsync: LoadNormalizesNullableProfileFieldsAsync),
@@ -456,6 +468,71 @@ namespace Test.Shared
                 List<TerminalProfile> loaded = await store.LoadAsync(token).ConfigureAwait(false);
                 AssertEqual(1, loaded.Count, "Expected upsert to keep one profile.");
                 AssertEqual("New", loaded[0].Name, "Upserted profile name mismatch.");
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
+        private static async Task UpsertPreservesExistingProfileFolderWhenUnspecifiedAsync(CancellationToken token)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                ProfileStore store = new ProfileStore(directory);
+                await store.SaveAsync(new List<TerminalProfile>
+                {
+                    new TerminalProfile { Id = "profile1", Name = "SSH", FolderId = "folder-jurat" }
+                }, token).ConfigureAwait(false);
+
+                TerminalProfile workspaceProfile = new TerminalProfile
+                {
+                    Id = "profile1",
+                    Name = "SSH",
+                    FolderId = String.Empty,
+                    Tabs = new List<TerminalTabProfile>
+                    {
+                        new TerminalTabProfile { Name = "Linux API 1" }
+                    }
+                };
+
+                await store.UpsertAsync(workspaceProfile, token).ConfigureAwait(false);
+                List<TerminalProfile> loaded = await store.LoadAsync(token).ConfigureAwait(false);
+
+                AssertEqual(1, loaded.Count, "Expected upsert to keep one profile.");
+                AssertEqual("folder-jurat", loaded[0].FolderId, "Upsert should preserve existing profile folder.");
+                AssertEqual("folder-jurat", workspaceProfile.FolderId, "Upsert should restore the caller profile folder id.");
+                AssertEqual(1, loaded[0].Tabs.Count, "Upsert should still replace mutable profile data.");
+                AssertEqual("Linux API 1", loaded[0].Tabs[0].Name, "Upserted tab mismatch.");
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
+        private static async Task UpsertAppliesProvidedProfileFolderAsync(CancellationToken token)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                ProfileStore store = new ProfileStore(directory);
+                await store.SaveAsync(new List<TerminalProfile>
+                {
+                    new TerminalProfile { Id = "profile1", Name = "SSH", FolderId = "folder-old" }
+                }, token).ConfigureAwait(false);
+
+                await store.UpsertAsync(new TerminalProfile
+                {
+                    Id = "profile1",
+                    Name = "SSH",
+                    FolderId = "folder-new"
+                }, token).ConfigureAwait(false);
+
+                List<TerminalProfile> loaded = await store.LoadAsync(token).ConfigureAwait(false);
+                AssertEqual(1, loaded.Count, "Expected upsert to keep one profile.");
+                AssertEqual("folder-new", loaded[0].FolderId, "Upsert should apply provided profile folder.");
             }
             finally
             {

@@ -120,6 +120,11 @@ namespace Termrig.Core.Services
             TerminalProfile? existing = profiles.FirstOrDefault(item => item.Id == profile.Id);
             if (existing != null)
             {
+                if (String.IsNullOrWhiteSpace(profile.FolderId) && !String.IsNullOrWhiteSpace(existing.FolderId))
+                {
+                    profile.FolderId = existing.FolderId;
+                }
+
                 Int32 index = profiles.IndexOf(existing);
                 profiles[index] = profile;
             }
