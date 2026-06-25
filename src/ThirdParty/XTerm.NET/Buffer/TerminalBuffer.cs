@@ -337,6 +337,42 @@ public class TerminalBuffer
     }
 
     /// <summary>
+    /// Replaces the buffer contents with restored lines and positions the cursor
+    /// on a blank live row after the restored history.
+    /// </summary>
+    public void RestoreLines(IReadOnlyList<BufferLine> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        _lines.Clear();
+        foreach (BufferLine line in lines)
+        {
+            BufferLine restored = line.Clone();
+            if (restored.Length != _cols)
+            {
+                restored.Resize(_cols, BufferCell.Space);
+            }
+
+            _lines.Push(restored);
+        }
+
+        _lines.Push(GetBlankLine(AttributeData.Default));
+
+        while (_lines.Length < _rows)
+        {
+            _lines.Push(GetBlankLine(AttributeData.Default));
+        }
+
+        _yBase = Math.Max(0, _lines.Length - _rows);
+        _yDisp = _yBase;
+        _x = 0;
+        _y = Math.Max(0, _rows - 1);
+        _scrollTop = 0;
+        _scrollBottom = Math.Max(0, _rows - 1);
+        _isPendingWrap = false;
+    }
+
+    /// <summary>
     /// Sets the cursor position.
     /// </summary>
     public void SetCursor(int x, int y)

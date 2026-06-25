@@ -22,6 +22,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using XTerm.Buffer;
 using XTerm.Events;
+using XTerm.Restore;
 using XT = global::XTerm;
 
 namespace Iciclecreek.Terminal
@@ -465,6 +466,8 @@ namespace Iciclecreek.Terminal
         /// </summary>
         public event EventHandler<WindowInfoRequestedEventArgs>? WindowInfoRequested;
 
+        public event EventHandler? OutputReceived;
+
 
         static TerminalView()
         {
@@ -754,6 +757,53 @@ namespace Iciclecreek.Terminal
             {
                 ClearVisibleLineCachesUnderLock();
             }
+        }
+
+        public TerminalBufferSnapshot? ExportRestoreSnapshot(int lineLimit)
+        {
+            if (_terminal == null)
+                return null;
+
+            lock (_terminalLock)
+            {
+                return _terminal.ExportBufferSnapshot(lineLimit);
+            }
+        }
+
+        public void ApplyRestoreSnapshot(TerminalBufferSnapshot snapshot)
+        {
+            ArgumentNullException.ThrowIfNull(snapshot);
+            if (_terminal == null)
+                return;
+
+            int oldMax;
+            int oldY;
+            int newMax;
+            int newY;
+            bool oldAlternate;
+            bool newAlternate;
+
+            lock (_terminalLock)
+            {
+                oldMax = GetMaxScrollbackUnderLock();
+                oldY = _terminal.Buffer.ViewportY;
+                oldAlternate = _isAlternateBuffer;
+                _terminal.RestoreBufferSnapshot(snapshot);
+                _isAlternateBuffer = false;
+                ClearVisibleLineCachesUnderLock();
+                newMax = GetMaxScrollbackUnderLock();
+                newY = _terminal.Buffer.ViewportY;
+                newAlternate = _isAlternateBuffer;
+            }
+
+            if (oldAlternate != newAlternate)
+                RaisePropertyChanged(IsAlternateBufferProperty, oldAlternate, newAlternate);
+            if (oldMax != newMax)
+                RaisePropertyChanged(MaxScrollbackProperty, oldMax, newMax);
+            if (oldY != newY)
+                RaisePropertyChanged(ViewportYProperty, oldY, newY);
+
+            this.RequestInvalidate();
         }
 
         public void TerminateSession()
@@ -2250,6 +2300,7 @@ namespace Iciclecreek.Terminal
                             }
 
                             this.RequestInvalidate();
+                            DispatchOutputReceived();
                         }
                         break;
                     }
@@ -2305,6 +2356,7 @@ namespace Iciclecreek.Terminal
                     Dispatcher.UIThread.Post(() => _inputMethodClient?.NotifyCursorRectangleChanged());
 
                     this.RequestInvalidate();
+                    DispatchOutputReceived();
                 }
             }
             catch (OperationCanceledException)
@@ -2324,7 +2376,13 @@ namespace Iciclecreek.Terminal
                 }
 
                 this.RequestInvalidate();
+                DispatchOutputReceived();
             }
+        }
+
+        private void DispatchOutputReceived()
+        {
+            Dispatcher.UIThread.Post(() => OutputReceived?.Invoke(this, EventArgs.Empty));
         }
 
         private PtyRecording? OpenPtyRecording()

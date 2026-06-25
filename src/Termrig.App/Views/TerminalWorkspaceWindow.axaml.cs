@@ -13,9 +13,11 @@ namespace Termrig.App.Views
     using System.Threading;
     using System.Threading.Tasks;
     using Termrig.App.Models;
+    using Termrig.App.Services;
     using Termrig.Core;
     using Termrig.Core.Models;
     using Termrig.Core.Services;
+    using XTerm.Restore;
 
     /// <summary>
     /// Tabbed terminal workspace window.
@@ -28,6 +30,7 @@ namespace Termrig.App.Views
         private readonly ProfileStore _ProfileStore;
         private readonly ShellCatalog _ShellCatalog;
         private readonly CrashLogStore _CrashLogStore = new CrashLogStore();
+        private readonly TerminalRestoreStore _TerminalRestoreStore = new TerminalRestoreStore();
         private readonly List<ColorScheme> _ColorSchemes;
         private readonly List<TerminalSession> _Sessions = new List<TerminalSession>();
         private TerminalSession? _SelectedSession = null;
@@ -41,6 +44,7 @@ namespace Termrig.App.Views
         private const double MinimumTerminalFontSize = 8;
         private const double MaximumTerminalFontSize = 36;
         private const string AttentionIndicatorTag = "TerminalAttentionIndicator";
+        private static readonly TimeSpan RestoreSaveDebounce = TimeSpan.FromSeconds(3);
 
         #endregion
 
@@ -227,6 +231,7 @@ namespace Termrig.App.Views
 
             try
             {
+                await ApplyRestoreSnapshotIfAvailableAsync(session).ConfigureAwait(true);
                 await session.Terminal.LaunchProcess(plan.StartingDirectory, plan.Executable, plan.Arguments.ToArray()).ConfigureAwait(true);
                 if (session.IsClosingByTermrig) return;
                 await RunStartupCommandsAsync(session, plan.StartupCommands).ConfigureAwait(true);
@@ -285,6 +290,9 @@ namespace Termrig.App.Views
             TerminalTabProfile? updated = await editor.ShowDialog<TerminalTabProfile?>(this).ConfigureAwait(true);
             if (updated == null) return;
 
+            bool preserveConfiguredStartingDirectory =
+                session.PreserveConfiguredStartingDirectory ||
+                !StartingDirectoriesMatch(session.TabProfile.StartingDirectory, updated.StartingDirectory);
             Int32 profileIndex = _Profile.Tabs.IndexOf(session.TabProfile);
             if (profileIndex >= 0)
             {
@@ -292,19 +300,26 @@ namespace Termrig.App.Views
             }
 
             session.TabProfile = updated;
+            session.LaunchPlan = _ShellCatalog.BuildLaunchPlan(updated);
+            session.PreserveConfiguredStartingDirectory = preserveConfiguredStartingDirectory;
             TerminalProfileDefaults.ApplyShellFontDefaults(_Profile, updated.Shell);
             ApplyTerminalAppearance(session.Terminal, _Profile, updated, updated.ColorSchemeOverride ?? _Profile.GlobalColorScheme);
             ReplaceTabHeader(session);
+            if (updated.RestoreScrollbackEnabled)
+            {
+                QueueRestoreSnapshotSave(session);
+            }
+            else
+            {
+                _ = _TerminalRestoreStore.DeleteAsync(_Profile, updated, CancellationToken.None);
+            }
         }
 
         private void CaptureCurrentDirectories()
         {
             foreach (TerminalSession session in _Sessions)
             {
-                if (!String.IsNullOrWhiteSpace(session.Terminal.CurrentDirectory))
-                {
-                    session.TabProfile.StartingDirectory = session.Terminal.CurrentDirectory;
-                }
+                CaptureSessionDirectory(session);
             }
         }
 
@@ -329,6 +344,7 @@ namespace Termrig.App.Views
             }
 
             _IsClosingWorkspace = true;
+            await SaveAllRestoreSnapshotsAsync().ConfigureAwait(true);
             foreach (TerminalSession session in _Sessions.ToList())
             {
                 session.IsClosingByTermrig = true;
@@ -345,6 +361,7 @@ namespace Termrig.App.Views
 
             TerminalSession? session = _Sessions.FirstOrDefault(item => item.Terminal == terminal);
             if (session == null) return;
+            SaveRestoreSnapshotNow(session);
             if (session.IsClosingByTermrig) return;
             if (e.ExitCode == 0) return;
 
@@ -770,7 +787,7 @@ namespace Termrig.App.Views
             if (sessionIndex < 0) return;
 
             CaptureSessionDirectory(session);
-            TerminalTabProfile duplicate = session.TabProfile.Clone();
+            TerminalTabProfile duplicate = session.TabProfile.CloneForDuplicate();
             TerminalProfileDefaults.ApplyShellFontDefaults(_Profile, duplicate.Shell);
 
             Int32 profileIndex = _Profile.Tabs.IndexOf(session.TabProfile);
@@ -861,6 +878,7 @@ namespace Termrig.App.Views
         {
             if (_IsClosingWorkspace) return;
             int removedIndex = _Sessions.IndexOf(session);
+            SaveRestoreSnapshotNow(session);
             session.IsClosingByTermrig = true;
             UnwireTerminalSessionEvents(session);
 
@@ -1016,13 +1034,24 @@ namespace Termrig.App.Views
         private void WireTerminalSessionEvents(TerminalSession session)
         {
             session.Terminal.ProcessExited += OnTerminalProcessExited;
+            session.Terminal.OutputReceived += OnTerminalOutputReceived;
             TerminalView.AddBellRangHandler(session.Terminal, OnTerminalBellRang);
         }
 
         private void UnwireTerminalSessionEvents(TerminalSession session)
         {
             session.Terminal.ProcessExited -= OnTerminalProcessExited;
+            session.Terminal.OutputReceived -= OnTerminalOutputReceived;
             TerminalView.RemoveBellRangHandler(session.Terminal, OnTerminalBellRang);
+        }
+
+        private void OnTerminalOutputReceived(object? sender, EventArgs e)
+        {
+            if (!(sender is TerminalControl terminal)) return;
+
+            TerminalSession? session = _Sessions.FirstOrDefault(item => item.Terminal == terminal);
+            if (session == null) return;
+            QueueRestoreSnapshotSave(session);
         }
 
         private static void FocusTerminal(TerminalSession session)
@@ -1085,10 +1114,19 @@ namespace Termrig.App.Views
 
         private void CaptureSessionDirectory(TerminalSession session)
         {
+            if (session.PreserveConfiguredStartingDirectory) return;
             if (!String.IsNullOrWhiteSpace(session.Terminal.CurrentDirectory))
             {
                 session.TabProfile.StartingDirectory = session.Terminal.CurrentDirectory;
             }
+        }
+
+        private static bool StartingDirectoriesMatch(string? first, string? second)
+        {
+            StringComparison comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return String.Equals(first ?? String.Empty, second ?? String.Empty, comparison);
         }
 
         private static void ApplyTerminalAppearance(TerminalControl terminal, TerminalProfile profile, TerminalTabProfile tab, ColorScheme scheme)
@@ -1108,6 +1146,124 @@ namespace Termrig.App.Views
         private static int ResolveTerminalBufferSize(TerminalTabProfile tab)
         {
             return tab.ScrollbackBufferSize ?? Constants.DefaultTerminalBufferSize;
+        }
+
+        private static int ResolveRestoreLineLimit(TerminalTabProfile tab)
+        {
+            return tab.RestoreScrollbackLineLimit ?? Constants.DefaultTerminalRestoreLineLimit;
+        }
+
+        private async Task ApplyRestoreSnapshotIfAvailableAsync(TerminalSession session)
+        {
+            if (!session.IsProfileMember)
+                return;
+
+            if (!session.TabProfile.RestoreScrollbackEnabled)
+            {
+                await _TerminalRestoreStore.DeleteAsync(_Profile, session.TabProfile, CancellationToken.None).ConfigureAwait(false);
+                return;
+            }
+
+            TerminalBufferSnapshot? snapshot = await _TerminalRestoreStore
+                .LoadAsync(_Profile, session.TabProfile, CancellationToken.None)
+                .ConfigureAwait(false);
+            if (snapshot == null)
+                return;
+
+            session.Terminal.ApplyRestoreSnapshot(snapshot);
+        }
+
+        private void QueueRestoreSnapshotSave(TerminalSession session)
+        {
+            if (!session.IsProfileMember)
+                return;
+
+            CancelRestoreSaveDebounce(session);
+            var cts = new CancellationTokenSource();
+            session.RestoreSaveDebounce = cts;
+            _ = SaveRestoreSnapshotAfterDelayAsync(session, cts);
+        }
+
+        private async Task SaveRestoreSnapshotAfterDelayAsync(TerminalSession session, CancellationTokenSource cts)
+        {
+            try
+            {
+                await Task.Delay(RestoreSaveDebounce, cts.Token).ConfigureAwait(false);
+                await SaveRestoreSnapshotAsync(session, cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                if (ReferenceEquals(session.RestoreSaveDebounce, cts))
+                {
+                    session.RestoreSaveDebounce = null;
+                }
+
+                cts.Dispose();
+            }
+        }
+
+        private void SaveRestoreSnapshotNow(TerminalSession session)
+        {
+            if (!session.IsProfileMember)
+                return;
+
+            CancelRestoreSaveDebounce(session);
+            _ = SaveRestoreSnapshotAsync(session, CancellationToken.None);
+        }
+
+        private async Task SaveAllRestoreSnapshotsAsync()
+        {
+            foreach (TerminalSession session in _Sessions.ToList())
+            {
+                if (!session.IsProfileMember) continue;
+                CancelRestoreSaveDebounce(session);
+                await SaveRestoreSnapshotAsync(session, CancellationToken.None).ConfigureAwait(true);
+            }
+        }
+
+        private async Task SaveRestoreSnapshotAsync(TerminalSession session, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!session.IsProfileMember)
+                return;
+
+            if (!session.TabProfile.RestoreScrollbackEnabled)
+            {
+                await _TerminalRestoreStore.DeleteAsync(_Profile, session.TabProfile, token).ConfigureAwait(false);
+                return;
+            }
+
+            int lineLimit = ResolveRestoreLineLimit(session.TabProfile);
+            TerminalBufferSnapshot? snapshot;
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                snapshot = session.Terminal.ExportRestoreSnapshot(lineLimit);
+            }
+            else
+            {
+                snapshot = await Dispatcher.UIThread.InvokeAsync(
+                    () => session.Terminal.ExportRestoreSnapshot(lineLimit)).GetTask().ConfigureAwait(false);
+            }
+
+            if (snapshot == null)
+                return;
+
+            string workingDirectory = session.Terminal.CurrentDirectory ?? session.TabProfile.StartingDirectory;
+            await _TerminalRestoreStore
+                .SaveAsync(_Profile, session.TabProfile, snapshot, lineLimit, workingDirectory, token)
+                .ConfigureAwait(false);
+        }
+
+        private static void CancelRestoreSaveDebounce(TerminalSession session)
+        {
+            CancellationTokenSource? cts = session.RestoreSaveDebounce;
+            if (cts == null) return;
+
+            session.RestoreSaveDebounce = null;
+            cts.Cancel();
         }
 
         private static XTerm.Options.TerminalOptions BuildTerminalOptions(TerminalTabProfile tab)

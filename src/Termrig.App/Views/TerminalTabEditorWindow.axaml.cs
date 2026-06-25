@@ -114,6 +114,8 @@ namespace Termrig.App.Views
             FontFamilyCombo.SelectedItem = _Original.FontFamily ?? "Use profile font";
             FontSizeBox.Text = _Original.FontSize.HasValue ? _Original.FontSize.Value.ToString("0.##") : String.Empty;
             ScrollbackBufferBox.Text = _Original.ScrollbackBufferSize.HasValue ? _Original.ScrollbackBufferSize.Value.ToString() : String.Empty;
+            RestoreScrollbackBox.IsChecked = _Original.RestoreScrollbackEnabled;
+            RestoreScrollbackLineLimitBox.Text = _Original.RestoreScrollbackLineLimit.HasValue ? _Original.RestoreScrollbackLineLimit.Value.ToString() : String.Empty;
             RecordPtyOutputBox.IsChecked = _Original.RecordPtyOutput;
             PtyRecordingDirectoryBox.Text = _Original.PtyRecordingDirectory;
 
@@ -140,6 +142,7 @@ namespace Termrig.App.Views
 
             TerminalTabProfile tab = new TerminalTabProfile
             {
+                Id = _Original.Id,
                 Name = NameBox.Text,
                 Shell = shell.Shell,
                 StartingDirectory = DirectoryBox.Text ?? String.Empty,
@@ -147,6 +150,8 @@ namespace Termrig.App.Views
                 FontFamily = FontFamilyCombo.SelectedItem is string fontFamily && fontFamily != "Use profile font" ? fontFamily : null,
                 FontSize = ParseNullableFontSize(FontSizeBox.Text),
                 ScrollbackBufferSize = ParseNullableBufferSize(ScrollbackBufferBox.Text),
+                RestoreScrollbackEnabled = RestoreScrollbackBox.IsChecked == true,
+                RestoreScrollbackLineLimit = ParseNullableRestoreLineLimit(RestoreScrollbackLineLimitBox.Text),
                 RecordPtyOutput = RecordPtyOutputBox.IsChecked == true,
                 PtyRecordingDirectory = RecordPtyOutputBox.IsChecked == true
                     ? ResolvePtyRecordingDirectory(PtyRecordingDirectoryBox.Text)
@@ -203,6 +208,13 @@ namespace Termrig.App.Views
         {
             if (String.IsNullOrWhiteSpace(value)) return null;
             if (Int32.TryParse(value, out int bufferSize)) return bufferSize;
+            return null;
+        }
+
+        private static int? ParseNullableRestoreLineLimit(string? value)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            if (Int32.TryParse(value, out int lineLimit)) return lineLimit;
             return null;
         }
 

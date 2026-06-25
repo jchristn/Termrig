@@ -143,6 +143,12 @@ namespace Test.Shared
 
                     new TestCaseDescriptor(
                         suiteId: "ProfileStore",
+                        caseId: "TabRestoreScrollbackDefaultsAndLimits",
+                        displayName: "Tab restore scrollback settings default and clamp",
+                        executeAsync: TabRestoreScrollbackDefaultsAndLimitsAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ProfileStore",
                         caseId: "TerminalTabProfileCloneCopiesSettings",
                         displayName: "Terminal tab profile clone copies settings independently",
                         executeAsync: TerminalTabProfileCloneCopiesSettingsAsync)
@@ -415,7 +421,9 @@ namespace Test.Shared
                                 StartupScript = "Write-Host ready",
                                 FontFamily = "Consolas",
                                 FontSize = 16,
-                                ScrollbackBufferSize = 7500
+                                ScrollbackBufferSize = 7500,
+                                RestoreScrollbackEnabled = false,
+                                RestoreScrollbackLineLimit = 2500
                             },
                             new TerminalTabProfile
                             {
@@ -443,9 +451,14 @@ namespace Test.Shared
                 AssertEqual("Consolas", loaded[0].Tabs[0].FontFamily, "Font family mismatch.");
                 AssertEqual(16, loaded[0].Tabs[0].FontSize, "Font size mismatch.");
                 AssertEqual(7500, loaded[0].Tabs[0].ScrollbackBufferSize, "Scrollback buffer size mismatch.");
+                AssertEqual(false, loaded[0].Tabs[0].RestoreScrollbackEnabled, "Restore scrollback flag mismatch.");
+                AssertEqual(2500, loaded[0].Tabs[0].RestoreScrollbackLineLimit, "Restore scrollback line limit mismatch.");
+                if (String.IsNullOrWhiteSpace(loaded[0].Tabs[0].Id)) throw new InvalidOperationException("Expected tab id to persist.");
                 AssertEqual<string?>(null, loaded[0].Tabs[1].FontFamily, "Inherited tab font family should be null.");
                 AssertEqual<double?>(null, loaded[0].Tabs[1].FontSize, "Inherited tab font size should be null.");
                 AssertEqual<int?>(null, loaded[0].Tabs[1].ScrollbackBufferSize, "Default tab scrollback buffer size should be null.");
+                AssertEqual(true, loaded[0].Tabs[1].RestoreScrollbackEnabled, "Default restore scrollback should be enabled.");
+                AssertEqual<int?>(null, loaded[0].Tabs[1].RestoreScrollbackLineLimit, "Default restore scrollback line limit should be null.");
             }
             finally
             {
@@ -563,6 +576,9 @@ namespace Test.Shared
                 AssertEqual(String.Empty, profiles[0].Tabs[0].StartingDirectory, "Expected null starting directory to be normalized.");
                 AssertEqual(String.Empty, profiles[0].Tabs[0].StartupScript, "Expected null startup script to be normalized.");
                 AssertEqual<int?>(null, profiles[0].Tabs[0].ScrollbackBufferSize, "Missing scrollback buffer size should remain null.");
+                AssertEqual(true, profiles[0].Tabs[0].RestoreScrollbackEnabled, "Missing restore scrollback flag should default to true.");
+                AssertEqual<int?>(null, profiles[0].Tabs[0].RestoreScrollbackLineLimit, "Missing restore scrollback line limit should remain null.");
+                if (String.IsNullOrWhiteSpace(profiles[0].Tabs[0].Id)) throw new InvalidOperationException("Expected missing tab id to be generated.");
             }
             finally
             {
@@ -633,6 +649,26 @@ namespace Test.Shared
             return Task.CompletedTask;
         }
 
+        private static Task TabRestoreScrollbackDefaultsAndLimitsAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            TerminalTabProfile tab = new TerminalTabProfile();
+            AssertEqual(true, tab.RestoreScrollbackEnabled, "Restore scrollback should be enabled by default.");
+            AssertEqual<int?>(null, tab.RestoreScrollbackLineLimit, "Default restore line limit should be null.");
+            if (String.IsNullOrWhiteSpace(tab.Id)) throw new InvalidOperationException("Expected new tabs to have an id.");
+
+            tab.RestoreScrollbackLineLimit = 0;
+            AssertEqual(Termrig.Core.Constants.MinimumTerminalRestoreLineLimit, tab.RestoreScrollbackLineLimit, "Expected low restore line limit to be clamped.");
+
+            tab.RestoreScrollbackLineLimit = 200000;
+            AssertEqual(Termrig.Core.Constants.MaximumTerminalRestoreLineLimit, tab.RestoreScrollbackLineLimit, "Expected high restore line limit to be clamped.");
+
+            tab.RestoreScrollbackLineLimit = null;
+            AssertEqual<int?>(null, tab.RestoreScrollbackLineLimit, "Expected null restore line limit to remain null.");
+            return Task.CompletedTask;
+        }
+
         private static Task TerminalTabProfileCloneCopiesSettingsAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
@@ -648,6 +684,8 @@ namespace Test.Shared
                 ScrollbackBufferSize = 8000,
                 RecordPtyOutput = true,
                 PtyRecordingDirectory = "C:\\Recordings",
+                RestoreScrollbackEnabled = false,
+                RestoreScrollbackLineLimit = 3000,
                 ColorSchemeOverride = new ColorScheme
                 {
                     Name = "Custom",
@@ -669,12 +707,23 @@ namespace Test.Shared
             AssertEqual(original.ScrollbackBufferSize, duplicate.ScrollbackBufferSize, "Scrollback buffer size mismatch.");
             AssertEqual(original.RecordPtyOutput, duplicate.RecordPtyOutput, "PTY recording flag mismatch.");
             AssertEqual(original.PtyRecordingDirectory, duplicate.PtyRecordingDirectory, "PTY recording directory mismatch.");
+            AssertEqual(original.RestoreScrollbackEnabled, duplicate.RestoreScrollbackEnabled, "Restore scrollback flag mismatch.");
+            AssertEqual(original.RestoreScrollbackLineLimit, duplicate.RestoreScrollbackLineLimit, "Restore scrollback line limit mismatch.");
+            AssertEqual(original.Id, duplicate.Id, "Clone used for editing should preserve tab id.");
             AssertEqual(original.ColorSchemeOverride?.Name, duplicate.ColorSchemeOverride?.Name, "Color scheme name mismatch.");
             AssertEqual(original.ColorSchemeOverride?.Background, duplicate.ColorSchemeOverride?.Background, "Color scheme background mismatch.");
             AssertEqual(original.ColorSchemeOverride?.Foreground, duplicate.ColorSchemeOverride?.Foreground, "Color scheme foreground mismatch.");
 
             duplicate.ColorSchemeOverride!.Background = "#000000";
             AssertEqual("#112233", original.ColorSchemeOverride!.Background, "Original color scheme should not change when duplicate changes.");
+
+            TerminalTabProfile insertedDuplicate = original.CloneForDuplicate();
+            if (String.Equals(original.Id, insertedDuplicate.Id, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Inserted duplicate should receive a new tab id.");
+            }
+
+            AssertEqual(original.RestoreScrollbackEnabled, insertedDuplicate.RestoreScrollbackEnabled, "Inserted duplicate restore flag mismatch.");
             return Task.CompletedTask;
         }
 

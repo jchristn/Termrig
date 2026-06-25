@@ -6,6 +6,7 @@ using XTerm.Input;
 using XTerm.Events.Parser;
 using XTerm.Events;
 using XTerm.Selection;
+using XTerm.Restore;
 
 namespace XTerm;
 
@@ -399,6 +400,110 @@ public class Terminal
             lines[i] = GetLine(_buffer.YDisp + i);
         }
         return lines;
+    }
+
+    /// <summary>
+    /// Exports a bounded snapshot of the normal buffer for visual scrollback restore.
+    /// </summary>
+    public TerminalBufferSnapshot ExportBufferSnapshot(int maxLines)
+    {
+        maxLines = Math.Max(0, maxLines);
+        Buffer.TerminalBuffer buffer = _normalBuffer ?? _buffer;
+        int activeLength = Math.Min(buffer.Length, buffer.BaseY + buffer.Rows);
+        int start = maxLines == 0 ? activeLength : Math.Max(0, activeLength - maxLines);
+        var snapshot = new TerminalBufferSnapshot
+        {
+            Columns = Cols,
+            Rows = Rows,
+            CursorColumn = buffer.X,
+            CursorRow = buffer.Y,
+            ViewportY = buffer.ViewportY,
+            BaseY = buffer.BaseY,
+            WasAlternateBufferActive = _usingAltBuffer
+        };
+
+        for (int y = start; y < activeLength; y++)
+        {
+            BufferLine? line = buffer.GetLine(y);
+            if (line == null) continue;
+
+            var lineSnapshot = new TerminalBufferLineSnapshot
+            {
+                IsWrapped = line.IsWrapped,
+                LineAttribute = line.LineAttribute
+            };
+
+            int limit = Math.Min(line.Length, Cols);
+            int trimmedLength = Math.Min(line.GetTrimmedLength(), limit);
+            for (int x = 0; x < trimmedLength; x++)
+            {
+                BufferCell cell = line[x];
+                lineSnapshot.Cells.Add(new TerminalBufferCellSnapshot
+                {
+                    Text = cell.Content ?? String.Empty,
+                    Width = cell.Width,
+                    CodePoint = cell.CodePoint,
+                    Foreground = cell.Attributes.Fg,
+                    Background = cell.Attributes.Bg,
+                    Extended = cell.Attributes.Extended
+                });
+            }
+
+            snapshot.Lines.Add(lineSnapshot);
+        }
+
+        return snapshot;
+    }
+
+    /// <summary>
+    /// Restores a snapshot into the normal buffer without sending any data to the hosted process.
+    /// </summary>
+    public void RestoreBufferSnapshot(TerminalBufferSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        List<BufferLine> lines = new List<BufferLine>();
+        foreach (TerminalBufferLineSnapshot lineSnapshot in snapshot.Lines)
+        {
+            BufferLine line = new BufferLine(Cols, BufferCell.Space)
+            {
+                IsWrapped = lineSnapshot.IsWrapped,
+                LineAttribute = lineSnapshot.LineAttribute
+            };
+
+            int limit = Math.Min(Cols, lineSnapshot.Cells.Count);
+            for (int x = 0; x < limit; x++)
+            {
+                TerminalBufferCellSnapshot cellSnapshot = lineSnapshot.Cells[x];
+                BufferCell cell = new BufferCell
+                {
+                    Content = cellSnapshot.Text ?? String.Empty,
+                    Width = cellSnapshot.Width,
+                    CodePoint = cellSnapshot.CodePoint,
+                    Attributes = new AttributeData(cellSnapshot.Foreground, cellSnapshot.Background, cellSnapshot.Extended)
+                };
+
+                if (cell.CodePoint == 0 && !String.IsNullOrEmpty(cell.Content))
+                {
+                    cell.CodePoint = char.ConvertToUtf32(cell.Content, 0);
+                }
+
+                line.SetCell(x, ref cell);
+            }
+
+            lines.Add(line);
+        }
+
+        _normalBuffer ??= new Buffer.TerminalBuffer(Cols, Rows, Options.Scrollback);
+        _normalBuffer.RestoreLines(lines);
+        _buffer = _normalBuffer;
+        if (_usingAltBuffer)
+        {
+            _usingAltBuffer = false;
+            BufferChanged?.Invoke(this, new TerminalEvents.BufferChangedEventArgs(BufferType.Normal));
+        }
+
+        _inputHandler.SetBuffer(_buffer);
     }
 
     /// <summary>

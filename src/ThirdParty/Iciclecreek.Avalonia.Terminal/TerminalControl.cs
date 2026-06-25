@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using XTerm.Restore;
 
 namespace Iciclecreek.Terminal
 {
@@ -17,6 +18,7 @@ namespace Iciclecreek.Terminal
         private TerminalView? _terminalView;
         private ScrollBar? _scrollBar;
         private string? _currentDirectory;
+        private TerminalBufferSnapshot? _pendingRestoreSnapshot;
 
 
         public static readonly StyledProperty<TextDecorationLocation?> TextDecorationsProperty =
@@ -70,6 +72,8 @@ namespace Iciclecreek.Terminal
                 defaultValue: null);
 
         public event EventHandler<ProcessExitedEventArgs>? ProcessExited;
+
+        public event EventHandler? OutputReceived;
 
         /// <summary>
         /// Gets or sets the brush used to render selected terminal text.
@@ -232,6 +236,26 @@ namespace Iciclecreek.Terminal
             }
         }
 
+        public TerminalBufferSnapshot? ExportRestoreSnapshot(int lineLimit)
+        {
+            return _terminalView?.ExportRestoreSnapshot(lineLimit);
+        }
+
+        public void ApplyRestoreSnapshot(TerminalBufferSnapshot? snapshot)
+        {
+            if (snapshot == null)
+                return;
+
+            if (_terminalView == null)
+            {
+                _pendingRestoreSnapshot = snapshot;
+                return;
+            }
+
+            _terminalView.ApplyRestoreSnapshot(snapshot);
+            _pendingRestoreSnapshot = null;
+        }
+
         /// <summary>
         /// Call before removing this control from one visual tree and adding it to another
         /// (e.g. moving between windows). Prevents the PTY process from being killed
@@ -279,6 +303,7 @@ namespace Iciclecreek.Terminal
                 throw new InvalidOperationException("TerminalControl template has not been applied yet.");
 
             ApplyPropertiesToTerminalView();
+            ApplyPendingRestoreSnapshot();
             await _terminalView.LaunchProcess();
 
             Dispatcher.UIThread.Post(() =>
@@ -356,6 +381,7 @@ namespace Iciclecreek.Terminal
             {
                 _terminalView.PropertyChanged -= OnTerminalViewPropertyChanged;
                 _terminalView.ProcessExited -= OnTerminalViewProcessExited;
+                _terminalView.OutputReceived -= OnTerminalViewOutputReceived;
             }
 
             SetCurrentDirectory(null);
@@ -371,6 +397,8 @@ namespace Iciclecreek.Terminal
                 ApplyPropertiesToTerminalView();
                 _terminalView.PropertyChanged += OnTerminalViewPropertyChanged;
                 _terminalView.ProcessExited += OnTerminalViewProcessExited;
+                _terminalView.OutputReceived += OnTerminalViewOutputReceived;
+                ApplyPendingRestoreSnapshot();
                 SetCurrentDirectory(_terminalView.CurrentDirectory);
                 // (no window event hooking needed)
             }
@@ -387,6 +415,15 @@ namespace Iciclecreek.Terminal
             _terminalView.Options = Options ?? new XTerm.Options.TerminalOptions();
             _terminalView.RecordPtyOutput = RecordPtyOutput;
             _terminalView.PtyRecordingDirectory = PtyRecordingDirectory;
+        }
+
+        private void ApplyPendingRestoreSnapshot()
+        {
+            if (_terminalView == null || _pendingRestoreSnapshot == null)
+                return;
+
+            _terminalView.ApplyRestoreSnapshot(_pendingRestoreSnapshot);
+            _pendingRestoreSnapshot = null;
         }
 
         private void OnScrollBarScroll(object? sender, ScrollEventArgs e)
@@ -418,6 +455,11 @@ namespace Iciclecreek.Terminal
         private void OnTerminalViewProcessExited(object? sender, ProcessExitedEventArgs e)
         {
             ProcessExited?.Invoke(this, e);
+        }
+
+        private void OnTerminalViewOutputReceived(object? sender, EventArgs e)
+        {
+            OutputReceived?.Invoke(this, EventArgs.Empty);
         }
 
         private void SetCurrentDirectory(string? currentDirectory)

@@ -16,6 +16,7 @@ namespace Termrig.App.Views
     using System.Threading;
     using System.Threading.Tasks;
     using Termrig.App.Models;
+    using Termrig.App.Services;
     using Termrig.Core;
     using Termrig.Core.Enums;
     using Termrig.Core.Models;
@@ -35,6 +36,7 @@ namespace Termrig.App.Views
         private readonly WorkspaceRecoveryStore _WorkspaceRecoveryStore = new WorkspaceRecoveryStore();
         private readonly WorkspaceRecoveryPlanner _WorkspaceRecoveryPlanner = new WorkspaceRecoveryPlanner();
         private readonly CrashLogStore _CrashLogStore = new CrashLogStore();
+        private readonly TerminalRestoreStore _TerminalRestoreStore = new TerminalRestoreStore();
         private readonly string _RecoveryRunId = Guid.NewGuid().ToString("N");
         private const string RepositoryUrl = "https://github.com/jchristn/Termrig";
         private const string NoFolderLabel = "No folder";
@@ -320,7 +322,11 @@ namespace Termrig.App.Views
             if (!String.IsNullOrWhiteSpace(SchemeNameBox.Text)) _SelectedProfile.GlobalColorScheme.Name = SchemeNameBox.Text;
             _SelectedProfile.GlobalColorScheme.Background = ToHex(SchemeBackgroundPicker.Color);
             _SelectedProfile.GlobalColorScheme.Foreground = ToHex(SchemeForegroundPicker.Color);
-            _SelectedProfile.FolderId = GetSelectedProfileFolderId();
+            if (TryGetSelectedProfileFolderId(out string folderId))
+            {
+                _SelectedProfile.FolderId = folderId;
+            }
+
             _SelectedProfile.AutoOpen = AutoOpenProfileBox.IsChecked == true;
             _SelectedProfile.FontFamily = ProfileFontFamilyCombo.SelectedItem is string fontFamily && fontFamily != "Default terminal font" ? fontFamily : null;
             if (String.IsNullOrWhiteSpace(ProfileFontSizeBox.Text))
@@ -939,6 +945,11 @@ namespace Termrig.App.Views
             if (tab == null) return;
             _SelectedProfile.Tabs[index] = tab;
             ApplyProfileFontDefaultForShell(tab.Shell);
+            if (!tab.RestoreScrollbackEnabled)
+            {
+                await _TerminalRestoreStore.DeleteAsync(_SelectedProfile, tab, CancellationToken.None).ConfigureAwait(true);
+            }
+
             RefreshTabs();
         }
 
@@ -1087,6 +1098,7 @@ namespace Termrig.App.Views
             if (!confirmed) return;
 
             _Profiles.RemoveAt(index);
+            await _TerminalRestoreStore.DeleteProfileAsync(profile, CancellationToken.None).ConfigureAwait(true);
             await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
             RefreshProfiles();
             TerminalProfile? nextProfile = _Profiles.Count > 0 ? _Profiles[Math.Min(index, _Profiles.Count - 1)] : null;
@@ -1130,7 +1142,7 @@ namespace Termrig.App.Views
             if (index < 0) return;
 
             ApplyEditorToProfile();
-            TerminalTabProfile duplicate = tab.Clone();
+            TerminalTabProfile duplicate = tab.CloneForDuplicate();
             _SelectedProfile.Tabs.Insert(index + 1, duplicate);
             ApplyProfileFontDefaultForShell(duplicate.Shell);
             await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
@@ -1163,6 +1175,7 @@ namespace Termrig.App.Views
             if (!confirmed) return;
 
             _SelectedProfile.Tabs.RemoveAt(index);
+            await _TerminalRestoreStore.DeleteAsync(_SelectedProfile, tab, CancellationToken.None).ConfigureAwait(true);
             RefreshTabs();
             TabsList.SelectedIndex = Math.Min(index, _SelectedProfile.Tabs.Count - 1);
         }
@@ -1520,6 +1533,10 @@ namespace Termrig.App.Views
             if (sourceProfile == targetProfile && sourceIndex < targetIndex) targetIndex--;
             targetIndex = Math.Clamp(targetIndex, 0, targetProfile.Tabs.Count);
             targetProfile.Tabs.Insert(targetIndex, _DraggedTab);
+            if (sourceProfile != targetProfile)
+            {
+                await _TerminalRestoreStore.DeleteAsync(sourceProfile, _DraggedTab, CancellationToken.None).ConfigureAwait(true);
+            }
 
             RefreshProfiles(targetProfile.Id);
             RestoreSelectedProfile(targetProfile.Id);
@@ -1786,10 +1803,27 @@ namespace Termrig.App.Views
         {
             List<string> folders = new List<string> { NoFolderLabel };
             folders.AddRange(_ProfileFolders.Select(item => item.Name));
-            ProfileFolderCombo.ItemsSource = folders;
-            if (!String.IsNullOrWhiteSpace(selectedName) && folders.Any(item => item.Equals(selectedName, StringComparison.OrdinalIgnoreCase)))
+            bool wasRefreshing = _IsRefreshingProfileEditor;
+            _IsRefreshingProfileEditor = true;
+            try
             {
-                ProfileFolderCombo.SelectedItem = folders.First(item => item.Equals(selectedName, StringComparison.OrdinalIgnoreCase));
+                ProfileFolderCombo.ItemsSource = folders;
+                if (!String.IsNullOrWhiteSpace(selectedName) && folders.Any(item => item.Equals(selectedName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    ProfileFolderCombo.SelectedItem = folders.First(item => item.Equals(selectedName, StringComparison.OrdinalIgnoreCase));
+                }
+                else if (ProfileFolderCombo.SelectedItem is string selectedFolder && folders.Any(item => item.Equals(selectedFolder, StringComparison.OrdinalIgnoreCase)))
+                {
+                    ProfileFolderCombo.SelectedItem = folders.First(item => item.Equals(selectedFolder, StringComparison.OrdinalIgnoreCase));
+                }
+                else
+                {
+                    ProfileFolderCombo.SelectedItem = NoFolderLabel;
+                }
+            }
+            finally
+            {
+                _IsRefreshingProfileEditor = wasRefreshing;
             }
         }
 
@@ -1807,6 +1841,19 @@ namespace Termrig.App.Views
 
             ProfileFolder? folder = _ProfileFolders.FirstOrDefault(item => item.Name.Equals(selectedFolder, StringComparison.OrdinalIgnoreCase));
             return folder?.Id ?? String.Empty;
+        }
+
+        private bool TryGetSelectedProfileFolderId(out string folderId)
+        {
+            folderId = String.Empty;
+            if (!(ProfileFolderCombo.SelectedItem is string selectedFolder)) return false;
+            if (selectedFolder == NoFolderLabel) return true;
+
+            ProfileFolder? folder = _ProfileFolders.FirstOrDefault(item => item.Name.Equals(selectedFolder, StringComparison.OrdinalIgnoreCase));
+            if (folder == null) return false;
+
+            folderId = folder.Id;
+            return true;
         }
 
         private string GetNewProfileFolderId()

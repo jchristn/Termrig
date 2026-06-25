@@ -43,6 +43,14 @@
                 <TextBox x:Name="ScrollbackBufferBox" PlaceholderText="Default 5000; range 1000-100000"/>
             </StackPanel>
             <StackPanel Spacing="8">
+                <CheckBox x:Name="RestoreScrollbackBox" Content="Restore recent scrollback"/>
+                <TextBox x:Name="RestoreScrollbackLineLimitBox" PlaceholderText="Default 1000; range 1-100000"/>
+                <TextBlock Text="Restores visual terminal history only; it does not reconnect to the previous process."
+                           TextWrapping="Wrap"
+                           FontSize="12"
+                           Foreground="#8FA1B3"/>
+            </StackPanel>
+            <StackPanel Spacing="8">
                 <CheckBox x:Name="RecordPtyOutputBox" Content="Record raw PTY output"/>
                 <TextBox x:Name="PtyRecordingDirectoryBox" PlaceholderText="Directory for .pty.bin recordings"/>
             </StackPanel>
