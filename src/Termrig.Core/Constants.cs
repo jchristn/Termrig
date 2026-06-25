@@ -84,5 +84,25 @@ namespace Termrig.Core
         /// Maximum per-tab terminal scrollback buffer size.
         /// </summary>
         public const int MaximumTerminalBufferSize = 100000;
+
+        /// <summary>
+        /// Directory name under the application data directory used for terminal restore snapshots.
+        /// </summary>
+        public const string TerminalRestoreSubdirectoryName = "terminal-restore";
+
+        /// <summary>
+        /// Default number of recent terminal lines persisted for scrollback restore.
+        /// </summary>
+        public const int DefaultTerminalRestoreLineLimit = 1000;
+
+        /// <summary>
+        /// Minimum number of recent terminal lines persisted for scrollback restore.
+        /// </summary>
+        public const int MinimumTerminalRestoreLineLimit = 1;
+
+        /// <summary>
+        /// Maximum number of recent terminal lines persisted for scrollback restore.
+        /// </summary>
+        public const int MaximumTerminalRestoreLineLimit = MaximumTerminalBufferSize;
     }
 }

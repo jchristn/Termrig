@@ -12,6 +12,21 @@ namespace Termrig.Core.Models
         #region Public-Members
 
         /// <summary>
+        /// Stable tab identifier used for per-tab persisted state.
+        /// </summary>
+        public string Id
+        {
+            get
+            {
+                return _Id;
+            }
+            set
+            {
+                _Id = String.IsNullOrWhiteSpace(value) ? CreateId() : value;
+            }
+        }
+
+        /// <summary>
         /// Display name for the tab.
         /// </summary>
         public string Name
@@ -118,6 +133,28 @@ namespace Termrig.Core.Models
         /// </summary>
         public string PtyRecordingDirectory { get; set; } = String.Empty;
 
+        /// <summary>
+        /// True to persist and restore recent terminal scrollback for this tab.
+        /// </summary>
+        public bool RestoreScrollbackEnabled { get; set; } = true;
+
+        /// <summary>
+        /// Optional per-tab line limit for terminal scrollback restore. Null means the application default is used.
+        /// </summary>
+        public int? RestoreScrollbackLineLimit
+        {
+            get
+            {
+                return _RestoreScrollbackLineLimit;
+            }
+            set
+            {
+                _RestoreScrollbackLineLimit = value.HasValue
+                    ? Math.Clamp(value.Value, Constants.MinimumTerminalRestoreLineLimit, Constants.MaximumTerminalRestoreLineLimit)
+                    : null;
+            }
+        }
+
         #endregion
 
         #region Public-Methods
@@ -130,6 +167,7 @@ namespace Termrig.Core.Models
         {
             return new TerminalTabProfile
             {
+                Id = Id,
                 Name = Name,
                 Shell = Shell,
                 StartingDirectory = StartingDirectory,
@@ -139,6 +177,8 @@ namespace Termrig.Core.Models
                 ScrollbackBufferSize = ScrollbackBufferSize,
                 RecordPtyOutput = RecordPtyOutput,
                 PtyRecordingDirectory = PtyRecordingDirectory,
+                RestoreScrollbackEnabled = RestoreScrollbackEnabled,
+                RestoreScrollbackLineLimit = RestoreScrollbackLineLimit,
                 ColorSchemeOverride = ColorSchemeOverride == null ? null : new ColorScheme
                 {
                     Name = ColorSchemeOverride.Name,
@@ -148,14 +188,48 @@ namespace Termrig.Core.Models
             };
         }
 
+        /// <summary>
+        /// Create an independent duplicate suitable for insertion as a new saved tab.
+        /// </summary>
+        /// <returns>Duplicated tab profile with a new stable identifier.</returns>
+        public TerminalTabProfile CloneForDuplicate()
+        {
+            TerminalTabProfile duplicate = Clone();
+            duplicate.RegenerateId();
+            return duplicate;
+        }
+
+        /// <summary>
+        /// Ensure this tab has a stable identifier.
+        /// </summary>
+        public void EnsureId()
+        {
+            if (String.IsNullOrWhiteSpace(_Id)) _Id = CreateId();
+        }
+
+        /// <summary>
+        /// Replace this tab's stable identifier.
+        /// </summary>
+        public void RegenerateId()
+        {
+            _Id = CreateId();
+        }
+
         #endregion
 
         #region Private-Members
 
+        private string _Id = CreateId();
         private string _Name = "Terminal";
         private string? _FontFamily = null;
         private double? _FontSize = null;
         private int? _ScrollbackBufferSize = null;
+        private int? _RestoreScrollbackLineLimit = null;
+
+        private static string CreateId()
+        {
+            return Guid.NewGuid().ToString("N");
+        }
 
         #endregion
     }

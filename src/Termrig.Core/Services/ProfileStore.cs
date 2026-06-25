@@ -178,11 +178,23 @@ namespace Termrig.Core.Services
                 profile.Tabs ??= new List<TerminalTabProfile>();
 
                 List<TerminalTabProfile> tabs = new List<TerminalTabProfile>();
+                HashSet<string> tabIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (TerminalTabProfile? tab in profile.Tabs)
                 {
                     if (tab == null) continue;
+                    tab.EnsureId();
+                    if (!tabIds.Add(tab.Id))
+                    {
+                        do
+                        {
+                            tab.RegenerateId();
+                        }
+                        while (!tabIds.Add(tab.Id));
+                    }
+
                     tab.StartingDirectory ??= String.Empty;
                     tab.StartupScript ??= String.Empty;
+                    tab.PtyRecordingDirectory ??= String.Empty;
                     tabs.Add(tab);
                 }
 

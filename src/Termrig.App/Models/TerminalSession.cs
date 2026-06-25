@@ -2,6 +2,7 @@ namespace Termrig.App.Models
 {
     using Avalonia.Controls;
     using Iciclecreek.Terminal;
+    using System.Threading;
     using Termrig.Core.Models;
 
     /// <summary>
@@ -53,5 +54,15 @@ namespace Termrig.App.Models
         /// Whether this tab has requested user attention.
         /// </summary>
         public bool HasAttention { get; set; } = false;
+
+        /// <summary>
+        /// True when the configured start directory was edited after launch and should not be replaced by the live process directory.
+        /// </summary>
+        public bool PreserveConfiguredStartingDirectory { get; set; } = false;
+
+        /// <summary>
+        /// Pending debounced scrollback restore save.
+        /// </summary>
+        public CancellationTokenSource? RestoreSaveDebounce { get; set; } = null;
     }
 }

@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Termrig.App\Termrig.App.csproj" />
     <ProjectReference Include="..\ThirdParty\Iciclecreek.Avalonia.Terminal\Iciclecreek.Avalonia.Terminal.csproj" />
     <ProjectReference Include="..\ThirdParty\XTerm.NET\XTerm.NET.csproj" />
   </ItemGroup>
