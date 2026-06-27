@@ -38,6 +38,7 @@ namespace Termrig.App.Views
         private Control? _DropTargetHeader = null;
         private bool _IsClosingWorkspace = false;
         private bool _IsCloseConfirmationOpen = false;
+        private bool _IsTerminalCloseConfirmationOpen = false;
         private bool _HasConfirmedWorkspaceClose = false;
         private bool _SuppressNextShortcutTextInput = false;
         private const double TerminalFontZoomStep = 1;
@@ -376,13 +377,13 @@ namespace Termrig.App.Views
             WriteTerminalCrashLog(session.TabProfile, "Terminal process exited with non-zero exit code.", details);
         }
 
-        private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+        private async void OnWindowKeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key != Key.W) return;
             if (e.KeyModifiers != KeyModifiers.Control) return;
 
             e.Handled = true;
-            CloseSelectedTab();
+            await ConfirmAndCloseSelectedTabAsync().ConfigureAwait(true);
         }
 
         private void OnWindowTextInput(object? sender, TextInputEventArgs e)
@@ -867,14 +868,36 @@ namespace Termrig.App.Views
             CloseSession(session);
         }
 
-        private void CloseSelectedTab()
+        private async Task ConfirmAndCloseSelectedTabAsync()
         {
             TerminalSession? session = GetSelectedSession();
             if (session == null) return;
-            CloseSession(session);
+            if (_IsTerminalCloseConfirmationOpen) return;
+
+            _IsTerminalCloseConfirmationOpen = true;
+            bool confirmed = false;
+            try
+            {
+                DeleteConfirmationWindow confirmation = new DeleteConfirmationWindow(
+                    "Close terminal",
+                    "Close active terminal?",
+                    "This will close \"" + session.TabProfile.Name + "\" and stop its terminal session.",
+                    "Close terminal");
+
+                confirmed = await confirmation.ShowDialog<bool>(this).ConfigureAwait(true);
+            }
+            finally
+            {
+                _IsTerminalCloseConfirmationOpen = false;
+            }
+
+            if (!confirmed) return;
+
+            bool willCloseWorkspace = _Sessions.Count == 1;
+            CloseSession(session, willCloseWorkspace);
         }
 
-        private void CloseSession(TerminalSession session)
+        private void CloseSession(TerminalSession session, bool workspaceCloseAlreadyConfirmed = false)
         {
             if (_IsClosingWorkspace) return;
             int removedIndex = _Sessions.IndexOf(session);
@@ -889,6 +912,11 @@ namespace Termrig.App.Views
 
             if (_Sessions.Count < 1)
             {
+                if (workspaceCloseAlreadyConfirmed)
+                {
+                    _HasConfirmedWorkspaceClose = true;
+                }
+
                 Close();
                 return;
             }
