@@ -474,21 +474,28 @@ namespace Iciclecreek.Terminal
 
             if (_terminalView.IsAlternateBuffer)
             {
-                _scrollBar.IsVisible = false;
                 _scrollBar.Value = 0;
+                _scrollBar.IsVisible = true;
+                _scrollBar.IsEnabled = false;
+                _scrollBar.IsHitTestVisible = false;
+                _scrollBar.Opacity = 0;
                 return;
             }
 
-            var maxScrollback = _terminalView.MaxScrollback;
-            var viewportLines = _terminalView.ViewportLines;
-            var currentScroll = _terminalView.ViewportY;
+            int maxScrollback = _terminalView.MaxScrollback;
+            int viewportLines = _terminalView.ViewportLines;
+            int currentScroll = _terminalView.ViewportY;
+            bool hasScrollback = maxScrollback > 0;
 
             // Scrollbar range: 0 (top of buffer) to maxScrollback (bottom/current output)
             _scrollBar.Minimum = 0;
             _scrollBar.Maximum = maxScrollback;
             _scrollBar.ViewportSize = viewportLines;
             _scrollBar.Value = currentScroll;
-            _scrollBar.IsVisible = maxScrollback > 0;
+            _scrollBar.IsVisible = true;
+            _scrollBar.IsEnabled = hasScrollback;
+            _scrollBar.IsHitTestVisible = hasScrollback;
+            _scrollBar.Opacity = hasScrollback ? 1 : 0;
         }
     }
 }
