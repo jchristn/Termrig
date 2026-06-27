@@ -1170,7 +1170,10 @@ namespace Termrig.App.Views
             if (snapshot == null)
                 return;
 
-            session.Terminal.ApplyRestoreSnapshot(snapshot);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                session.Terminal.ApplyRestoreSnapshot(snapshot);
+            });
         }
 
         private void QueueRestoreSnapshotSave(TerminalSession session)
