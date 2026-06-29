@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/Termrig.App/Assets/termrig-logo.svg" alt="Termrig logo" width="192" height="192" />
+  <img src="src/Termrig.App/Assets/termrig-logo.svg" alt="Termrig logo" width="128" height="128" />
 </p>
 
 # Termrig
