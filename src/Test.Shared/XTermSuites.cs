@@ -112,6 +112,24 @@ namespace Test.Shared
 
                     new TestCaseDescriptor(
                         suiteId: "XTermNET",
+                        caseId: "SelectionTextTrimsTrailingWhitespaceByDefault",
+                        displayName: "Selection text trims trailing whitespace by default",
+                        executeAsync: SelectionTextTrimsTrailingWhitespaceByDefaultAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "XTermNET",
+                        caseId: "SelectionTextCanPreserveTrailingWhitespace",
+                        displayName: "Selection text can preserve trailing whitespace",
+                        executeAsync: SelectionTextCanPreserveTrailingWhitespaceAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "XTermNET",
+                        caseId: "SelectionTextPreservesWrappedRowWhitespace",
+                        displayName: "Selection text preserves wrapped row whitespace",
+                        executeAsync: SelectionTextPreservesWrappedRowWhitespaceAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "XTermNET",
                         caseId: "SelectionTextClampsBounds",
                         displayName: "Selection text clamps bounds",
                         executeAsync: SelectionTextClampsBoundsAsync),
@@ -351,6 +369,58 @@ namespace Test.Shared
             return Task.CompletedTask;
         }
 
+        private static Task SelectionTextTrimsTrailingWhitespaceByDefaultAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            Terminal terminal = new Terminal(new TerminalOptions { Rows = 2, Cols = 8, Scrollback = 20 });
+            SetLineText(terminal.Buffer, 0, "abc");
+            SetLineText(terminal.Buffer, 1, "def");
+
+            terminal.Selection.StartSelection(0, 0);
+            terminal.Selection.UpdateSelection(2, 1);
+            terminal.Selection.EndSelection();
+
+            AssertEqual("abc\ndef", terminal.Selection.GetSelectionText(), "Default selection text should trim right-side spaces at line endings.");
+            return Task.CompletedTask;
+        }
+
+        private static Task SelectionTextCanPreserveTrailingWhitespaceAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            Terminal terminal = new Terminal(new TerminalOptions
+            {
+                Rows = 2,
+                Cols = 8,
+                Scrollback = 20,
+                TrimSelectionTrailingWhitespace = false
+            });
+            SetLineText(terminal.Buffer, 0, "abc");
+            SetLineText(terminal.Buffer, 1, "def");
+
+            terminal.Selection.StartSelection(0, 0);
+            terminal.Selection.UpdateSelection(2, 1);
+            terminal.Selection.EndSelection();
+
+            AssertEqual("abc     \ndef", terminal.Selection.GetSelectionText(), "Selection text should preserve trailing spaces when trimming is disabled.");
+            return Task.CompletedTask;
+        }
+
+        private static Task SelectionTextPreservesWrappedRowWhitespaceAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            Terminal terminal = new Terminal(new TerminalOptions { Rows = 2, Cols = 5, Scrollback = 20 });
+            SetLineText(terminal.Buffer, 0, "abc  ");
+            SetLineText(terminal.Buffer, 1, "def");
+            terminal.Buffer.Lines[0]!.IsWrapped = true;
+
+            terminal.Selection.StartSelection(0, 0);
+            terminal.Selection.UpdateSelection(2, 1);
+            terminal.Selection.EndSelection();
+
+            AssertEqual("abc  def", terminal.Selection.GetSelectionText(), "Selection text should preserve spaces on joined wrapped rows.");
+            return Task.CompletedTask;
+        }
+
         private static Task SelectionTextClampsBoundsAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
@@ -503,6 +573,19 @@ namespace Test.Shared
             if (line == null) throw new InvalidOperationException("Expected buffer line " + row + ".");
             var cell = new BufferCell { Content = content, Width = content.Length == 0 ? 0 : 1 };
             line.SetCell(0, ref cell);
+        }
+
+        private static void SetLineText(TerminalBuffer buffer, int row, string text)
+        {
+            BufferLine? line = buffer.GetLine(row);
+            if (line == null) throw new InvalidOperationException("Expected buffer line " + row + ".");
+
+            int limit = Math.Min(text.Length, line.Length);
+            for (int index = 0; index < limit; index++)
+            {
+                var cell = new BufferCell(text[index], 1, AttributeData.Default);
+                line.SetCell(index, ref cell);
+            }
         }
 
         private static void AssertLineCell(TerminalBuffer buffer, int row, string expected)

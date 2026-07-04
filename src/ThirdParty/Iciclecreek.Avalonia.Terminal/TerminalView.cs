@@ -1051,6 +1051,22 @@ namespace Iciclecreek.Terminal
                 _terminal.Options.CursorBlinkRate = rate;
                 _cursorBlinkTimer.Interval = TimeSpan.FromMilliseconds(rate > 0 ? rate : 530);
             }
+            else if (change.Property == OptionsProperty && _terminal != null)
+            {
+                var options = (XT.Options.TerminalOptions?)change.NewValue ?? new XT.Options.TerminalOptions();
+                lock (_terminalLock)
+                {
+                    ApplyRuntimeTerminalOptions(options);
+                }
+            }
+        }
+
+        private void ApplyRuntimeTerminalOptions(XT.Options.TerminalOptions options)
+        {
+            _terminal.Options.Scrollback = options.Scrollback;
+            _terminal.Options.ConvertEol = options.ConvertEol;
+            _terminal.Options.TermName = options.TermName;
+            _terminal.Options.TrimSelectionTrailingWhitespace = options.TrimSelectionTrailingWhitespace;
         }
 
         private async void OnLoaded(object? sender, RoutedEventArgs e)

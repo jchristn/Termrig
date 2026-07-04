@@ -128,6 +128,12 @@ public class TerminalOptions : ICloneable
     public bool RightClickSelectsWord { get; set; } = true;
 
     /// <summary>
+    /// Whether copied selections trim trailing whitespace at logical line endings.
+    /// Wrapped rows are preserved so spaces at wrap boundaries remain intact.
+    /// </summary>
+    public bool TrimSelectionTrailingWhitespace { get; set; } = true;
+
+    /// <summary>
     /// Renderer type.
     /// </summary>
     public RendererType RendererType { get; set; } = RendererType.Canvas;
@@ -193,6 +199,7 @@ public class TerminalOptions : ICloneable
         AllowTransparency = other.AllowTransparency;
         MacOptionIsMeta = other.MacOptionIsMeta;
         RightClickSelectsWord = other.RightClickSelectsWord;
+        TrimSelectionTrailingWhitespace = other.TrimSelectionTrailingWhitespace;
         RendererType = other.RendererType;
         WindowOptions = new WindowOptions(other.WindowOptions);
         Theme = new ThemeOptions(other.Theme);

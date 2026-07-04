@@ -155,6 +155,11 @@ namespace Termrig.Core.Models
             }
         }
 
+        /// <summary>
+        /// True to trim trailing whitespace from copied selections at logical line endings.
+        /// </summary>
+        public bool TrimSelectionTrailingWhitespace { get; set; } = true;
+
         #endregion
 
         #region Public-Methods
@@ -179,6 +184,7 @@ namespace Termrig.Core.Models
                 PtyRecordingDirectory = PtyRecordingDirectory,
                 RestoreScrollbackEnabled = RestoreScrollbackEnabled,
                 RestoreScrollbackLineLimit = RestoreScrollbackLineLimit,
+                TrimSelectionTrailingWhitespace = TrimSelectionTrailingWhitespace,
                 ColorSchemeOverride = ColorSchemeOverride == null ? null : new ColorScheme
                 {
                     Name = ColorSchemeOverride.Name,

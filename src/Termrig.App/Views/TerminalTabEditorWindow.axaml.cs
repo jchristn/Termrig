@@ -116,6 +116,7 @@ namespace Termrig.App.Views
             ScrollbackBufferBox.Text = _Original.ScrollbackBufferSize.HasValue ? _Original.ScrollbackBufferSize.Value.ToString() : String.Empty;
             RestoreScrollbackBox.IsChecked = _Original.RestoreScrollbackEnabled;
             RestoreScrollbackLineLimitBox.Text = _Original.RestoreScrollbackLineLimit.HasValue ? _Original.RestoreScrollbackLineLimit.Value.ToString() : String.Empty;
+            TrimSelectionTrailingWhitespaceBox.IsChecked = _Original.TrimSelectionTrailingWhitespace;
             RecordPtyOutputBox.IsChecked = _Original.RecordPtyOutput;
             PtyRecordingDirectoryBox.Text = _Original.PtyRecordingDirectory;
 
@@ -152,6 +153,7 @@ namespace Termrig.App.Views
                 ScrollbackBufferSize = ParseNullableBufferSize(ScrollbackBufferBox.Text),
                 RestoreScrollbackEnabled = RestoreScrollbackBox.IsChecked == true,
                 RestoreScrollbackLineLimit = ParseNullableRestoreLineLimit(RestoreScrollbackLineLimitBox.Text),
+                TrimSelectionTrailingWhitespace = TrimSelectionTrailingWhitespaceBox.IsChecked == true,
                 RecordPtyOutput = RecordPtyOutputBox.IsChecked == true,
                 PtyRecordingDirectory = RecordPtyOutputBox.IsChecked == true
                     ? ResolvePtyRecordingDirectory(PtyRecordingDirectoryBox.Text)

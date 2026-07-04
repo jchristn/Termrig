@@ -1303,7 +1303,8 @@ namespace Termrig.App.Views
             {
                 ConvertEol = !OperatingSystem.IsWindows(),
                 Scrollback = ResolveTerminalBufferSize(tab),
-                TermName = "xterm-256color"
+                TermName = "xterm-256color",
+                TrimSelectionTrailingWhitespace = tab.TrimSelectionTrailingWhitespace
             };
         }
 

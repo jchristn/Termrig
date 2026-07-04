@@ -51,6 +51,9 @@
                            Foreground="#8FA1B3"/>
             </StackPanel>
             <StackPanel Spacing="8">
+                <CheckBox x:Name="TrimSelectionTrailingWhitespaceBox" Content="Trim trailing spaces when copying"/>
+            </StackPanel>
+            <StackPanel Spacing="8">
                 <CheckBox x:Name="RecordPtyOutputBox" Content="Record raw PTY output"/>
                 <TextBox x:Name="PtyRecordingDirectoryBox" PlaceholderText="Directory for .pty.bin recordings"/>
             </StackPanel>

@@ -151,15 +151,29 @@ public class SelectionManager
 
             int startX = Math.Clamp((y == start.y) ? start.x : 0, 0, lastColumn);
             int endX = Math.Clamp((y == end.y) ? end.x : lastColumn, 0, lastColumn);
+            bool appendLineBreak = y < end.y && !line.IsWrapped;
+            bool endsLogicalLine = y == end.y || appendLineBreak;
+
+            if (_terminal.Options.TrimSelectionTrailingWhitespace && endsLogicalLine)
+            {
+                endX = Math.Min(endX, line.GetTrimmedLength() - 1);
+            }
 
             if (startX > endX)
+            {
+                if (appendLineBreak)
+                {
+                    text.Append('\n');
+                }
+
                 continue;
+            }
 
             var lineText = line.TranslateToString(false, startX, endX + 1);
             text.Append(lineText);
 
             // Add line break if not last line and line doesn't wrap
-            if (y < end.y && !line.IsWrapped)
+            if (appendLineBreak)
             {
                 text.Append('\n');
             }
