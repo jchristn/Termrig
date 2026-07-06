@@ -3,61 +3,63 @@
         x:Class="Termrig.App.Views.TerminalTabEditorWindow"
         Title="Tab settings"
         Width="560"
-        Height="820"
+        Height="880"
         MinWidth="520"
         MinHeight="700">
     <Grid RowDefinitions="*,Auto" Margin="18">
-        <StackPanel Grid.Row="0" Spacing="12">
-            <StackPanel Spacing="6">
-                <TextBlock Text="Tab name" FontWeight="SemiBold"/>
-                <TextBox x:Name="NameBox"/>
-            </StackPanel>
-            <StackPanel Spacing="6">
-                <TextBlock Text="Terminal type" FontWeight="SemiBold"/>
-                <ComboBox x:Name="ShellCombo"/>
-            </StackPanel>
-            <StackPanel Spacing="6">
-                <TextBlock Text="Starting directory" FontWeight="SemiBold"/>
-                <TextBox x:Name="DirectoryBox" PlaceholderText="Leave empty to use the current directory"/>
-            </StackPanel>
-            <StackPanel Spacing="6">
-                <TextBlock Text="Startup script" FontWeight="SemiBold"/>
-                <TextBox x:Name="StartupScriptBox" AcceptsReturn="True" MinHeight="120"/>
-            </StackPanel>
-            <StackPanel Spacing="6">
-                <TextBlock Text="Color override" FontWeight="SemiBold"/>
-                <ComboBox x:Name="ColorOverrideCombo"/>
-            </StackPanel>
-            <Grid ColumnDefinitions="*,120" ColumnSpacing="12">
-                <StackPanel Grid.Column="0" Spacing="6">
-                    <TextBlock Text="Font family override" FontWeight="SemiBold"/>
-                    <ComboBox x:Name="FontFamilyCombo" PlaceholderText="Use profile font"/>
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="12">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Tab name" FontWeight="SemiBold"/>
+                    <TextBox x:Name="NameBox"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Spacing="6">
-                    <TextBlock Text="Font size override" FontWeight="SemiBold"/>
-                    <TextBox x:Name="FontSizeBox" PlaceholderText="Profile"/>
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Terminal type" FontWeight="SemiBold"/>
+                    <ComboBox x:Name="ShellCombo"/>
                 </StackPanel>
-            </Grid>
-            <StackPanel Spacing="6">
-                <TextBlock Text="Scrollback buffer" FontWeight="SemiBold"/>
-                <TextBox x:Name="ScrollbackBufferBox" PlaceholderText="Default 5000; range 1000-100000"/>
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Starting directory" FontWeight="SemiBold"/>
+                    <TextBox x:Name="DirectoryBox" PlaceholderText="Leave empty to use the current directory"/>
+                </StackPanel>
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Startup script" FontWeight="SemiBold"/>
+                    <TextBox x:Name="StartupScriptBox" AcceptsReturn="True" MinHeight="120"/>
+                </StackPanel>
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Color override" FontWeight="SemiBold"/>
+                    <ComboBox x:Name="ColorOverrideCombo"/>
+                </StackPanel>
+                <Grid ColumnDefinitions="*,120" ColumnSpacing="12">
+                    <StackPanel Grid.Column="0" Spacing="6">
+                        <TextBlock Text="Font family override" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="FontFamilyCombo" PlaceholderText="Use profile font"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="6">
+                        <TextBlock Text="Font size override" FontWeight="SemiBold"/>
+                        <TextBox x:Name="FontSizeBox" PlaceholderText="Profile"/>
+                    </StackPanel>
+                </Grid>
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Scrollback buffer" FontWeight="SemiBold"/>
+                    <TextBox x:Name="ScrollbackBufferBox" PlaceholderText="Default 5000; range 1000-100000"/>
+                </StackPanel>
+                <StackPanel Spacing="8">
+                    <CheckBox x:Name="RestoreScrollbackBox" Content="Restore recent scrollback"/>
+                    <TextBox x:Name="RestoreScrollbackLineLimitBox" PlaceholderText="Default 1000; range 1-100000"/>
+                    <TextBlock Text="Restores visual terminal history only; it does not reconnect to the previous process."
+                               TextWrapping="Wrap"
+                               FontSize="12"
+                               Foreground="#8FA1B3"/>
+                </StackPanel>
+                <StackPanel Spacing="8">
+                    <CheckBox x:Name="TrimSelectionTrailingWhitespaceBox" Content="Trim trailing spaces when copying"/>
+                </StackPanel>
+                <StackPanel Spacing="8">
+                    <CheckBox x:Name="RecordPtyOutputBox" Content="Record raw PTY output"/>
+                    <TextBox x:Name="PtyRecordingDirectoryBox" PlaceholderText="Directory for .pty.bin recordings"/>
+                </StackPanel>
             </StackPanel>
-            <StackPanel Spacing="8">
-                <CheckBox x:Name="RestoreScrollbackBox" Content="Restore recent scrollback"/>
-                <TextBox x:Name="RestoreScrollbackLineLimitBox" PlaceholderText="Default 1000; range 1-100000"/>
-                <TextBlock Text="Restores visual terminal history only; it does not reconnect to the previous process."
-                           TextWrapping="Wrap"
-                           FontSize="12"
-                           Foreground="#8FA1B3"/>
-            </StackPanel>
-            <StackPanel Spacing="8">
-                <CheckBox x:Name="TrimSelectionTrailingWhitespaceBox" Content="Trim trailing spaces when copying"/>
-            </StackPanel>
-            <StackPanel Spacing="8">
-                <CheckBox x:Name="RecordPtyOutputBox" Content="Record raw PTY output"/>
-                <TextBox x:Name="PtyRecordingDirectoryBox" PlaceholderText="Directory for .pty.bin recordings"/>
-            </StackPanel>
-        </StackPanel>
+        </ScrollViewer>
         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,18,0,0">
             <Button x:Name="CancelButton" Content="Cancel" MinWidth="92"/>
             <Button x:Name="SaveButton" Content="Save" MinWidth="92"/>
