@@ -43,6 +43,9 @@ namespace Termrig.Core.Services
 
         #region Private-Members
 
+        private static readonly SemaphoreSlim _FileAccessLock = new SemaphoreSlim(1, 1);
+        private const int FileAccessRetryCount = 5;
+        private static readonly TimeSpan FileAccessRetryDelay = TimeSpan.FromMilliseconds(50);
         private readonly string _DirectoryPath;
         private readonly JsonSerializerOptions _JsonOptions;
 
@@ -76,16 +79,14 @@ namespace Termrig.Core.Services
         /// <returns>Profiles from disk, or an empty list if no file exists.</returns>
         public async Task<List<TerminalProfile>> LoadAsync(CancellationToken token = default)
         {
-            token.ThrowIfCancellationRequested();
-            if (!File.Exists(FilePath)) return new List<TerminalProfile>();
-
-            using (FileStream stream = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            await _FileAccessLock.WaitAsync(token).ConfigureAwait(false);
+            try
             {
-                List<TerminalProfile>? profiles = await JsonSerializer.DeserializeAsync<List<TerminalProfile>>(
-                    stream,
-                    _JsonOptions,
-                    token).ConfigureAwait(false);
-                return NormalizeProfiles(profiles);
+                return await LoadCoreAsync(token).ConfigureAwait(false);
+            }
+            finally
+            {
+                _FileAccessLock.Release();
             }
         }
 
@@ -98,12 +99,15 @@ namespace Termrig.Core.Services
         public async Task SaveAsync(List<TerminalProfile> profiles, CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(profiles);
-            token.ThrowIfCancellationRequested();
 
-            Directory.CreateDirectory(_DirectoryPath);
-            using (FileStream stream = new FileStream(FilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+            await _FileAccessLock.WaitAsync(token).ConfigureAwait(false);
+            try
             {
-                await JsonSerializer.SerializeAsync(stream, profiles, _JsonOptions, token).ConfigureAwait(false);
+                await SaveCoreAsync(profiles, token).ConfigureAwait(false);
+            }
+            finally
+            {
+                _FileAccessLock.Release();
             }
         }
 
@@ -116,24 +120,33 @@ namespace Termrig.Core.Services
         public async Task UpsertAsync(TerminalProfile profile, CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(profile);
-            List<TerminalProfile> profiles = await LoadAsync(token).ConfigureAwait(false);
-            TerminalProfile? existing = profiles.FirstOrDefault(item => item.Id == profile.Id);
-            if (existing != null)
+
+            await _FileAccessLock.WaitAsync(token).ConfigureAwait(false);
+            try
             {
-                if (String.IsNullOrWhiteSpace(profile.FolderId) && !String.IsNullOrWhiteSpace(existing.FolderId))
+                List<TerminalProfile> profiles = await LoadCoreAsync(token).ConfigureAwait(false);
+                TerminalProfile? existing = profiles.FirstOrDefault(item => item.Id == profile.Id);
+                if (existing != null)
                 {
-                    profile.FolderId = existing.FolderId;
+                    if (String.IsNullOrWhiteSpace(profile.FolderId) && !String.IsNullOrWhiteSpace(existing.FolderId))
+                    {
+                        profile.FolderId = existing.FolderId;
+                    }
+
+                    Int32 index = profiles.IndexOf(existing);
+                    profiles[index] = profile;
+                }
+                else
+                {
+                    profiles.Add(profile);
                 }
 
-                Int32 index = profiles.IndexOf(existing);
-                profiles[index] = profile;
+                await SaveCoreAsync(profiles, token).ConfigureAwait(false);
             }
-            else
+            finally
             {
-                profiles.Add(profile);
+                _FileAccessLock.Release();
             }
-
-            await SaveAsync(profiles, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -146,15 +159,68 @@ namespace Termrig.Core.Services
         public async Task<bool> DeleteAsync(string profileId, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(profileId)) throw new ArgumentNullException(nameof(profileId));
-            List<TerminalProfile> profiles = await LoadAsync(token).ConfigureAwait(false);
-            Int32 removed = profiles.RemoveAll(item => item.Id == profileId);
-            await SaveAsync(profiles, token).ConfigureAwait(false);
-            return removed > 0;
+
+            await _FileAccessLock.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                List<TerminalProfile> profiles = await LoadCoreAsync(token).ConfigureAwait(false);
+                Int32 removed = profiles.RemoveAll(item => item.Id == profileId);
+                await SaveCoreAsync(profiles, token).ConfigureAwait(false);
+                return removed > 0;
+            }
+            finally
+            {
+                _FileAccessLock.Release();
+            }
         }
 
         #endregion
 
         #region Private-Methods
+
+        private async Task<List<TerminalProfile>> LoadCoreAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!File.Exists(FilePath)) return new List<TerminalProfile>();
+
+            return await ExecuteWithFileAccessRetryAsync(async delegate
+            {
+                using FileStream stream = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                List<TerminalProfile>? profiles = await JsonSerializer.DeserializeAsync<List<TerminalProfile>>(
+                    stream,
+                    _JsonOptions,
+                    token).ConfigureAwait(false);
+                return NormalizeProfiles(profiles);
+            }, token).ConfigureAwait(false);
+        }
+
+        private async Task SaveCoreAsync(List<TerminalProfile> profiles, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            Directory.CreateDirectory(_DirectoryPath);
+            await ExecuteWithFileAccessRetryAsync(async delegate
+            {
+                using FileStream stream = new FileStream(FilePath, FileMode.Create, FileAccess.Write, FileShare.None);
+                await JsonSerializer.SerializeAsync(stream, profiles, _JsonOptions, token).ConfigureAwait(false);
+                return true;
+            }, token).ConfigureAwait(false);
+        }
+
+        private static async Task<T> ExecuteWithFileAccessRetryAsync<T>(Func<Task<T>> action, CancellationToken token)
+        {
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    return await action().ConfigureAwait(false);
+                }
+                catch (IOException) when (attempt < FileAccessRetryCount)
+                {
+                    await Task.Delay(FileAccessRetryDelay, token).ConfigureAwait(false);
+                }
+            }
+        }
 
         private static string ResolveDirectoryPath(string? directoryPath)
         {

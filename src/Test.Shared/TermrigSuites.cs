@@ -119,6 +119,12 @@ namespace Test.Shared
 
                     new TestCaseDescriptor(
                         suiteId: "ProfileStore",
+                        caseId: "ConcurrentUpsertsAreSerialized",
+                        displayName: "Concurrent upserts are serialized",
+                        executeAsync: ConcurrentUpsertsAreSerializedAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ProfileStore",
                         caseId: "UpsertPreservesExistingProfileFolderWhenUnspecified",
                         displayName: "Upsert preserves existing profile folder when unspecified",
                         executeAsync: UpsertPreservesExistingProfileFolderWhenUnspecifiedAsync),
@@ -481,6 +487,39 @@ namespace Test.Shared
                 List<TerminalProfile> loaded = await store.LoadAsync(token).ConfigureAwait(false);
                 AssertEqual(1, loaded.Count, "Expected upsert to keep one profile.");
                 AssertEqual("New", loaded[0].Name, "Upserted profile name mismatch.");
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
+        private static async Task ConcurrentUpsertsAreSerializedAsync(CancellationToken token)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "termrig-tests-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                const int profileCount = 20;
+                Task[] tasks = new Task[profileCount];
+                for (int i = 0; i < profileCount; i++)
+                {
+                    int index = i;
+                    tasks[i] = Task.Run(async delegate
+                    {
+                        ProfileStore store = new ProfileStore(directory);
+                        await store.UpsertAsync(new TerminalProfile
+                        {
+                            Id = "profile" + index.ToString("00"),
+                            Name = "Profile " + index.ToString("00")
+                        }, token).ConfigureAwait(false);
+                    }, token);
+                }
+
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+
+                ProfileStore verifier = new ProfileStore(directory);
+                List<TerminalProfile> loaded = await verifier.LoadAsync(token).ConfigureAwait(false);
+                AssertEqual(profileCount, loaded.Count, "Expected all concurrent profile upserts to persist.");
             }
             finally
             {
