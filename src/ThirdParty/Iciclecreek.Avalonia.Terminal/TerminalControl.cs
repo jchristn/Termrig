@@ -71,6 +71,11 @@ namespace Iciclecreek.Terminal
                 nameof(PtyRecordingDirectory),
                 defaultValue: null);
 
+        public static readonly StyledProperty<bool> IsRenderPausedProperty =
+            AvaloniaProperty.Register<TerminalControl, bool>(
+                nameof(IsRenderPaused),
+                defaultValue: false);
+
         public event EventHandler<ProcessExitedEventArgs>? ProcessExited;
 
         public event EventHandler? OutputReceived;
@@ -152,6 +157,15 @@ namespace Iciclecreek.Terminal
             set => SetValue(PtyRecordingDirectoryProperty, value);
         }
 
+        /// <summary>
+        /// Gets or sets whether the inner terminal should defer repaint requests while continuing to process output.
+        /// </summary>
+        public bool IsRenderPaused
+        {
+            get => GetValue(IsRenderPausedProperty);
+            set => SetValue(IsRenderPausedProperty, value);
+        }
+
         private static bool _stylesLoaded = false;
 
         static TerminalControl()
@@ -228,7 +242,7 @@ namespace Iciclecreek.Terminal
         {
             if (_terminalView != null)
             {
-                _terminalView.InvalidateVisual();
+                _terminalView.RequestRenderInvalidate();
             }
             else
             {
@@ -358,7 +372,8 @@ namespace Iciclecreek.Terminal
                 change.Property == StartingDirectoryProperty ||
                 change.Property == OptionsProperty ||
                 change.Property == RecordPtyOutputProperty ||
-                change.Property == PtyRecordingDirectoryProperty)
+                change.Property == PtyRecordingDirectoryProperty ||
+                change.Property == IsRenderPausedProperty)
             {
                 ApplyPropertiesToTerminalView();
             }
@@ -415,6 +430,7 @@ namespace Iciclecreek.Terminal
             _terminalView.Options = Options ?? new XTerm.Options.TerminalOptions();
             _terminalView.RecordPtyOutput = RecordPtyOutput;
             _terminalView.PtyRecordingDirectory = PtyRecordingDirectory;
+            _terminalView.IsRenderPaused = IsRenderPaused;
         }
 
         private void ApplyPendingRestoreSnapshot()

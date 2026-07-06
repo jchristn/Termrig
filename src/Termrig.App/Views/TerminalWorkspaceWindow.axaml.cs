@@ -201,6 +201,7 @@ namespace Termrig.App.Views
                 Options = BuildTerminalOptions(tab)
             };
             ApplyTerminalAppearance(terminal, _Profile, tab, scheme);
+            terminal.IsRenderPaused = _SelectedSession != null && !selectTab;
 
             TerminalSession session = new TerminalSession
             {
@@ -941,6 +942,7 @@ namespace Termrig.App.Views
             foreach (TerminalSession item in _Sessions)
             {
                 bool selected = item == session;
+                item.Terminal.IsRenderPaused = !selected;
                 item.Terminal.Opacity = selected ? 1 : 0;
                 item.Terminal.IsHitTestVisible = selected;
                 item.Terminal.SetValue(Panel.ZIndexProperty, selected ? 1 : 0);

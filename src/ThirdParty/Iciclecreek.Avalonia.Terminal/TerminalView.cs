@@ -37,6 +37,9 @@ namespace Iciclecreek.Terminal
         private double _charHeight;
         private int _bufferSize = 1000;
         private bool _isAlternateBuffer;
+        private bool _isRenderPaused;
+        private bool _renderInvalidatePending;
+        private int _outputReceivedScheduled;
 
         // Process management
         private IPtyConnection? _ptyConnection;
@@ -143,6 +146,12 @@ namespace Iciclecreek.Terminal
             AvaloniaProperty.RegisterDirect<TerminalView, bool>(
                 nameof(IsAlternateBuffer),
                 o => o.IsAlternateBuffer);
+
+        public static readonly DirectProperty<TerminalView, bool> IsRenderPausedProperty =
+            AvaloniaProperty.RegisterDirect<TerminalView, bool>(
+                nameof(IsRenderPaused),
+                o => o.IsRenderPaused,
+                (o, v) => o.IsRenderPaused = v);
 
         public static readonly DirectProperty<TerminalView, int> BufferSizeProperty =
             AvaloniaProperty.RegisterDirect<TerminalView, int>(
@@ -578,6 +587,22 @@ namespace Iciclecreek.Terminal
         }
 
         /// <summary>
+        /// Gets or sets whether visual invalidations should be deferred while terminal state continues updating.
+        /// </summary>
+        public bool IsRenderPaused
+        {
+            get => Volatile.Read(ref _isRenderPaused);
+            set
+            {
+                if (SetAndRaise(IsRenderPausedProperty, ref _isRenderPaused, value) && !value && _renderInvalidatePending)
+                {
+                    _renderInvalidatePending = false;
+                    TerminalRenderThrottle.RequestInvalidate(this);
+                }
+            }
+        }
+
+        /// <summary>
         /// Gets or sets the terminal scrollback buffer size in lines.
         /// </summary>
         public int BufferSize
@@ -759,6 +784,11 @@ namespace Iciclecreek.Terminal
             }
         }
 
+        public void RequestRenderInvalidate()
+        {
+            RequestInvalidate();
+        }
+
         public TerminalBufferSnapshot? ExportRestoreSnapshot(int lineLimit)
         {
             if (_terminal == null)
@@ -831,6 +861,17 @@ namespace Iciclecreek.Terminal
                     line.Cache = null;
                 }
             }
+        }
+
+        private void RequestInvalidate()
+        {
+            if (Volatile.Read(ref _isRenderPaused))
+            {
+                _renderInvalidatePending = true;
+                return;
+            }
+
+            TerminalRenderThrottle.RequestInvalidate(this);
         }
 
         /// <summary>
@@ -2368,8 +2409,11 @@ namespace Iciclecreek.Terminal
                         });
                     }
 
-                    // Notify IME of cursor position change after terminal processes data
-                    Dispatcher.UIThread.Post(() => _inputMethodClient?.NotifyCursorRectangleChanged());
+                    // Notify IME only for active/rendering terminals; hidden tabs do not need cursor geometry updates.
+                    if (!Volatile.Read(ref _isRenderPaused))
+                    {
+                        Dispatcher.UIThread.Post(() => _inputMethodClient?.NotifyCursorRectangleChanged());
+                    }
 
                     this.RequestInvalidate();
                     DispatchOutputReceived();
@@ -2398,7 +2442,14 @@ namespace Iciclecreek.Terminal
 
         private void DispatchOutputReceived()
         {
-            Dispatcher.UIThread.Post(() => OutputReceived?.Invoke(this, EventArgs.Empty));
+            if (Interlocked.Exchange(ref _outputReceivedScheduled, 1) != 0)
+                return;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                Interlocked.Exchange(ref _outputReceivedScheduled, 0);
+                OutputReceived?.Invoke(this, EventArgs.Empty);
+            });
         }
 
         private PtyRecording? OpenPtyRecording()

@@ -29,7 +29,8 @@ namespace Test.Terminal
                 StartingDirectory = @"C:\Work",
                 Options = options,
                 RecordPtyOutput = true,
-                PtyRecordingDirectory = @"C:\Recordings"
+                PtyRecordingDirectory = @"C:\Recordings",
+                IsRenderPaused = true
             };
             var view = new TerminalView();
 
@@ -47,6 +48,7 @@ namespace Test.Terminal
             Assert.Same(options, view.Options);
             Assert.True(view.RecordPtyOutput);
             Assert.Equal(@"C:\Recordings", view.PtyRecordingDirectory);
+            Assert.True(view.IsRenderPaused);
         }
 
         [Fact]
@@ -64,12 +66,46 @@ namespace Test.Terminal
             control.StartingDirectory = @"C:\Source";
             control.RecordPtyOutput = true;
             control.PtyRecordingDirectory = @"C:\Source\recordings";
+            control.IsRenderPaused = true;
 
             Assert.Equal("pwsh.exe", view.Process);
             Assert.Equal(new[] { "-NoLogo" }, view.Args);
             Assert.Equal(@"C:\Source", view.StartingDirectory);
             Assert.True(view.RecordPtyOutput);
             Assert.Equal(@"C:\Source\recordings", view.PtyRecordingDirectory);
+            Assert.True(view.IsRenderPaused);
+        }
+
+        [Fact]
+        public void RenderPauseDefersInvalidationUntilResumed()
+        {
+            var view = new TerminalView
+            {
+                IsRenderPaused = true
+            };
+
+            typeof(TerminalView)
+                .GetMethod("RequestInvalidate", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(view, null);
+
+            Assert.True(GetPrivateField<bool>(view, "_renderInvalidatePending"));
+
+            view.IsRenderPaused = false;
+
+            Assert.False(GetPrivateField<bool>(view, "_renderInvalidatePending"));
+        }
+
+        [Fact]
+        public void OutputReceivedDispatchIsCoalescedWhilePending()
+        {
+            var view = new TerminalView();
+            MethodInfo dispatch = typeof(TerminalView)
+                .GetMethod("DispatchOutputReceived", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+            dispatch.Invoke(view, null);
+            dispatch.Invoke(view, null);
+
+            Assert.Equal(1, GetPrivateField<int>(view, "_outputReceivedScheduled"));
         }
 
         [Fact]
@@ -165,6 +201,14 @@ namespace Test.Terminal
                 .GetType()
                 .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(instance, value);
+        }
+
+        private static T GetPrivateField<T>(object instance, string name)
+        {
+            return (T)instance
+                .GetType()
+                .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(instance)!;
         }
     }
 }
