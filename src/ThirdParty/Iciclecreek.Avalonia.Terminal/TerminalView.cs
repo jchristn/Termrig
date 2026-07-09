@@ -564,10 +564,11 @@ namespace Iciclecreek.Terminal
 
         private void OnTerminalDirectoryChanged(object? sender, TerminalEvents.DirectoryChangeEventArgs e)
         {
-            Dispatcher.UIThread.Invoke(() =>
+            string directory = e.Directory;
+            Dispatcher.UIThread.Post(() =>
             {
                 var oldValue = _currentDirectory;
-                _currentDirectory = e.Directory;
+                _currentDirectory = directory;
                 RaisePropertyChanged(CurrentDirectoryProperty, oldValue, _currentDirectory);
             });
         }

@@ -1270,16 +1270,7 @@ namespace Termrig.App.Views
             }
 
             int lineLimit = ResolveRestoreLineLimit(session.TabProfile);
-            TerminalBufferSnapshot? snapshot;
-            if (Dispatcher.UIThread.CheckAccess())
-            {
-                snapshot = session.Terminal.ExportRestoreSnapshot(lineLimit);
-            }
-            else
-            {
-                snapshot = await Dispatcher.UIThread.InvokeAsync(
-                    () => session.Terminal.ExportRestoreSnapshot(lineLimit)).GetTask().ConfigureAwait(false);
-            }
+            TerminalBufferSnapshot? snapshot = session.Terminal.ExportRestoreSnapshot(lineLimit);
 
             if (snapshot == null)
                 return;

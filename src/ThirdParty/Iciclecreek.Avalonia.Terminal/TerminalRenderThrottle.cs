@@ -30,14 +30,20 @@ namespace Iciclecreek.Terminal
             if (control == null)
                 return;
 
+            bool shouldSchedule = false;
             lock (Pending)
+            {
                 Pending.Add(control);
 
-            if (!_frameScheduled)
-            {
-                _frameScheduled = true;
-                ScheduleFrame();
+                if (!_frameScheduled)
+                {
+                    _frameScheduled = true;
+                    shouldSchedule = true;
+                }
             }
+
+            if (shouldSchedule)
+                ScheduleFrame();
         }
 
         private static void ScheduleFrame()
@@ -64,19 +70,22 @@ namespace Iciclecreek.Terminal
 
         private static void Flush()
         {
-            _frameScheduled = false;
-            _lastFrame = DateTime.UtcNow;
+            List<Control> controls;
 
             lock (Pending)
             {
+                _frameScheduled = false;
+                _lastFrame = DateTime.UtcNow;
+
                 if (Pending.Count == 0)
                     return;
 
-                foreach (var control in Pending)
-                    control.InvalidateVisual();
-
+                controls = new List<Control>(Pending);
                 Pending.Clear();
             }
+
+            foreach (var control in controls)
+                control.InvalidateVisual();
         }
     }
 }
