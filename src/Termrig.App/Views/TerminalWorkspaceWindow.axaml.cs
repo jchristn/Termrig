@@ -1211,30 +1211,42 @@ namespace Termrig.App.Views
             if (!session.IsProfileMember)
                 return;
 
-            CancelRestoreSaveDebounce(session);
-            var cts = new CancellationTokenSource();
-            session.RestoreSaveDebounce = cts;
-            _ = SaveRestoreSnapshotAfterDelayAsync(session, cts);
+            Interlocked.Exchange(ref session.RestoreSaveDirty, 1);
+            if (Interlocked.CompareExchange(ref session.RestoreSaveScheduled, 1, 0) == 0)
+            {
+                _ = SaveRestoreSnapshotAfterQuietPeriodAsync(session);
+            }
         }
 
-        private async Task SaveRestoreSnapshotAfterDelayAsync(TerminalSession session, CancellationTokenSource cts)
+        private async Task SaveRestoreSnapshotAfterQuietPeriodAsync(TerminalSession session)
         {
             try
             {
-                await Task.Delay(RestoreSaveDebounce, cts.Token).ConfigureAwait(false);
-                await SaveRestoreSnapshotAsync(session, cts.Token).ConfigureAwait(false);
+                while (!session.IsClosingByTermrig)
+                {
+                    await Task.Delay(RestoreSaveDebounce).ConfigureAwait(false);
+                    if (Interlocked.Exchange(ref session.RestoreSaveDirty, 0) == 0)
+                        return;
+
+                    await SaveRestoreSnapshotAsync(session, CancellationToken.None).ConfigureAwait(false);
+
+                    if (Volatile.Read(ref session.RestoreSaveDirty) == 0)
+                        return;
+                }
             }
-            catch (OperationCanceledException)
+            catch (Exception exception)
             {
+                WriteTerminalCrashLog(session.TabProfile, "Terminal restore snapshot save failed.", exception.ToString());
             }
             finally
             {
-                if (ReferenceEquals(session.RestoreSaveDebounce, cts))
+                Interlocked.Exchange(ref session.RestoreSaveScheduled, 0);
+                if (!session.IsClosingByTermrig &&
+                    Volatile.Read(ref session.RestoreSaveDirty) != 0 &&
+                    Interlocked.CompareExchange(ref session.RestoreSaveScheduled, 1, 0) == 0)
                 {
-                    session.RestoreSaveDebounce = null;
+                    _ = SaveRestoreSnapshotAfterQuietPeriodAsync(session);
                 }
-
-                cts.Dispose();
             }
         }
 
@@ -1243,7 +1255,7 @@ namespace Termrig.App.Views
             if (!session.IsProfileMember)
                 return;
 
-            CancelRestoreSaveDebounce(session);
+            Interlocked.Exchange(ref session.RestoreSaveDirty, 0);
             _ = SaveRestoreSnapshotAsync(session, CancellationToken.None);
         }
 
@@ -1252,7 +1264,7 @@ namespace Termrig.App.Views
             foreach (TerminalSession session in _Sessions.ToList())
             {
                 if (!session.IsProfileMember) continue;
-                CancelRestoreSaveDebounce(session);
+                Interlocked.Exchange(ref session.RestoreSaveDirty, 0);
                 await SaveRestoreSnapshotAsync(session, CancellationToken.None).ConfigureAwait(true);
             }
         }
@@ -1279,15 +1291,6 @@ namespace Termrig.App.Views
             await _TerminalRestoreStore
                 .SaveAsync(_Profile, session.TabProfile, snapshot, lineLimit, workingDirectory, token)
                 .ConfigureAwait(false);
-        }
-
-        private static void CancelRestoreSaveDebounce(TerminalSession session)
-        {
-            CancellationTokenSource? cts = session.RestoreSaveDebounce;
-            if (cts == null) return;
-
-            session.RestoreSaveDebounce = null;
-            cts.Cancel();
         }
 
         private static XTerm.Options.TerminalOptions BuildTerminalOptions(TerminalTabProfile tab)

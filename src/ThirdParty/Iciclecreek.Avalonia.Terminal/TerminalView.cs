@@ -40,6 +40,27 @@ namespace Iciclecreek.Terminal
         private bool _isRenderPaused;
         private bool _renderInvalidatePending;
         private int _outputReceivedScheduled;
+        private int _focusedForRendering;
+        private int _backgroundRenderInvalidateScheduled;
+        private int _terminalStateNotificationScheduled;
+        private int _imeCursorNotificationScheduled;
+        private readonly object _terminalStateNotificationLock = new object();
+        private bool _pendingScrollChanged;
+        private int _pendingOldMaxScrollback;
+        private int _pendingOldViewportY;
+        private int _pendingNewMaxScrollback;
+        private int _pendingNewViewportY;
+        private int _titleChangedScheduled;
+        private string? _pendingTitle;
+        private string? _lastDispatchedTitle;
+        private int _directoryChangedScheduled;
+        private string? _pendingDirectory;
+        private int _windowMovedScheduled;
+        private int _pendingWindowX;
+        private int _pendingWindowY;
+        private int _windowResizedScheduled;
+        private int _pendingWindowWidth;
+        private int _pendingWindowHeight;
 
         // Process management
         private IPtyConnection? _ptyConnection;
@@ -58,6 +79,17 @@ namespace Iciclecreek.Terminal
         private bool _currentPtyRecordingConvertEol;
         private string? _currentPtyRecordingTermName;
         private const string PtyRecordingDiagnosticsEnvironmentVariable = "TERMRIG_PTY_RECORDING_DIAGNOSTICS";
+        private const string TerminalPerformanceDiagnosticsEnvironmentVariable = "TERMRIG_TERMINAL_PERF";
+        private static readonly bool TerminalPerformanceDiagnosticsEnabled =
+            String.Equals(
+                Environment.GetEnvironmentVariable(TerminalPerformanceDiagnosticsEnvironmentVariable),
+                "1",
+                StringComparison.Ordinal);
+        private static readonly TimeSpan BackgroundRenderInterval = TimeSpan.FromMilliseconds(66);
+        private const int MaxPtyWriteChunkLength = 0x4000;
+        private const double SlowRenderMilliseconds = 16.0;
+        private const double SlowTerminalLockWaitMilliseconds = 8.0;
+        private const double SlowPtyWriteMilliseconds = 20.0;
 
         // Cursor blinking
         private DispatcherTimer _cursorBlinkTimer;
@@ -81,6 +113,24 @@ namespace Iciclecreek.Terminal
 
         private sealed record CachedTextRun(FormattedText Text, int StartX, int CellCount, IBrush Background);
         private sealed record CachedLineRender(ulong Fingerprint, List<CachedTextRun> TextRuns);
+        private sealed record RenderLineSnapshot(int AbsoluteY, int ScreenY, BufferLine Line);
+        private sealed record SelectionRangeSnapshot(int ScreenY, int StartX, int EndX);
+        private sealed record CursorSnapshot(
+            bool IsVisible,
+            int X,
+            int ScreenY,
+            BufferCell Cell);
+        private sealed class TerminalRenderSnapshot
+        {
+            public int Cols { get; init; }
+            public int Rows { get; init; }
+            public int ViewportY { get; init; }
+            public bool ReverseVideo { get; init; }
+            public CursorSnapshot Cursor { get; init; } = new CursorSnapshot(false, 0, 0, BufferCell.Space);
+            public List<RenderLineSnapshot> Lines { get; init; } = new List<RenderLineSnapshot>();
+            public List<SelectionRangeSnapshot> SelectionRanges { get; init; } = new List<SelectionRangeSnapshot>();
+        }
+        private readonly Dictionary<int, CachedLineRender> _lineRenderCache = new Dictionary<int, CachedLineRender>();
         private sealed class PtyRecordingMetadata
         {
             public int FormatVersion { get; set; } = 1;
@@ -564,9 +614,17 @@ namespace Iciclecreek.Terminal
 
         private void OnTerminalDirectoryChanged(object? sender, TerminalEvents.DirectoryChangeEventArgs e)
         {
-            string directory = e.Directory;
+            _pendingDirectory = e.Directory;
+            if (Interlocked.Exchange(ref _directoryChangedScheduled, 1) != 0)
+                return;
+
             Dispatcher.UIThread.Post(() =>
             {
+                Interlocked.Exchange(ref _directoryChangedScheduled, 0);
+                string? directory = Interlocked.Exchange(ref _pendingDirectory, null);
+                if (directory == null || String.Equals(directory, _currentDirectory, StringComparison.Ordinal))
+                    return;
+
                 var oldValue = _currentDirectory;
                 _currentDirectory = directory;
                 RaisePropertyChanged(CurrentDirectoryProperty, oldValue, _currentDirectory);
@@ -783,6 +841,8 @@ namespace Iciclecreek.Terminal
             {
                 ClearVisibleLineCachesUnderLock();
             }
+
+            _lineRenderCache.Clear();
         }
 
         public void RequestRenderInvalidate()
@@ -872,7 +932,60 @@ namespace Iciclecreek.Terminal
                 return;
             }
 
+            if (!ShouldRenderNow())
+            {
+                _renderInvalidatePending = true;
+                return;
+            }
+
+            if (Volatile.Read(ref _focusedForRendering) == 0)
+            {
+                ScheduleBackgroundRenderInvalidate();
+                return;
+            }
+
             TerminalRenderThrottle.RequestInvalidate(this);
+        }
+
+        private void ScheduleBackgroundRenderInvalidate()
+        {
+            if (Interlocked.Exchange(ref _backgroundRenderInvalidateScheduled, 1) != 0)
+                return;
+
+            Dispatcher.UIThread.Post(async () =>
+            {
+                try
+                {
+                    await Task.Delay(BackgroundRenderInterval).ConfigureAwait(true);
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _backgroundRenderInvalidateScheduled, 0);
+                }
+
+                if (!Volatile.Read(ref _isRenderPaused))
+                {
+                    if (ShouldRenderNow())
+                    {
+                        TerminalRenderThrottle.RequestInvalidate(this);
+                    }
+                    else
+                    {
+                        _renderInvalidatePending = true;
+                    }
+                }
+            });
+        }
+
+        private bool ShouldRenderNow()
+        {
+            if (!IsVisible)
+                return false;
+
+            if (TopLevel.GetTopLevel(this) is Window window && window.WindowState == WindowState.Minimized)
+                return false;
+
+            return true;
         }
 
         /// <summary>
@@ -1100,6 +1213,17 @@ namespace Iciclecreek.Terminal
                 {
                     ApplyRuntimeTerminalOptions(options);
                 }
+            }
+
+            if (change.Property == FontFamilyProperty ||
+                change.Property == FontSizeProperty ||
+                change.Property == FontStyleProperty ||
+                change.Property == FontWeightProperty ||
+                change.Property == TextDecorationsProperty ||
+                change.Property == ForegroundProperty ||
+                change.Property == BackgroundProperty)
+            {
+                _lineRenderCache.Clear();
             }
         }
 
@@ -1738,6 +1862,7 @@ namespace Iciclecreek.Terminal
         protected override async void OnGotFocus(FocusChangedEventArgs e)
         {
             base.OnGotFocus(e);
+            Volatile.Write(ref _focusedForRendering, 1);
 
             Debug.WriteLine($"[TerminalView] OnGotFocus: Source={e.Source?.GetType().Name}");
 
@@ -1763,6 +1888,7 @@ namespace Iciclecreek.Terminal
         protected override async void OnLostFocus(FocusChangedEventArgs e)
         {
             base.OnLostFocus(e);
+            Volatile.Write(ref _focusedForRendering, 0);
 
             Debug.WriteLine($"[TerminalView] OnLostFocus");
 
@@ -1842,10 +1968,19 @@ namespace Iciclecreek.Terminal
 
         private void OnTerminalTitleChanged(object? sender, XT.Events.TerminalEvents.TitleChangeEventArgs e)
         {
+            _pendingTitle = e.Title;
+            if (Interlocked.Exchange(ref _titleChangedScheduled, 1) != 0)
+                return;
+
             Dispatcher.UIThread.Post(() =>
             {
+                Interlocked.Exchange(ref _titleChangedScheduled, 0);
+                string? title = Interlocked.Exchange(ref _pendingTitle, null);
+                if (title == null || String.Equals(title, _lastDispatchedTitle, StringComparison.Ordinal))
+                    return;
 
-                var args = new TitleChangedEventArgs(e.Title)
+                _lastDispatchedTitle = title;
+                var args = new TitleChangedEventArgs(title)
                 {
                     RoutedEvent = TitleChangedEvent
                 };
@@ -1857,9 +1992,15 @@ namespace Iciclecreek.Terminal
 
         private void OnTerminalWindowMoved(object? sender, XT.Events.TerminalEvents.WindowMovedEventArgs e)
         {
+            _pendingWindowX = e.X;
+            _pendingWindowY = e.Y;
+            if (Interlocked.Exchange(ref _windowMovedScheduled, 1) != 0)
+                return;
+
             Dispatcher.UIThread.Post(() =>
             {
-                var args = new WindowMovedEventArgs(e.X, e.Y)
+                Interlocked.Exchange(ref _windowMovedScheduled, 0);
+                var args = new WindowMovedEventArgs(_pendingWindowX, _pendingWindowY)
                 {
                     RoutedEvent = WindowMovedEvent
                 };
@@ -1871,10 +2012,16 @@ namespace Iciclecreek.Terminal
 
         private void OnTerminalWindowResized(object? sender, XT.Events.TerminalEvents.WindowResizedEventArgs e)
         {
+            _pendingWindowWidth = e.Width;
+            _pendingWindowHeight = e.Height;
+            if (Interlocked.Exchange(ref _windowResizedScheduled, 1) != 0)
+                return;
+
             Dispatcher.UIThread.Post(() =>
             {
+                Interlocked.Exchange(ref _windowResizedScheduled, 0);
 
-                var args = new WindowResizedEventArgs(e.Width, e.Height)
+                var args = new WindowResizedEventArgs(_pendingWindowWidth, _pendingWindowHeight)
                 {
                     RoutedEvent = WindowResizedEvent
                 };
@@ -2374,46 +2521,21 @@ namespace Iciclecreek.Terminal
                     if (output.Length == 0)
                         continue;
 
-                    int oldMax;
-                    int oldY;
-                    int newMax = 0;
-                    int newY = 0;
-                    bool shouldFollowOutput;
-                    bool scrollChanged = false;
-                    lock (_terminalLock)
+                    var writeResult = await WritePtyOutputToTerminalAsync(output, cancellationToken).ConfigureAwait(false);
+
+                    if (writeResult.ScrollChanged)
                     {
-                        oldMax = GetMaxScrollbackUnderLock();
-                        oldY = _terminal.Buffer.ViewportY;
-                        shouldFollowOutput = _isAlternateBuffer || oldY >= oldMax;
-                        _terminal.Write(output);
-
-                        // Follow live output only when the user was already at the bottom.
-                        // Manual scrollback should stay put while new process output arrives.
-                        if (shouldFollowOutput)
-                        {
-                            _terminal.Buffer.ScrollToBottom();
-                        }
-
-                        newY = _terminal.Buffer.ViewportY;
-                        newMax = GetMaxScrollbackUnderLock();
-                        scrollChanged = oldMax != newMax || oldY != newY;
+                        ScheduleTerminalStateNotification(
+                            writeResult.OldMax,
+                            writeResult.OldY,
+                            writeResult.NewMax,
+                            writeResult.NewY);
                     }
 
-                    if (scrollChanged)
+                    // Notify IME only for focused terminals; hidden or background terminals do not need cursor geometry updates.
+                    if (!Volatile.Read(ref _isRenderPaused) && Volatile.Read(ref _focusedForRendering) != 0)
                     {
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            if (oldMax != newMax)
-                                RaisePropertyChanged(MaxScrollbackProperty, oldMax, newMax);
-                            if (oldY != newY)
-                                RaisePropertyChanged(ViewportYProperty, oldY, newY);
-                        });
-                    }
-
-                    // Notify IME only for active/rendering terminals; hidden tabs do not need cursor geometry updates.
-                    if (!Volatile.Read(ref _isRenderPaused))
-                    {
-                        Dispatcher.UIThread.Post(() => _inputMethodClient?.NotifyCursorRectangleChanged());
+                        ScheduleImeCursorNotification();
                     }
 
                     this.RequestInvalidate();
@@ -2441,6 +2563,130 @@ namespace Iciclecreek.Terminal
             }
         }
 
+        private async Task<(bool ScrollChanged, int OldMax, int OldY, int NewMax, int NewY)> WritePtyOutputToTerminalAsync(string output, CancellationToken cancellationToken)
+        {
+            int oldMax = 0;
+            int oldY = 0;
+            int newMax = 0;
+            int newY = 0;
+            bool shouldFollowOutput = false;
+            bool initialized = false;
+
+            for (int offset = 0; offset < output.Length; offset += MaxPtyWriteChunkLength)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int length = Math.Min(MaxPtyWriteChunkLength, output.Length - offset);
+                string chunk = length == output.Length ? output : output.Substring(offset, length);
+
+                long lockWaitStart = Stopwatch.GetTimestamp();
+                long writeStart;
+                bool lockTaken = false;
+                try
+                {
+                    Monitor.Enter(_terminalLock, ref lockTaken);
+                    TraceSlowOperation("PTY output waited for terminal lock", lockWaitStart, SlowTerminalLockWaitMilliseconds);
+                    writeStart = Stopwatch.GetTimestamp();
+
+                    if (!initialized)
+                    {
+                        oldMax = GetMaxScrollbackUnderLock();
+                        oldY = _terminal.Buffer.ViewportY;
+                        shouldFollowOutput = _isAlternateBuffer || oldY >= oldMax;
+                        initialized = true;
+                    }
+
+                    _terminal.Write(chunk);
+
+                    // Follow live output only when the user was already at the bottom.
+                    // Manual scrollback should stay put while new process output arrives.
+                    if (shouldFollowOutput)
+                    {
+                        _terminal.Buffer.ScrollToBottom();
+                    }
+
+                    newY = _terminal.Buffer.ViewportY;
+                    newMax = GetMaxScrollbackUnderLock();
+                    TraceSlowOperation("PTY output write/parse", writeStart, SlowPtyWriteMilliseconds);
+                }
+                finally
+                {
+                    if (lockTaken)
+                        Monitor.Exit(_terminalLock);
+                }
+
+                if (offset + length < output.Length)
+                {
+                    await Task.Yield();
+                }
+            }
+
+            bool scrollChanged = initialized && (oldMax != newMax || oldY != newY);
+            return (scrollChanged, oldMax, oldY, newMax, newY);
+        }
+
+        private void ScheduleTerminalStateNotification(int oldMax, int oldY, int newMax, int newY)
+        {
+            lock (_terminalStateNotificationLock)
+            {
+                if (!_pendingScrollChanged)
+                {
+                    _pendingOldMaxScrollback = oldMax;
+                    _pendingOldViewportY = oldY;
+                    _pendingScrollChanged = true;
+                }
+
+                _pendingNewMaxScrollback = newMax;
+                _pendingNewViewportY = newY;
+            }
+
+            if (Interlocked.Exchange(ref _terminalStateNotificationScheduled, 1) != 0)
+                return;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                bool hasScrollChanged;
+                int pendingOldMax;
+                int pendingOldY;
+                int pendingNewMax;
+                int pendingNewY;
+
+                lock (_terminalStateNotificationLock)
+                {
+                    hasScrollChanged = _pendingScrollChanged;
+                    pendingOldMax = _pendingOldMaxScrollback;
+                    pendingOldY = _pendingOldViewportY;
+                    pendingNewMax = _pendingNewMaxScrollback;
+                    pendingNewY = _pendingNewViewportY;
+                    _pendingScrollChanged = false;
+                }
+
+                Interlocked.Exchange(ref _terminalStateNotificationScheduled, 0);
+
+                if (!hasScrollChanged)
+                    return;
+
+                if (pendingOldMax != pendingNewMax)
+                    RaisePropertyChanged(MaxScrollbackProperty, pendingOldMax, pendingNewMax);
+                if (pendingOldY != pendingNewY)
+                    RaisePropertyChanged(ViewportYProperty, pendingOldY, pendingNewY);
+            });
+        }
+
+        private void ScheduleImeCursorNotification()
+        {
+            if (Interlocked.Exchange(ref _imeCursorNotificationScheduled, 1) != 0)
+                return;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                Interlocked.Exchange(ref _imeCursorNotificationScheduled, 0);
+                if (!Volatile.Read(ref _isRenderPaused) && Volatile.Read(ref _focusedForRendering) != 0)
+                {
+                    _inputMethodClient?.NotifyCursorRectangleChanged();
+                }
+            });
+        }
+
         private void DispatchOutputReceived()
         {
             if (Interlocked.Exchange(ref _outputReceivedScheduled, 1) != 0)
@@ -2451,6 +2697,23 @@ namespace Iciclecreek.Terminal
                 Interlocked.Exchange(ref _outputReceivedScheduled, 0);
                 OutputReceived?.Invoke(this, EventArgs.Empty);
             });
+        }
+
+        private void TraceSlowOperation(string operation, long startTimestamp, double thresholdMilliseconds)
+        {
+            if (!TerminalPerformanceDiagnosticsEnabled)
+                return;
+
+            double elapsed = GetElapsedMilliseconds(startTimestamp);
+            if (elapsed >= thresholdMilliseconds)
+            {
+                Debug.WriteLine($"[TerminalView:{_instanceId:N}] {operation} took {elapsed:F1} ms");
+            }
+        }
+
+        private static double GetElapsedMilliseconds(long startTimestamp)
+        {
+            return (Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / Stopwatch.Frequency;
         }
 
         private PtyRecording? OpenPtyRecording()
@@ -2655,55 +2918,38 @@ namespace Iciclecreek.Terminal
 
         public override void Render(DrawingContext context)
         {
+            long renderStart = Stopwatch.GetTimestamp();
             var scale = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
-            //Debug.WriteLine("======");
-            //Debug.WriteLine(_terminal.Buffer.PrintViewport());
 
-            // Use the terminal buffer's ViewportY to determine what to render
             try
             {
-                lock (_terminalLock)
+                TerminalRenderSnapshot snapshot = CreateRenderSnapshot();
+                TrimLineRenderCache(snapshot.ViewportY, snapshot.ViewportY + snapshot.Rows);
+
+                foreach (RenderLineSnapshot line in snapshot.Lines)
                 {
-                    int viewportY = _terminal.Buffer.ViewportY;
-                    int viewportLines = _terminal.Rows;
-                    int startLine = viewportY;
-                    int endLine = Math.Min(_terminal.Buffer.Length, startLine + viewportLines);
+                    var startYPos = Snap(line.ScreenY * _charHeight, scale);
+                    var endYPos = Snap((line.ScreenY + 1) * _charHeight, scale);
+                    var rowHeight = Math.Max(0, endYPos - startYPos);
 
-                    for (int y = startLine; y < endLine; y++)
+                    LineAttribute lineAttr = line.Line.LineAttribute;
+                    if (lineAttr == LineAttribute.DoubleWidth ||
+                        lineAttr == LineAttribute.DoubleHeightTop ||
+                        lineAttr == LineAttribute.DoubleHeightBottom)
                     {
-                        var line = _terminal.Buffer.GetLine(y);
-                        if (line == null)
-                            continue;
-
-                        int screenY = y - startLine;
-
-                        // Calculate Y positions for this screen row
-                        var startYPos = Snap(screenY * _charHeight, scale);
-                        var endYPos = Snap((screenY + 1) * _charHeight, scale);
-                        var rowHeight = Math.Max(0, endYPos - startYPos);
-
-                        // Check for double-width/double-height line attributes
-                        var lineAttr = line.LineAttribute;
-                        if (lineAttr == LineAttribute.DoubleWidth ||
-                                 lineAttr == LineAttribute.DoubleHeightTop ||
-                                 lineAttr == LineAttribute.DoubleHeightBottom)
-                        {
-                            RenderDoubleWidthLine(context, line, screenY, startYPos, rowHeight, lineAttr, scale);
-                        }
-                        else
-                        {
-                            RenderNormalLine(context, line, screenY, startYPos, rowHeight, scale);
-                        }
+                        RenderDoubleWidthLine(context, line.Line, snapshot, line.ScreenY, startYPos, rowHeight, lineAttr, scale);
                     }
-
-                    // Render selection overlay
-                    RenderSelection(context, viewportY, scale);
-
-                    RenderCursor(context, viewportY, scale);
-
-                    // Render IME preedit (composition) text overlay
-                    RenderPreeditText(context, viewportY, scale);
+                    else
+                    {
+                        RenderNormalLine(context, line, snapshot, startYPos, rowHeight, scale);
+                    }
                 }
+
+                RenderSelection(context, snapshot, scale);
+                RenderCursor(context, snapshot, scale);
+                RenderPreeditText(context, snapshot, scale);
+
+                TraceSlowOperation("Render", renderStart, SlowRenderMilliseconds);
             }
             catch (Exception ex)
             {
@@ -2711,17 +2957,138 @@ namespace Iciclecreek.Terminal
             }
         }
 
+        private TerminalRenderSnapshot CreateRenderSnapshot()
+        {
+            long waitStart = Stopwatch.GetTimestamp();
+            bool lockTaken = false;
+
+            try
+            {
+                Monitor.Enter(_terminalLock, ref lockTaken);
+                TraceSlowOperation("Render waited for terminal lock", waitStart, SlowTerminalLockWaitMilliseconds);
+
+                int viewportY = _terminal.Buffer.ViewportY;
+                int viewportLines = _terminal.Rows;
+                int cols = _terminal.Cols;
+                int startLine = viewportY;
+                int endLine = Math.Min(_terminal.Buffer.Length, startLine + viewportLines);
+                var lines = new List<RenderLineSnapshot>(Math.Max(0, endLine - startLine));
+
+                for (int y = startLine; y < endLine; y++)
+                {
+                    BufferLine? line = _terminal.Buffer.GetLine(y);
+                    if (line == null)
+                        continue;
+
+                    lines.Add(new RenderLineSnapshot(y, y - startLine, line.Clone()));
+                }
+
+                CursorSnapshot cursor = CreateCursorSnapshotUnderLock(viewportY);
+                List<SelectionRangeSnapshot> selections = CreateSelectionSnapshotUnderLock(viewportLines, cols);
+
+                return new TerminalRenderSnapshot
+                {
+                    Cols = cols,
+                    Rows = viewportLines,
+                    ViewportY = viewportY,
+                    ReverseVideo = _terminal.ReverseVideo,
+                    Cursor = cursor,
+                    Lines = lines,
+                    SelectionRanges = selections
+                };
+            }
+            finally
+            {
+                if (lockTaken)
+                    Monitor.Exit(_terminalLock);
+            }
+        }
+
+        private CursorSnapshot CreateCursorSnapshotUnderLock(int viewportY)
+        {
+            if (!_terminal.CursorVisible)
+                return new CursorSnapshot(false, 0, 0, BufferCell.Space);
+
+            int cursorX = _terminal.Buffer.X;
+            int cursorY = _terminal.Buffer.Y;
+            int absoluteCursorY = _terminal.Buffer.YBase + cursorY;
+            if (absoluteCursorY < viewportY || absoluteCursorY >= viewportY + _terminal.Rows)
+                return new CursorSnapshot(false, 0, 0, BufferCell.Space);
+
+            BufferCell cell = BufferCell.Space;
+            BufferLine? line = _terminal.Buffer.GetLine(absoluteCursorY);
+            if (line != null && cursorX >= 0 && cursorX < line.Length)
+            {
+                cell = line[cursorX];
+            }
+
+            return new CursorSnapshot(true, cursorX, absoluteCursorY - viewportY, cell);
+        }
+
+        private List<SelectionRangeSnapshot> CreateSelectionSnapshotUnderLock(int viewportLines, int cols)
+        {
+            var ranges = new List<SelectionRangeSnapshot>();
+            if (!_terminal.Selection.HasSelection)
+                return ranges;
+
+            for (int screenY = 0; screenY < viewportLines; screenY++)
+            {
+                int? selectionStartX = null;
+                int? selectionEndX = null;
+
+                for (int x = 0; x < cols; x++)
+                {
+                    if (_terminal.Selection.IsCellSelected(x, screenY))
+                    {
+                        selectionStartX ??= x;
+                        selectionEndX = x;
+                    }
+                    else if (selectionStartX.HasValue)
+                    {
+                        ranges.Add(new SelectionRangeSnapshot(screenY, selectionStartX.Value, selectionEndX!.Value + 1));
+                        selectionStartX = null;
+                        selectionEndX = null;
+                    }
+                }
+
+                if (selectionStartX.HasValue)
+                {
+                    ranges.Add(new SelectionRangeSnapshot(screenY, selectionStartX.Value, selectionEndX!.Value + 1));
+                }
+            }
+
+            return ranges;
+        }
+
+        private void TrimLineRenderCache(int startLine, int endLine)
+        {
+            if (_lineRenderCache.Count <= Math.Max(256, _bufferSize + 128))
+                return;
+
+            foreach (int key in _lineRenderCache.Keys.ToList())
+            {
+                if (key < startLine - _bufferSize || key > endLine + _bufferSize)
+                {
+                    _lineRenderCache.Remove(key);
+                }
+            }
+        }
+
         /// <summary>
         /// Renders a normal (single-width, single-height) line.
         /// </summary>
-        private void RenderNormalLine(DrawingContext context, BufferLine line, int screenY, double startYPos, double rowHeight, double scale)
+        private void RenderNormalLine(DrawingContext context, RenderLineSnapshot lineSnapshot, TerminalRenderSnapshot snapshot, double startYPos, double rowHeight, double scale)
         {
+            BufferLine line = lineSnapshot.Line;
             ulong fingerprint = GetLineRenderFingerprint(line);
-            double rowWidth = Snap(_terminal.Cols * _charWidth, scale);
+            double rowWidth = Snap(snapshot.Cols * _charWidth, scale);
             context.FillRectangle(this.Background, new Rect(0, startYPos, Math.Max(0, rowWidth), rowHeight));
 
             // Try to use cached text runs for this line (but not when ReverseVideo mode is active as it affects all cells)
-            var cachedLine = !_terminal.ReverseVideo ? line.Cache as CachedLineRender : null;
+            _lineRenderCache.TryGetValue(lineSnapshot.AbsoluteY, out CachedLineRender? cachedLine);
+            if (snapshot.ReverseVideo)
+                cachedLine = null;
+
             if (cachedLine != null && cachedLine.Fingerprint == fingerprint)
             {
                 foreach (var run in cachedLine.TextRuns)
@@ -2741,7 +3108,7 @@ namespace Iciclecreek.Terminal
             // Build and cache text runs for this line
             var textRuns = new List<CachedTextRun>();
 
-            for (int x = 0; x < _terminal.Cols;)
+            for (int x = 0; x < snapshot.Cols;)
             {
                 if (x >= line.Length)
                     break;
@@ -2763,7 +3130,7 @@ namespace Iciclecreek.Terminal
                     var textBuilder = new StringBuilder();
                     cellCount = 0;  // Total cell positions consumed (including wide char placeholders)
                     runStartX = x;
-                    while (x < line.Length && x < _terminal.Cols)
+                    while (x < line.Length && x < snapshot.Cols)
                     {
                         var currentCell = line[x];
 
@@ -2795,7 +3162,7 @@ namespace Iciclecreek.Terminal
                 if (cell.Attributes.IsInverse())
                     (foreground, background) = (background, foreground);
                 // Apply terminal-wide reverse video mode (DECSCNM)
-                if (_terminal.ReverseVideo)
+                if (snapshot.ReverseVideo)
                     (foreground, background) = (background, foreground);
                 if (cell.Attributes.IsBlink() && this._cursorBlinkOn)
                     (foreground, background) = (background, foreground);
@@ -2815,8 +3182,8 @@ namespace Iciclecreek.Terminal
             }
 
             // Cache the text runs (but not when ReverseVideo mode is active)
-            if (!_terminal.ReverseVideo)
-                line.Cache = new CachedLineRender(fingerprint, textRuns);
+            if (!snapshot.ReverseVideo)
+                _lineRenderCache[lineSnapshot.AbsoluteY] = new CachedLineRender(fingerprint, textRuns);
         }
 
         private ulong GetLineRenderFingerprint(BufferLine line)
@@ -2831,12 +3198,11 @@ namespace Iciclecreek.Terminal
                 hash *= prime;
             }
 
-            Add((ulong)_terminal.Cols);
             Add((ulong)line.Length);
             Add((ulong)line.LineAttribute);
             Add(_cursorBlinkOn ? 1UL : 0UL);
 
-            int limit = Math.Min(line.Length, _terminal.Cols);
+            int limit = line.Length;
             for (int x = 0; x < limit; x++)
             {
                 BufferCell cell = line[x];
@@ -2851,13 +3217,10 @@ namespace Iciclecreek.Terminal
         /// <summary>
         /// Renders a double-width or double-height line using transforms and clipping.
         /// </summary>
-        private void RenderDoubleWidthLine(DrawingContext context, BufferLine line, int screenY, double startYPos, double rowHeight, LineAttribute lineAttr, double scale)
+        private void RenderDoubleWidthLine(DrawingContext context, BufferLine line, TerminalRenderSnapshot snapshot, int screenY, double startYPos, double rowHeight, LineAttribute lineAttr, double scale)
         {
-            // Don't cache double-width lines (transform makes caching complex)
-            line.Cache = null;
-
             // Calculate the clip rect for this row
-            var clipRect = new Rect(0, startYPos, _terminal.Cols * _charWidth, rowHeight);
+            var clipRect = new Rect(0, startYPos, snapshot.Cols * _charWidth, rowHeight);
 
             // For double-height lines, we need to clip to show only top or bottom half
             double scaleX = 2.0;
@@ -2886,7 +3249,7 @@ namespace Iciclecreek.Terminal
                 {
                     // Render the line content at normal size - the transform will scale it
                     // Only render the first half of the columns since they'll be doubled
-                    int effectiveCols = _terminal.Cols / 2;
+                    int effectiveCols = snapshot.Cols / 2;
 
                     for (int x = 0; x < effectiveCols && x < line.Length;)
                     {
@@ -2935,7 +3298,7 @@ namespace Iciclecreek.Terminal
                         if (cell.Attributes.IsInverse())
                             (foreground, background) = (background, foreground);
                         // Apply terminal-wide reverse video mode (DECSCNM)
-                        if (_terminal.ReverseVideo)
+                        if (snapshot.ReverseVideo)
                             (foreground, background) = (background, foreground);
                         if (cell.Attributes.IsBlink() && this._cursorBlinkOn)
                             (foreground, background) = (background, foreground);
@@ -2958,41 +3321,11 @@ namespace Iciclecreek.Terminal
         /// <summary>
         /// Renders the selection overlay.
         /// </summary>
-        private void RenderSelection(DrawingContext context, int viewportY, double scale)
+        private void RenderSelection(DrawingContext context, TerminalRenderSnapshot snapshot, double scale)
         {
-            if (!_terminal.Selection.HasSelection)
-                return;
-
-            int viewportLines = _terminal.Rows;
-
-            for (int screenY = 0; screenY < viewportLines; screenY++)
+            foreach (SelectionRangeSnapshot range in snapshot.SelectionRanges)
             {
-                // Find cells that are selected in this row
-                int? selectionStartX = null;
-                int? selectionEndX = null;
-
-                for (int x = 0; x < _terminal.Cols; x++)
-                {
-                    if (_terminal.Selection.IsCellSelected(x, screenY))
-                    {
-                        if (!selectionStartX.HasValue)
-                            selectionStartX = x;
-                        selectionEndX = x;
-                    }
-                    else if (selectionStartX.HasValue)
-                    {
-                        // End of a selection run - draw it
-                        DrawSelectionRect(context, selectionStartX.Value, selectionEndX!.Value + 1, screenY, scale);
-                        selectionStartX = null;
-                        selectionEndX = null;
-                    }
-                }
-
-                // Draw remaining selection at end of row
-                if (selectionStartX.HasValue)
-                {
-                    DrawSelectionRect(context, selectionStartX.Value, selectionEndX!.Value + 1, screenY, scale);
-                }
+                DrawSelectionRect(context, range.StartX, range.EndX, range.ScreenY, scale);
             }
         }
 
@@ -3007,34 +3340,20 @@ namespace Iciclecreek.Terminal
             context.FillRectangle(SelectionBrush, rect);
         }
 
-        private void RenderCursor(DrawingContext context, int viewportY, double scale)
+        private void RenderCursor(DrawingContext context, TerminalRenderSnapshot snapshot, double scale)
         {
-            // Only show cursor if terminal wants it visible (controlled by escape sequences)
-            if (!_terminal.CursorVisible)
+            if (!snapshot.Cursor.IsVisible)
                 return;
 
             // Only show cursor if in "on" phase of blink cycle (or not blinking)
             if (!_cursorBlinkOn)
                 return;
 
-            // Get cursor position relative to viewport
-            int cursorX = _terminal.Buffer.X;
-            int cursorY = _terminal.Buffer.Y;
-
-            // The cursor Y is relative to the active screen area, need to check if it's visible
-            // when scrolled. Cursor is at absolute position: Buffer.YBase + Buffer.Y
-            int absoluteCursorY = _terminal.Buffer.YBase + cursorY;
-
-            // Check if cursor is visible in current viewport
-            if (absoluteCursorY < viewportY || absoluteCursorY >= viewportY + _terminal.Rows)
-                return;
-
             // Calculate screen position
-            int screenY = absoluteCursorY - viewportY;
-            double posX = Snap(cursorX * _charWidth, scale);
-            double posY = Snap(screenY * _charHeight, scale);
-            double nextX = Snap((cursorX + 1) * _charWidth, scale);
-            double nextY = Snap((screenY + 1) * _charHeight, scale);
+            double posX = Snap(snapshot.Cursor.X * _charWidth, scale);
+            double posY = Snap(snapshot.Cursor.ScreenY * _charHeight, scale);
+            double nextX = Snap((snapshot.Cursor.X + 1) * _charWidth, scale);
+            double nextY = Snap((snapshot.Cursor.ScreenY + 1) * _charHeight, scale);
             double cellWidth = Math.Max(0, nextX - posX);
             double cellHeight = Math.Max(0, nextY - posY);
 
@@ -3051,22 +3370,18 @@ namespace Iciclecreek.Terminal
                         context.FillRectangle(cursorBrush, new Rect(posX, posY, cellWidth, cellHeight));
 
                         // Draw the character under cursor with inverted colors
-                        var line = _terminal.Buffer.GetLine(absoluteCursorY);
-                        if (line != null && cursorX < line.Length)
-                        {
-                            var cell = line[cursorX];
-                            var charContent = cell.Content ?? " ";
-                            var typeface = new Typeface(FontFamily, FontStyle, FontWeight);
-                            var invertedBrush = cell.GetBackgroundBrush(this.Background);
-                            var formattedText = new FormattedText(
-                                charContent,
-                                CultureInfo.CurrentCulture,
-                                FlowDirection.LeftToRight,
-                                typeface,
-                                FontSize,
-                                invertedBrush);
-                            context.DrawText(formattedText, new Point(posX, posY));
-                        }
+                        var cell = snapshot.Cursor.Cell;
+                        var charContent = cell.Content ?? " ";
+                        var typeface = new Typeface(FontFamily, FontStyle, FontWeight);
+                        var invertedBrush = cell.GetBackgroundBrush(this.Background);
+                        var formattedText = new FormattedText(
+                            charContent,
+                            CultureInfo.CurrentCulture,
+                            FlowDirection.LeftToRight,
+                            typeface,
+                            FontSize,
+                            invertedBrush);
+                        context.DrawText(formattedText, new Point(posX, posY));
                     }
                     else
                     {
@@ -3104,24 +3419,18 @@ namespace Iciclecreek.Terminal
         /// This displays the uncommitted text that the IME is composing, with an underline
         /// to indicate it is not yet committed.
         /// </summary>
-        private void RenderPreeditText(DrawingContext context, int viewportY, double scale)
+        private void RenderPreeditText(DrawingContext context, TerminalRenderSnapshot snapshot, double scale)
         {
             var preeditText = _inputMethodClient?.PreeditText;
             if (string.IsNullOrEmpty(preeditText))
                 return;
 
-            int cursorX = _terminal.Buffer.X;
-            int cursorY = _terminal.Buffer.Y;
-            int absoluteCursorY = _terminal.Buffer.YBase + cursorY;
-
-            // Only render if cursor is visible in current viewport
-            if (absoluteCursorY < viewportY || absoluteCursorY >= viewportY + _terminal.Rows)
+            if (!snapshot.Cursor.IsVisible)
                 return;
 
-            int screenY = absoluteCursorY - viewportY;
-            double posX = Snap(cursorX * _charWidth, scale);
-            double posY = Snap(screenY * _charHeight, scale);
-            double cellHeight = Snap((screenY + 1) * _charHeight, scale) - posY;
+            double posX = Snap(snapshot.Cursor.X * _charWidth, scale);
+            double posY = Snap(snapshot.Cursor.ScreenY * _charHeight, scale);
+            double cellHeight = Snap((snapshot.Cursor.ScreenY + 1) * _charHeight, scale) - posY;
 
             var typeface = new Typeface(FontFamily, FontStyle, FontWeight);
             var foreground = GetValue(ForegroundProperty) ?? Brushes.White;

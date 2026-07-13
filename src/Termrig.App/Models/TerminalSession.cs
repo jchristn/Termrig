@@ -2,7 +2,6 @@ namespace Termrig.App.Models
 {
     using Avalonia.Controls;
     using Iciclecreek.Terminal;
-    using System.Threading;
     using Termrig.Core.Models;
 
     /// <summary>
@@ -61,8 +60,13 @@ namespace Termrig.App.Models
         public bool PreserveConfiguredStartingDirectory { get; set; } = false;
 
         /// <summary>
-        /// Pending debounced scrollback restore save.
+        /// Non-zero when output has changed since the last restore snapshot save.
         /// </summary>
-        public CancellationTokenSource? RestoreSaveDebounce { get; set; } = null;
+        public int RestoreSaveDirty;
+
+        /// <summary>
+        /// Non-zero when a debounced restore snapshot save worker is active.
+        /// </summary>
+        public int RestoreSaveScheduled;
     }
 }
