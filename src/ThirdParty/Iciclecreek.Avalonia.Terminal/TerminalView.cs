@@ -932,7 +932,7 @@ namespace Iciclecreek.Terminal
                 return;
             }
 
-            if (!ShouldRenderNow())
+            if (Dispatcher.UIThread.CheckAccess() && !ShouldRenderNow())
             {
                 _renderInvalidatePending = true;
                 return;
