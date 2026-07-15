@@ -50,7 +50,7 @@ namespace Termrig.App
                     MainWindow main = new MainWindow();
                     _MainWindow = main;
                     desktop.MainWindow = main;
-                    desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
+                    desktop.ShutdownMode = ShutdownMode.OnLastWindowClose;
                     main.Show();
                     splash?.Close();
                     StartCommandServer();
