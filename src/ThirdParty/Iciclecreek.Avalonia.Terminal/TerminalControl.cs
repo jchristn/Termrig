@@ -204,6 +204,17 @@ namespace Iciclecreek.Terminal
         }
 
         /// <summary>
+        /// Focuses the inner terminal immediately when its template is ready.
+        /// </summary>
+        public bool FocusTerminalInput()
+        {
+            if (_terminalView != null && _terminalView.Focus())
+                return true;
+
+            return Focus();
+        }
+
+        /// <summary>
         /// Gets the underlying <see cref="XTerm.Terminal"/> instance.
         /// </summary>
         [Obsolete("Use TerminalControl public APIs instead of mutating the XTerm terminal directly.")]
@@ -349,10 +360,13 @@ namespace Iciclecreek.Terminal
         {
             base.OnGotFocus(e);
 
-            // Only focus the inner TerminalView if it doesn't already have focus
-            if (_terminalView != null && !_terminalView.IsFocused)
+            if (_terminalView == null || _terminalView.IsFocused)
+                return;
+
+            // In normal operation the template is ready, so transfer focus immediately.
+            // Retain the deferred attempt only as a fallback for initial layout.
+            if (!_terminalView.Focus())
             {
-                // Defer until layout is ready
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (_terminalView != null && !_terminalView.IsFocused)

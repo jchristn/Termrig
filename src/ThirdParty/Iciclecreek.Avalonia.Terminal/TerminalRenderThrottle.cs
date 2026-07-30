@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
@@ -6,85 +6,93 @@ using System.Threading.Tasks;
 
 namespace Iciclecreek.Terminal
 {
-
     /// <summary>
-    /// Synchronizes control invalidation to a target frame rate, so all terminals get invalidated together.
+    /// Coalesces terminal invalidations while keeping focused-terminal work ahead of background windows.
     /// </summary>
     public static class TerminalRenderThrottle
     {
-        // Target frame rate (30 FPS = 33 ms)
         private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(33);
+        private static readonly HashSet<Control> ForegroundPending = new();
+        private static readonly HashSet<Control> BackgroundPending = new();
+        private static readonly object Sync = new();
+        private static bool _foregroundScheduled;
+        private static bool _backgroundScheduled;
 
-        // Controls waiting to be invalidated
-        private static readonly HashSet<Control> Pending = new();
-
-        // State
-        private static bool _frameScheduled;
-        private static DateTime _lastFrame = DateTime.MinValue;
-
-        /// <summary>
-        /// Request that a control be invalidated on the next coordinated frame.
-        /// </summary>
-        public static void RequestInvalidate(this Control control)
+        public static void RequestInvalidate(Control control, bool foreground)
         {
             if (control == null)
                 return;
 
-            bool shouldSchedule = false;
-            lock (Pending)
+            bool schedule;
+            lock (Sync)
             {
-                Pending.Add(control);
-
-                if (!_frameScheduled)
+                if (foreground)
                 {
-                    _frameScheduled = true;
-                    shouldSchedule = true;
+                    BackgroundPending.Remove(control);
+                    ForegroundPending.Add(control);
+                    schedule = !_foregroundScheduled;
+                    _foregroundScheduled = true;
+                }
+                else
+                {
+                    if (!ForegroundPending.Contains(control))
+                        BackgroundPending.Add(control);
+                    schedule = !_backgroundScheduled;
+                    _backgroundScheduled = true;
                 }
             }
 
-            if (shouldSchedule)
-                ScheduleFrame();
-        }
-
-        private static void ScheduleFrame()
-        {
-            var now = DateTime.UtcNow;
-            var elapsed = now - _lastFrame;
-
-            // If enough time has passed, flush immediately on the UI thread
-            if (elapsed >= FrameInterval)
+            if (schedule)
             {
-                Dispatcher.UIThread.Post(Flush);
-                return;
+                if (foreground)
+                    Dispatcher.UIThread.Post(FlushForeground, DispatcherPriority.Input);
+                else
+                    _ = ScheduleBackgroundFlushAsync();
             }
-
-            // Otherwise schedule a delayed flush
-            var delay = FrameInterval - elapsed;
-
-            Dispatcher.UIThread.Post(async () =>
-            {
-                await Task.Delay(delay);
-                Flush();
-            });
         }
 
-        private static void Flush()
+        private static async Task ScheduleBackgroundFlushAsync()
+        {
+            await Task.Delay(FrameInterval).ConfigureAwait(false);
+            Dispatcher.UIThread.Post(FlushBackground, DispatcherPriority.Background);
+        }
+
+        private static void FlushForeground()
         {
             List<Control> controls;
-
-            lock (Pending)
+            lock (Sync)
             {
-                _frameScheduled = false;
-                _lastFrame = DateTime.UtcNow;
-
-                if (Pending.Count == 0)
-                    return;
-
-                controls = new List<Control>(Pending);
-                Pending.Clear();
+                controls = new List<Control>(ForegroundPending);
+                ForegroundPending.Clear();
+                _foregroundScheduled = false;
             }
 
-            foreach (var control in controls)
+            foreach (Control control in controls)
+                control.InvalidateVisual();
+        }
+
+        private static void FlushBackground()
+        {
+            List<Control> controls;
+            lock (Sync)
+            {
+                if (ForegroundPending.Count > 0 || _foregroundScheduled)
+                {
+                    _backgroundScheduled = false;
+                    if (BackgroundPending.Count > 0)
+                    {
+                        _backgroundScheduled = true;
+                        _ = ScheduleBackgroundFlushAsync();
+                    }
+                    return;
+                }
+
+                controls = new List<Control>(BackgroundPending);
+                BackgroundPending.Clear();
+                _backgroundScheduled = false;
+            }
+
+            foreach (Control control in controls)
                 control.InvalidateVisual();
         }
     }

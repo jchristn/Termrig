@@ -1,8 +1,12 @@
 namespace Termrig.App.Services
 {
     using System;
+    using System.Collections.Concurrent;
+    using System.Globalization;
     using System.IO;
     using System.Linq;
+    using System.Security.Cryptography;
+    using System.Text;
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using System.Threading;
@@ -36,6 +40,12 @@ namespace Termrig.App.Services
 
         private readonly string _DirectoryPath;
         private readonly JsonSerializerOptions _JsonOptions;
+
+        // Content signature of the last snapshot written per file path, so an unchanged buffer is not
+        // re-serialized and re-written to disk. Excludes the capture timestamp so identical content
+        // dedups correctly. Concurrent because saves for different tabs run on the thread pool.
+        private readonly ConcurrentDictionary<string, string> _LastSavedSignatures =
+            new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
 
         #endregion
 
@@ -93,7 +103,9 @@ namespace Termrig.App.Services
         /// <summary>
         /// Save the buffer snapshot for a profile tab.
         /// </summary>
-        public async Task SaveAsync(
+        /// <returns>True if the snapshot was written; false if it was skipped because the content
+        /// was identical to the previously saved snapshot.</returns>
+        public async Task<bool> SaveAsync(
             TerminalProfile profile,
             TerminalTabProfile tab,
             TerminalBufferSnapshot buffer,
@@ -107,6 +119,18 @@ namespace Termrig.App.Services
             token.ThrowIfCancellationRequested();
 
             string path = GetSnapshotPath(profile, tab);
+
+            // Skip the (potentially large) serialization + disk write when nothing changed since the
+            // last save for this tab. A missing file always forces a write so we cannot silently lose
+            // a snapshot that was deleted out from under us.
+            string signature = ComputeContentSignature(buffer, scrollbackLineLimit, workingDirectory ?? tab.StartingDirectory ?? String.Empty);
+            if (_LastSavedSignatures.TryGetValue(path, out string? previousSignature) &&
+                String.Equals(previousSignature, signature, StringComparison.Ordinal) &&
+                File.Exists(path))
+            {
+                return false;
+            }
+
             string directory = Path.GetDirectoryName(path) ?? _DirectoryPath;
             Directory.CreateDirectory(directory);
 
@@ -147,6 +171,25 @@ namespace Termrig.App.Services
                     }
                 }
             }
+
+            _LastSavedSignatures[path] = signature;
+            return true;
+        }
+
+        /// <summary>
+        /// Computes a stable content signature for a buffer snapshot. Deliberately excludes the
+        /// capture timestamp so that two exports of identical terminal content hash identically.
+        /// </summary>
+        private string ComputeContentSignature(TerminalBufferSnapshot buffer, int scrollbackLineLimit, string workingDirectory)
+        {
+            string header = String.Create(
+                CultureInfo.InvariantCulture,
+                $"v{buffer.SchemaVersion}|{buffer.Columns}x{buffer.Rows}|cur={buffer.CursorColumn},{buffer.CursorRow}|vy={buffer.ViewportY}|by={buffer.BaseY}|alt={buffer.WasAlternateBufferActive}|limit={scrollbackLineLimit}|wd={workingDirectory}|n={buffer.Lines.Count}|");
+
+            using IncrementalHash hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            hasher.AppendData(Encoding.UTF8.GetBytes(header));
+            hasher.AppendData(JsonSerializer.SerializeToUtf8Bytes(buffer.Lines, _JsonOptions));
+            return Convert.ToHexString(hasher.GetHashAndReset());
         }
 
         /// <summary>
@@ -158,7 +201,9 @@ namespace Termrig.App.Services
             ArgumentNullException.ThrowIfNull(tab);
             token.ThrowIfCancellationRequested();
 
-            DeleteFileIfExists(GetSnapshotPath(profile, tab));
+            string path = GetSnapshotPath(profile, tab);
+            _LastSavedSignatures.TryRemove(path, out _);
+            DeleteFileIfExists(path);
             RemoveDirectoryIfEmpty(GetProfileDirectory(profile));
             return Task.CompletedTask;
         }
@@ -172,6 +217,15 @@ namespace Termrig.App.Services
             token.ThrowIfCancellationRequested();
 
             string directory = GetProfileDirectory(profile);
+            string prefix = directory + Path.DirectorySeparatorChar;
+            foreach (string key in _LastSavedSignatures.Keys.ToList())
+            {
+                if (key.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    _LastSavedSignatures.TryRemove(key, out _);
+                }
+            }
+
             if (Directory.Exists(directory))
             {
                 Directory.Delete(directory, true);

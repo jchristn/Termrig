@@ -103,9 +103,14 @@ namespace Termrig.Core.Services
 
             List<ColorScheme> normalized = Normalize(schemes);
             Directory.CreateDirectory(_DirectoryPath);
+            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(normalized, _JsonOptions);
+
+            // Record before writing so the watcher recognizes our own write as an echo (see ConfigWriteRegistry).
+            ConfigWriteRegistry.RecordWrite(FilePath, bytes);
+
             using (FileStream stream = new FileStream(FilePath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
-                await JsonSerializer.SerializeAsync(stream, normalized, _JsonOptions, token).ConfigureAwait(false);
+                await stream.WriteAsync(bytes, token).ConfigureAwait(false);
             }
         }
 

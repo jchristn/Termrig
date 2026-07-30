@@ -199,10 +199,16 @@ namespace Termrig.Core.Services
             token.ThrowIfCancellationRequested();
 
             Directory.CreateDirectory(_DirectoryPath);
+            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(profiles, _JsonOptions);
+
+            // Record before writing so a file-system watcher event that arrives immediately after the
+            // write is recognized as our own echo and does not trigger a full config reload.
+            ConfigWriteRegistry.RecordWrite(FilePath, bytes);
+
             await ExecuteWithFileAccessRetryAsync(async delegate
             {
                 using FileStream stream = new FileStream(FilePath, FileMode.Create, FileAccess.Write, FileShare.None);
-                await JsonSerializer.SerializeAsync(stream, profiles, _JsonOptions, token).ConfigureAwait(false);
+                await stream.WriteAsync(bytes, token).ConfigureAwait(false);
                 return true;
             }, token).ConfigureAwait(false);
         }

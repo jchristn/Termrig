@@ -33,6 +33,9 @@ namespace Termrig.App.Views
         private readonly TerminalRestoreStore _TerminalRestoreStore = new TerminalRestoreStore();
         private readonly List<ColorScheme> _ColorSchemes;
         private readonly List<TerminalSession> _Sessions = new List<TerminalSession>();
+        // Terminal-control -> session index so per-output/per-event handlers resolve their session in
+        // O(1) instead of scanning every tab on each PTY output event.
+        private readonly Dictionary<TerminalControl, TerminalSession> _SessionsByTerminal = new Dictionary<TerminalControl, TerminalSession>();
         private TerminalSession? _SelectedSession = null;
         private TerminalSession? _DraggedSession = null;
         private Control? _DropTargetHeader = null;
@@ -147,6 +150,7 @@ namespace Termrig.App.Views
             AddHandler(TextInputEvent, OnWindowTextInput, RoutingStrategies.Tunnel, true);
             Opened += OnWorkspaceOpened;
             Activated += OnWorkspaceActivated;
+            Deactivated += OnWorkspaceDeactivated;
             Closing += OnWindowClosing;
             DragDrop.SetAllowDrop(TerminalTabHeaders, true);
             DragDrop.AddDragOverHandler(TerminalTabHeaders, OnTabHeadersDragOver);
@@ -171,7 +175,28 @@ namespace Termrig.App.Views
 
         private void OnWorkspaceActivated(object? sender, EventArgs e)
         {
-            ClearAttention(GetSelectedSession());
+            // The window is visible again: resume painting the selected terminal (background tabs
+            // stay paused). Parsing never stopped, so this repaints current state faithfully.
+            UpdateRenderActivation();
+
+            TerminalSession? selectedSession = GetSelectedSession();
+            ClearAttention(selectedSession);
+
+            if (selectedSession == null) return;
+
+            // Restore keyboard focus. A synchronous Focus() during window activation is unreliable:
+            // Avalonia performs its own focus restoration as part of activation, which can run after
+            // (and override) this call, leaving the terminal visually selected but NOT holding keyboard
+            // focus — so it silently ignores typing until the tab is reselected. We focus synchronously
+            // AND retry once activation has settled (Input priority runs after activation focus work),
+            // so the click that brings a workspace/tab forward reliably lands focus in the terminal.
+            FocusTerminal(selectedSession);
+            Dispatcher.UIThread.Post(delegate
+            {
+                if (!IsActive || GetSelectedSession() != selectedSession) return;
+                FocusTerminal(selectedSession);
+                selectedSession.Terminal.RequestRenderInvalidate();
+            }, DispatcherPriority.Input);
         }
 
         private async Task LaunchAllSessionsAsync()
@@ -216,6 +241,7 @@ namespace Termrig.App.Views
             WireTerminalSessionEvents(session);
             int targetIndex = insertIndex.HasValue ? Math.Clamp(insertIndex.Value, 0, _Sessions.Count) : _Sessions.Count;
             _Sessions.Insert(targetIndex, session);
+            _SessionsByTerminal[terminal] = session;
             TerminalTabHeaders.Children.Insert(targetIndex, session.Header);
             TerminalSurface.Children.Add(terminal);
             if (selectTab || _SelectedSession == null)
@@ -248,6 +274,7 @@ namespace Termrig.App.Views
                 TerminalTabHeaders.Children.Remove(session.Header);
                 TerminalSurface.Children.Remove(session.Terminal);
                 _Sessions.Remove(session);
+                _SessionsByTerminal.Remove(session.Terminal);
                 UnwireTerminalSessionEvents(session);
                 if (wasSelected)
                 {
@@ -355,13 +382,14 @@ namespace Termrig.App.Views
             }
 
             _Sessions.Clear();
+            _SessionsByTerminal.Clear();
         }
 
         private void OnTerminalProcessExited(object? sender, ProcessExitedEventArgs e)
         {
             if (!(sender is TerminalControl terminal)) return;
 
-            TerminalSession? session = _Sessions.FirstOrDefault(item => item.Terminal == terminal);
+            TerminalSession? session = GetSessionForTerminal(terminal);
             if (session == null) return;
             SaveRestoreSnapshotNow(session);
             if (session.IsClosingByTermrig) return;
@@ -907,6 +935,7 @@ namespace Termrig.App.Views
             UnwireTerminalSessionEvents(session);
 
             _Sessions.Remove(session);
+            _SessionsByTerminal.Remove(session.Terminal);
             TerminalTabHeaders.Children.Remove(session.Header);
             TerminalSurface.Children.Remove(session.Terminal);
             QueueTerminalKill(session);
@@ -939,10 +968,11 @@ namespace Termrig.App.Views
             _SelectedSession = session;
             session.HasAttention = false;
 
+            bool renderActive = IsWorkspaceRenderActive();
             foreach (TerminalSession item in _Sessions)
             {
                 bool selected = item == session;
-                item.Terminal.IsRenderPaused = !selected;
+                item.Terminal.IsRenderPaused = ShouldPauseRendering(renderActive, selected);
                 item.Terminal.Opacity = selected ? 1 : 0;
                 item.Terminal.IsHitTestVisible = selected;
                 item.Terminal.SetValue(Panel.ZIndexProperty, selected ? 1 : 0);
@@ -950,6 +980,48 @@ namespace Termrig.App.Views
 
             UpdateTabHeaderStates();
             FocusTerminal(session);
+        }
+
+        private void OnWorkspaceDeactivated(object? sender, EventArgs e)
+        {
+            // The window lost activation (another window focused, or this one minimized). Pause all
+            // of its terminals so background/minimized workspaces stop competing for the shared UI
+            // thread. Only rendering is deferred; the PTY keeps parsing so no output is lost.
+            UpdateRenderActivation();
+        }
+
+        /// <summary>
+        /// Whether this workspace's terminals should render right now. A window that is inactive or
+        /// minimized cannot be seen, so its terminals may pause painting until it is shown again.
+        /// </summary>
+        private bool IsWorkspaceRenderActive()
+        {
+            return IsActive && WindowState != WindowState.Minimized;
+        }
+
+        /// <summary>
+        /// Applies the current activation state to every terminal's <c>IsRenderPaused</c> flag.
+        /// </summary>
+        private void UpdateRenderActivation()
+        {
+            bool renderActive = IsWorkspaceRenderActive();
+            TerminalSession? selected = _SelectedSession;
+            foreach (TerminalSession item in _Sessions)
+            {
+                item.Terminal.IsRenderPaused = ShouldPauseRendering(renderActive, item == selected);
+            }
+        }
+
+        /// <summary>
+        /// Decides whether a terminal should defer painting: a terminal renders only when its window
+        /// is visible/active <em>and</em> it is the selected tab; otherwise it pauses.
+        /// </summary>
+        /// <param name="windowRenderActive">Whether the owning window is active and not minimized.</param>
+        /// <param name="isSelectedTab">Whether the terminal is the selected tab in its window.</param>
+        /// <returns>True to pause rendering; false to render.</returns>
+        internal static bool ShouldPauseRendering(bool windowRenderActive, bool isSelectedTab)
+        {
+            return !windowRenderActive || !isSelectedTab;
         }
 
         private void FocusSelectedTerminal()
@@ -1024,12 +1096,12 @@ namespace Termrig.App.Views
         {
             if (sender is TerminalControl terminal)
             {
-                return _Sessions.FirstOrDefault(item => item.Terminal == terminal);
+                return GetSessionForTerminal(terminal);
             }
 
             if (e.Source is TerminalControl sourceTerminal)
             {
-                return _Sessions.FirstOrDefault(item => item.Terminal == sourceTerminal);
+                return GetSessionForTerminal(sourceTerminal);
             }
 
             if (e.Source is Control sourceControl)
@@ -1037,11 +1109,20 @@ namespace Termrig.App.Views
                 TerminalControl? parentTerminal = sourceControl.FindAncestorOfType<TerminalControl>();
                 if (parentTerminal != null)
                 {
-                    return _Sessions.FirstOrDefault(item => item.Terminal == parentTerminal);
+                    return GetSessionForTerminal(parentTerminal);
                 }
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Resolves the session that owns a terminal control in O(1), or null if unknown.
+        /// </summary>
+        private TerminalSession? GetSessionForTerminal(TerminalControl? terminal)
+        {
+            if (terminal == null) return null;
+            return _SessionsByTerminal.TryGetValue(terminal, out TerminalSession? session) ? session : null;
         }
 
         private void MarkAttention(TerminalSession session)
@@ -1079,17 +1160,22 @@ namespace Termrig.App.Views
         {
             if (!(sender is TerminalControl terminal)) return;
 
-            TerminalSession? session = _Sessions.FirstOrDefault(item => item.Terminal == terminal);
+            TerminalSession? session = GetSessionForTerminal(terminal);
             if (session == null) return;
             QueueRestoreSnapshotSave(session);
         }
 
         private static void FocusTerminal(TerminalSession session)
         {
-            Dispatcher.UIThread.Post(delegate
+            if (Dispatcher.UIThread.CheckAccess())
             {
-                session.Terminal.Focus();
-            }, DispatcherPriority.Input);
+                session.Terminal.FocusTerminalInput();
+                return;
+            }
+
+            Dispatcher.UIThread.Post(
+                () => session.Terminal.FocusTerminalInput(),
+                DispatcherPriority.Input);
         }
 
         private static async Task PasteIntoTerminalAsync(TerminalControl terminal)

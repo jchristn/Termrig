@@ -112,8 +112,21 @@ namespace Iciclecreek.Terminal
         private bool _suppressCleanupOnDetach;
 
         private sealed record CachedTextRun(FormattedText Text, int StartX, int CellCount, IBrush Background);
-        private sealed record CachedLineRender(ulong Fingerprint, List<CachedTextRun> TextRuns);
-        private sealed record RenderLineSnapshot(int AbsoluteY, int ScreenY, BufferLine Line);
+        // Cached render of one line. Validity is decided in O(1) by comparing the source line's
+        // identity and Version (plus blink phase for lines that contain blinking cells), instead of
+        // hashing every cell each frame.
+        private sealed record CachedLineRender(BufferLine SourceLine, long Version, bool HasBlink, bool BlinkOn, List<CachedTextRun> TextRuns);
+        // RenderLine carries a defensive clone used only on a cache miss; on a hit it is null and
+        // CachedRuns are drawn directly, so no per-frame clone is allocated for unchanged lines.
+        // SourceLine is the live buffer line, retained solely as an identity token for the cache.
+        private sealed record RenderLineSnapshot(
+            int AbsoluteY,
+            int ScreenY,
+            long Version,
+            LineAttribute LineAttribute,
+            BufferLine SourceLine,
+            BufferLine? RenderLine,
+            List<CachedTextRun>? CachedRuns);
         private sealed record SelectionRangeSnapshot(int ScreenY, int StartX, int EndX);
         private sealed record CursorSnapshot(
             bool IsVisible,
@@ -656,7 +669,7 @@ namespace Iciclecreek.Terminal
                 if (SetAndRaise(IsRenderPausedProperty, ref _isRenderPaused, value) && !value && _renderInvalidatePending)
                 {
                     _renderInvalidatePending = false;
-                    TerminalRenderThrottle.RequestInvalidate(this);
+                    TerminalRenderThrottle.RequestInvalidate(this, Volatile.Read(ref _focusedForRendering) != 0);
                 }
             }
         }
@@ -919,7 +932,8 @@ namespace Iciclecreek.Terminal
                 BufferLine? line = _terminal.Buffer.GetLine(index);
                 if (line != null)
                 {
-                    line.Cache = null;
+                    // Bump the line version so any cached render for it is discarded on next paint.
+                    line.Invalidate();
                 }
             }
         }
@@ -944,7 +958,7 @@ namespace Iciclecreek.Terminal
                 return;
             }
 
-            TerminalRenderThrottle.RequestInvalidate(this);
+            TerminalRenderThrottle.RequestInvalidate(this, true);
         }
 
         private void ScheduleBackgroundRenderInvalidate()
@@ -967,7 +981,7 @@ namespace Iciclecreek.Terminal
                 {
                     if (ShouldRenderNow())
                     {
-                        TerminalRenderThrottle.RequestInvalidate(this);
+                        TerminalRenderThrottle.RequestInvalidate(this, false);
                     }
                     else
                     {
@@ -1341,18 +1355,9 @@ namespace Iciclecreek.Terminal
             if (CursorBlink && IsFocused)
             {
                 _cursorBlinkOn = !_cursorBlinkOn;
-                lock (_terminalLock)
-                {
-                    for (int y = 0; y < _terminal.Rows; y++)
-                    {
-                        var line = _terminal.Buffer.GetLine(y);
-                        if (line != null && line.Any(cell => cell.Attributes.IsBlink()))
-                        {
-                            line.Cache = null;
-                        }
-                    }
-                }
-
+                // No buffer scan needed: the render cache keys blink-bearing lines on the blink
+                // phase (CachedLineRender.BlinkOn), so a plain invalidate rebuilds exactly the
+                // affected lines and leaves every other line's cache intact.
                 this.RequestInvalidate();
             }
         }
@@ -1615,8 +1620,13 @@ namespace Iciclecreek.Terminal
         {
             base.OnPointerPressed(e);
 
-            // Request focus when clicked
-            Focus();
+            // Request focus when clicked. If the click is also what activated the window, the
+            // synchronous Focus() can lose to Avalonia's activation focus restoration, so retry once
+            // the activation has settled (Input priority) to guarantee the terminal takes input.
+            if (!Focus())
+            {
+                Dispatcher.UIThread.Post(() => Focus(), DispatcherPriority.Input);
+            }
 
             try
             {
@@ -2430,8 +2440,20 @@ namespace Iciclecreek.Terminal
                 // Subscribe to process exit event for reliable exit detection
                 _ptyConnection.ProcessExited += OnPtyProcessExited;
 
-                // Start reading from the PTY connection
-                _ = Task.Run(async () => await ReadPtyOutputAsync(_processCts.Token), _processCts.Token);
+                // Start reading from the PTY on a DEDICATED thread rather than the thread pool.
+                // The ConPTY connection is backed by an anonymous pipe, which cannot do overlapped
+                // (real async) I/O, so a blocking read parks whatever thread it runs on. On the thread
+                // pool that means every open terminal permanently consumes a pool thread — even when
+                // idle — starving keystroke writes and process launches once enough terminals are open
+                // (the "low CPU but laggy input as more workspaces open" symptom). A dedicated thread
+                // keeps the pool free.
+                var readToken = _processCts.Token;
+                var readThread = new Thread(() => ReadPtyOutputLoop(readToken))
+                {
+                    IsBackground = true,
+                    Name = "TermrigPtyReader"
+                };
+                readThread.Start();
             }
             catch (Exception ex)
             {
@@ -2480,23 +2502,37 @@ namespace Iciclecreek.Terminal
             await LaunchProcess();
         }
 
-        private async Task ReadPtyOutputAsync(CancellationToken cancellationToken)
+        private void ReadPtyOutputLoop(CancellationToken cancellationToken)
         {
+            PtyRecording? ptyRecording = null;
+            var connection = _ptyConnection;
             try
             {
                 var buffer = new byte[0x40000];
                 var decoder = Utf8NoBom.GetDecoder();
                 var charBuffer = new char[Utf8NoBom.GetMaxCharCount(buffer.Length)];
-                await using PtyRecording? ptyRecording = OpenPtyRecording();
-                while (!cancellationToken.IsCancellationRequested && _ptyConnection != null)
+                ptyRecording = OpenPtyRecording();
+                while (!cancellationToken.IsCancellationRequested && connection != null)
                 {
-                    var bytesRead = await _ptyConnection.ReaderStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+                    int bytesRead;
+                    try
+                    {
+                        // Synchronous blocking read on this dedicated thread (see LaunchProcess for why).
+                        bytesRead = connection.ReaderStream.Read(buffer, 0, buffer.Length);
+                    }
+                    catch (Exception) when (cancellationToken.IsCancellationRequested || _processExitHandled != 0)
+                    {
+                        // Stream closed as part of shutdown / process exit — expected.
+                        break;
+                    }
+
                     if (bytesRead == 0)
                     {
                         // Process has exited — fallback in case OnPtyProcessExited didn't fire first.
                         if (Interlocked.Exchange(ref _processExitHandled, 1) == 0)
                         {
-                            var exitCode = _ptyConnection?.ExitCode ?? 0;
+                            int exitCode = 0;
+                            try { exitCode = connection.ExitCode; } catch { }
 
                             lock (_terminalLock)
                             {
@@ -2513,15 +2549,15 @@ namespace Iciclecreek.Terminal
                     if (ptyRecording != null)
                     {
                         ptyRecording.AddChunk(bytesRead);
-                        await ptyRecording.Stream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                        ptyRecording.Stream.Write(buffer, 0, bytesRead);
                     }
 
                     int charsRead = decoder.GetChars(buffer, 0, bytesRead, charBuffer, 0, flush: false);
-                    var output = new string(charBuffer, 0, charsRead);
-                    if (output.Length == 0)
+                    if (charsRead == 0)
                         continue;
+                    var output = new string(charBuffer, 0, charsRead);
 
-                    var writeResult = await WritePtyOutputToTerminalAsync(output, cancellationToken).ConfigureAwait(false);
+                    var writeResult = WritePtyOutputToTerminal(output, cancellationToken);
 
                     if (writeResult.ScrollChanged)
                     {
@@ -2561,9 +2597,22 @@ namespace Iciclecreek.Terminal
                 this.RequestInvalidate();
                 DispatchOutputReceived();
             }
+            finally
+            {
+                if (ptyRecording != null)
+                {
+                    try
+                    {
+                        ptyRecording.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
         }
 
-        private async Task<(bool ScrollChanged, int OldMax, int OldY, int NewMax, int NewY)> WritePtyOutputToTerminalAsync(string output, CancellationToken cancellationToken)
+        private (bool ScrollChanged, int OldMax, int OldY, int NewMax, int NewY) WritePtyOutputToTerminal(string output, CancellationToken cancellationToken)
         {
             int oldMax = 0;
             int oldY = 0;
@@ -2574,7 +2623,8 @@ namespace Iciclecreek.Terminal
 
             for (int offset = 0; offset < output.Length; offset += MaxPtyWriteChunkLength)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                if (cancellationToken.IsCancellationRequested)
+                    break;
                 int length = Math.Min(MaxPtyWriteChunkLength, output.Length - offset);
                 string chunk = length == output.Length ? output : output.Substring(offset, length);
 
@@ -2612,11 +2662,6 @@ namespace Iciclecreek.Terminal
                 {
                     if (lockTaken)
                         Monitor.Exit(_terminalLock);
-                }
-
-                if (offset + length < output.Length)
-                {
-                    await Task.Yield();
                 }
             }
 
@@ -2932,12 +2977,13 @@ namespace Iciclecreek.Terminal
                     var endYPos = Snap((line.ScreenY + 1) * _charHeight, scale);
                     var rowHeight = Math.Max(0, endYPos - startYPos);
 
-                    LineAttribute lineAttr = line.Line.LineAttribute;
+                    LineAttribute lineAttr = line.LineAttribute;
                     if (lineAttr == LineAttribute.DoubleWidth ||
                         lineAttr == LineAttribute.DoubleHeightTop ||
                         lineAttr == LineAttribute.DoubleHeightBottom)
                     {
-                        RenderDoubleWidthLine(context, line.Line, snapshot, line.ScreenY, startYPos, rowHeight, lineAttr, scale);
+                        // Double-width/height lines never use the run cache, so a clone is always present.
+                        RenderDoubleWidthLine(context, line.RenderLine!, snapshot, line.ScreenY, startYPos, rowHeight, lineAttr, scale);
                     }
                     else
                     {
@@ -2973,6 +3019,8 @@ namespace Iciclecreek.Terminal
                 int startLine = viewportY;
                 int endLine = Math.Min(_terminal.Buffer.Length, startLine + viewportLines);
                 var lines = new List<RenderLineSnapshot>(Math.Max(0, endLine - startLine));
+                bool reverseVideo = _terminal.ReverseVideo;
+                bool blinkOn = _cursorBlinkOn;
 
                 for (int y = startLine; y < endLine; y++)
                 {
@@ -2980,7 +3028,28 @@ namespace Iciclecreek.Terminal
                     if (line == null)
                         continue;
 
-                    lines.Add(new RenderLineSnapshot(y, y - startLine, line.Clone()));
+                    long version = line.Version;
+                    LineAttribute attr = line.LineAttribute;
+                    bool isDoubleLine = attr == LineAttribute.DoubleWidth ||
+                                        attr == LineAttribute.DoubleHeightTop ||
+                                        attr == LineAttribute.DoubleHeightBottom;
+
+                    // A cache hit requires the same buffer line object (identity guards against a
+                    // circular-buffer slot being reused for a different line) at the same version,
+                    // and — for lines with blink cells — the same blink phase.
+                    List<CachedTextRun>? cachedRuns = null;
+                    if (!reverseVideo && !isDoubleLine &&
+                        _lineRenderCache.TryGetValue(y, out CachedLineRender? cached) &&
+                        ReferenceEquals(cached.SourceLine, line) &&
+                        cached.Version == version &&
+                        (!cached.HasBlink || cached.BlinkOn == blinkOn))
+                    {
+                        cachedRuns = cached.TextRuns;
+                    }
+
+                    // Only clone when we must actually read cells (cache miss / uncacheable line).
+                    BufferLine? renderLine = cachedRuns != null ? null : line.Clone();
+                    lines.Add(new RenderLineSnapshot(y, y - startLine, version, attr, line, renderLine, cachedRuns));
                 }
 
                 CursorSnapshot cursor = CreateCursorSnapshotUnderLock(viewportY);
@@ -3079,21 +3148,15 @@ namespace Iciclecreek.Terminal
         /// </summary>
         private void RenderNormalLine(DrawingContext context, RenderLineSnapshot lineSnapshot, TerminalRenderSnapshot snapshot, double startYPos, double rowHeight, double scale)
         {
-            BufferLine line = lineSnapshot.Line;
-            ulong fingerprint = GetLineRenderFingerprint(line);
             double rowWidth = Snap(snapshot.Cols * _charWidth, scale);
             context.FillRectangle(this.Background, new Rect(0, startYPos, Math.Max(0, rowWidth), rowHeight));
 
-            // Try to use cached text runs for this line (but not when ReverseVideo mode is active as it affects all cells)
-            _lineRenderCache.TryGetValue(lineSnapshot.AbsoluteY, out CachedLineRender? cachedLine);
-            if (snapshot.ReverseVideo)
-                cachedLine = null;
-
-            if (cachedLine != null && cachedLine.Fingerprint == fingerprint)
+            // Cache hit: the snapshot already validated the cached runs under the lock, so redraw
+            // them at their recomputed screen positions without touching cell data.
+            if (lineSnapshot.CachedRuns != null)
             {
-                foreach (var run in cachedLine.TextRuns)
+                foreach (var run in lineSnapshot.CachedRuns)
                 {
-                    // Recalculate position based on current screen row
                     var startX = Snap(run.StartX * _charWidth, scale);
                     var endX = Snap((run.StartX + run.CellCount) * _charWidth, scale);
                     var rect = new Rect(startX, startYPos, Math.Max(0, endX - startX), rowHeight);
@@ -3105,8 +3168,13 @@ namespace Iciclecreek.Terminal
                 return;
             }
 
-            // Build and cache text runs for this line
+            BufferLine? line = lineSnapshot.RenderLine;
+            if (line == null)
+                return;
+
+            // Build (and, unless reverse video is active, cache) text runs for this line.
             var textRuns = new List<CachedTextRun>();
+            bool hasBlink = false;
 
             for (int x = 0; x < snapshot.Cols;)
             {
@@ -3164,8 +3232,14 @@ namespace Iciclecreek.Terminal
                 // Apply terminal-wide reverse video mode (DECSCNM)
                 if (snapshot.ReverseVideo)
                     (foreground, background) = (background, foreground);
-                if (cell.Attributes.IsBlink() && this._cursorBlinkOn)
-                    (foreground, background) = (background, foreground);
+                if (cell.Attributes.IsBlink())
+                {
+                    // This line's appearance depends on the blink phase, so its cache entry must be
+                    // invalidated when the phase toggles (tracked via HasBlink/BlinkOn below).
+                    hasBlink = true;
+                    if (this._cursorBlinkOn)
+                        (foreground, background) = (background, foreground);
+                }
 
                 var typeface = new Typeface(FontFamily, cell.GetFontStyle(), cell.GetFontWeight());
                 var formattedText = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, FontSize, foreground);
@@ -3181,37 +3255,17 @@ namespace Iciclecreek.Terminal
                 context.DrawText(formattedText, position);
             }
 
-            // Cache the text runs (but not when ReverseVideo mode is active)
+            // Cache the text runs (but not when ReverseVideo mode is active, since it inverts every
+            // cell globally and is intentionally left uncached).
             if (!snapshot.ReverseVideo)
-                _lineRenderCache[lineSnapshot.AbsoluteY] = new CachedLineRender(fingerprint, textRuns);
-        }
-
-        private ulong GetLineRenderFingerprint(BufferLine line)
-        {
-            const ulong offset = 14695981039346656037UL;
-            const ulong prime = 1099511628211UL;
-            ulong hash = offset;
-
-            void Add(ulong value)
             {
-                hash ^= value;
-                hash *= prime;
+                _lineRenderCache[lineSnapshot.AbsoluteY] = new CachedLineRender(
+                    lineSnapshot.SourceLine,
+                    lineSnapshot.Version,
+                    hasBlink,
+                    this._cursorBlinkOn,
+                    textRuns);
             }
-
-            Add((ulong)line.Length);
-            Add((ulong)line.LineAttribute);
-            Add(_cursorBlinkOn ? 1UL : 0UL);
-
-            int limit = line.Length;
-            for (int x = 0; x < limit; x++)
-            {
-                BufferCell cell = line[x];
-                Add((ulong)cell.Width);
-                Add((ulong)cell.Attributes.GetHashCode());
-                Add((ulong)(cell.Content?.GetHashCode(StringComparison.Ordinal) ?? 0));
-            }
-
-            return hash;
         }
 
         /// <summary>

@@ -4,6 +4,7 @@ namespace Termrig.App
     using System;
     using System.Diagnostics;
     using System.Linq;
+    using System.Threading;
     using Termrig.App.Services;
 
     /// <summary>
@@ -27,6 +28,13 @@ namespace Termrig.App
         [STAThread]
         public static void Main(string[] args)
         {
+            // Ensure the thread pool starts with enough ready threads that a burst of terminal
+            // writes / process launches never has to wait for the pool's slow (~1-2/sec) thread
+            // injection. PTY *reads* run on dedicated threads (see TerminalView), so this only needs
+            // to cover the short-lived write/continuation work.
+            ThreadPool.GetMinThreads(out int minWorker, out int minIo);
+            ThreadPool.SetMinThreads(Math.Max(minWorker, 32), Math.Max(minIo, 32));
+
             if (CommandLineCommand.TryParse(args, out CommandLineCommand? command) &&
                 command != null &&
                 !args.Contains(DetachedChildArgument))

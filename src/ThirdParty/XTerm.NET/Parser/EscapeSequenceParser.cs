@@ -279,11 +279,43 @@ public class EscapeSequenceParser
     }
 
     /// <summary>
+    /// Interned single-character strings for the printable ASCII range (0x20-0x7E).
+    /// The overwhelming majority of terminal output is ASCII text, so reusing these
+    /// immutable strings avoids a heap allocation per printed glyph.
+    /// </summary>
+    private static readonly string[] AsciiPrintCache = BuildAsciiPrintCache();
+
+    private static string[] BuildAsciiPrintCache()
+    {
+        var cache = new string[128];
+        for (int code = 0; code < cache.Length; code++)
+        {
+            cache[code] = char.ConvertFromUtf32(code);
+        }
+
+        return cache;
+    }
+
+    /// <summary>
+    /// Returns the string representation of a printable code point, reusing a cached
+    /// instance for ASCII so the common path allocates nothing.
+    /// </summary>
+    internal static string GetPrintString(int code)
+    {
+        if ((uint)code < (uint)AsciiPrintCache.Length)
+        {
+            return AsciiPrintCache[code];
+        }
+
+        return char.ConvertFromUtf32(code);
+    }
+
+    /// <summary>
     /// Raises the Print event.
     /// </summary>
     protected virtual void OnPrint(int code)
     {
-        Print?.Invoke(this, new PrintEventArgs(char.ConvertFromUtf32(code)));
+        Print?.Invoke(this, new PrintEventArgs(GetPrintString(code)));
     }
 
     /// <summary>

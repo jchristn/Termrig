@@ -13,8 +13,17 @@ public class BufferLine : IEnumerable<BufferCell>
     private int _length;
     private bool _isWrapped;
     private LineAttribute _lineAttribute;
+    private long _version;
 
     public int Length => _length;
+
+    /// <summary>
+    /// Monotonically increasing token bumped whenever the line's rendered content changes.
+    /// Consumers can compare this (together with the line's identity) to detect, in O(1),
+    /// whether a cached render for this line is still valid, avoiding a per-cell content scan.
+    /// A value of 0 denotes a pristine, never-mutated (all-spaces) line.
+    /// </summary>
+    public long Version => _version;
 
     public bool IsWrapped
     {
@@ -32,8 +41,27 @@ public class BufferLine : IEnumerable<BufferCell>
         set
         {
             _lineAttribute = value;
-            Cache = null;
+            MarkDirty();
         }
+    }
+
+    /// <summary>
+    /// Clears the render cache and advances <see cref="Version"/> to signal that this line's
+    /// rendered appearance has changed and any cached render must be rebuilt.
+    /// </summary>
+    private void MarkDirty()
+    {
+        Cache = null;
+        _version++;
+    }
+
+    /// <summary>
+    /// Forces this line to be treated as changed on the next render without mutating its cells.
+    /// Used for appearance-only invalidations (e.g. blink phase toggles, cache clears).
+    /// </summary>
+    public void Invalidate()
+    {
+        MarkDirty();
     }
 
     /// <summary>
@@ -78,7 +106,7 @@ public class BufferLine : IEnumerable<BufferCell>
             if (index >= 0 && index < _length)
             {
                 _cells[index] = value;
-                Cache = null;
+                MarkDirty();
             }
         }
     }
@@ -91,7 +119,7 @@ public class BufferLine : IEnumerable<BufferCell>
         if (index >= 0 && index < _length)
         {
             _cells[index] = cell;
-            Cache = null;
+            MarkDirty();
         }
     }
 
@@ -129,7 +157,7 @@ public class BufferLine : IEnumerable<BufferCell>
             Array.Copy(_cells, newCells, cols);
             _cells = newCells;
         }
-        Cache = null;
+        MarkDirty();
         _length = cols;
     }
 
@@ -145,7 +173,7 @@ public class BufferLine : IEnumerable<BufferCell>
         {
             _cells[i] = fillCell;
         }
-        Cache = null;
+        MarkDirty();
     }
 
     /// <summary>
@@ -173,7 +201,7 @@ public class BufferLine : IEnumerable<BufferCell>
                 }
             }
         }
-        Cache = null;
+        MarkDirty();
     }
 
     /// <summary>
@@ -225,6 +253,7 @@ public class BufferLine : IEnumerable<BufferCell>
             newLine._cells[i] = _cells[i];
         }
         newLine.Cache = this.Cache;
+        newLine._version = _version;
         return newLine;
     }
 
@@ -246,6 +275,9 @@ public class BufferLine : IEnumerable<BufferCell>
         _isWrapped = line._isWrapped;
         _lineAttribute = line._lineAttribute;
         this.Cache = line.Cache;
+        // Content was replaced wholesale; advance the version so any render cache keyed to
+        // this line (and its previous version) is treated as stale.
+        _version++;
     }
 
     public IEnumerator<BufferCell> GetEnumerator()

@@ -556,12 +556,20 @@ namespace Termrig.App.Views
             if (!IsManagedConfigAsset(e.FullPath))
                 return;
 
+            // Ignore change notifications that are just echoes of this app's own writes; otherwise
+            // routine workspace-side saves would trigger a full config reload feedback loop.
+            if (ConfigWriteRegistry.IsEchoOfLastWrite(e.FullPath))
+                return;
+
             ScheduleConfigAssetReload();
         }
 
         private void OnConfigAssetRenamed(object sender, RenamedEventArgs e)
         {
             if (!IsManagedConfigAsset(e.FullPath) && !IsManagedConfigAsset(e.OldFullPath))
+                return;
+
+            if (ConfigWriteRegistry.IsEchoOfLastWrite(e.FullPath))
                 return;
 
             ScheduleConfigAssetReload();
