@@ -215,6 +215,13 @@ namespace Iciclecreek.Terminal
         }
 
         /// <summary>
+        /// Whether keyboard focus currently rests on the terminal input surface. Callers use this to
+        /// detect when Avalonia's window-activation focus restoration has moved focus away from the
+        /// terminal so they can re-assert it.
+        /// </summary>
+        public bool IsTerminalInputFocused => _terminalView?.IsFocused ?? IsFocused;
+
+        /// <summary>
         /// Gets the underlying <see cref="XTerm.Terminal"/> instance.
         /// </summary>
         [Obsolete("Use TerminalControl public APIs instead of mutating the XTerm terminal directly.")]

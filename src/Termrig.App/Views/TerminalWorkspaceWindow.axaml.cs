@@ -177,26 +177,60 @@ namespace Termrig.App.Views
         {
             // The window is visible again: resume painting the selected terminal (background tabs
             // stay paused). Parsing never stopped, so this repaints current state faithfully.
-            UpdateRenderActivation();
+            // NOTE: WindowBase.HandleActivated raises Activated (this handler) and only sets
+            // IsActive = true AFTERWARD, so IsActive is still false here. We must treat the window as
+            // active explicitly; otherwise the selected terminal stays paused until the next tab switch,
+            // leaving a blank terminal (that still accepts input) on first open / re-activation.
+            UpdateRenderActivation(assumeActive: true);
 
             TerminalSession? selectedSession = GetSelectedSession();
             ClearAttention(selectedSession);
 
             if (selectedSession == null) return;
 
-            // Restore keyboard focus. A synchronous Focus() during window activation is unreliable:
-            // Avalonia performs its own focus restoration as part of activation, which can run after
-            // (and override) this call, leaving the terminal visually selected but NOT holding keyboard
-            // focus — so it silently ignores typing until the tab is reselected. We focus synchronously
-            // AND retry once activation has settled (Input priority runs after activation focus work),
-            // so the click that brings a workspace/tab forward reliably lands focus in the terminal.
+            // Restore keyboard focus. A synchronous Focus() during window activation is futile:
+            // WindowBase.HandleActivated raises Activated (this handler) and THEN synchronously calls
+            // FocusManager.SetFocusScope, which restores the scope's remembered focused element and
+            // overwrites anything we focus here. Worse, alt-tabbing into the window delivers a native
+            // WM_SETFOCUS after WM_ACTIVATE whose restoration can run after a single deferred retry —
+            // so the terminal ends up visually selected but NOT holding keyboard focus, silently
+            // ignoring typing until the tab is reselected. (A mouse click is rescued by the pointer-
+            // press focus retry; alt-tab has no such follow-up event.) We therefore re-assert focus
+            // across the activation settle window, stopping as soon as the terminal holds focus so we
+            // never fight a legitimate later focus move.
             FocusTerminal(selectedSession);
+            ReassertActivationFocus(selectedSession, DispatcherPriority.Input, remainingAttempts: 3);
+        }
+
+        /// <summary>
+        /// Re-asserts keyboard focus on the given session's terminal after window activation, retrying
+        /// across dispatcher turns until the terminal actually holds focus (or attempts run out). This
+        /// defeats Avalonia's activation focus restoration and any late WM_SETFOCUS-driven restore that
+        /// would otherwise steal focus from the selected terminal on alt-tab.
+        /// </summary>
+        private void ReassertActivationFocus(TerminalSession session, DispatcherPriority priority, int remainingAttempts)
+        {
             Dispatcher.UIThread.Post(delegate
             {
-                if (!IsActive || GetSelectedSession() != selectedSession) return;
-                FocusTerminal(selectedSession);
-                selectedSession.Terminal.RequestRenderInvalidate();
-            }, DispatcherPriority.Input);
+                // Bail if the window deactivated again or the user switched tabs in the meantime.
+                if (!IsActive || GetSelectedSession() != session) return;
+
+                if (session.Terminal.IsTerminalInputFocused)
+                {
+                    session.Terminal.RequestRenderInvalidate();
+                    return;
+                }
+
+                FocusTerminal(session);
+                session.Terminal.RequestRenderInvalidate();
+
+                // Focus may not stick yet if a restoration message is still pending; try again on a
+                // later, lower-priority turn so we run after it. Self-terminates once focus lands.
+                if (remainingAttempts > 1)
+                {
+                    ReassertActivationFocus(session, DispatcherPriority.Background, remainingAttempts - 1);
+                }
+            }, priority);
         }
 
         private async Task LaunchAllSessionsAsync()
@@ -994,17 +1028,23 @@ namespace Termrig.App.Views
         /// Whether this workspace's terminals should render right now. A window that is inactive or
         /// minimized cannot be seen, so its terminals may pause painting until it is shown again.
         /// </summary>
-        private bool IsWorkspaceRenderActive()
+        /// <param name="assumeActive">
+        /// Treat the window as active regardless of <see cref="Window.IsActive"/>. Required when called
+        /// from the <c>Activated</c> handler, because Avalonia raises that event before it sets
+        /// <c>IsActive = true</c>.
+        /// </param>
+        private bool IsWorkspaceRenderActive(bool assumeActive = false)
         {
-            return IsActive && WindowState != WindowState.Minimized;
+            return (assumeActive || IsActive) && WindowState != WindowState.Minimized;
         }
 
         /// <summary>
         /// Applies the current activation state to every terminal's <c>IsRenderPaused</c> flag.
         /// </summary>
-        private void UpdateRenderActivation()
+        /// <param name="assumeActive">See <see cref="IsWorkspaceRenderActive(bool)"/>.</param>
+        private void UpdateRenderActivation(bool assumeActive = false)
         {
-            bool renderActive = IsWorkspaceRenderActive();
+            bool renderActive = IsWorkspaceRenderActive(assumeActive);
             TerminalSession? selected = _SelectedSession;
             foreach (TerminalSession item in _Sessions)
             {
