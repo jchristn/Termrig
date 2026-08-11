@@ -205,14 +205,32 @@ public class InputHandler
         if (!_buffer.IsPendingWrap)
             return;
 
-        ClearPendingWrapState();
+        // Any deferred trailing spaces have already been flushed by the caller
+        // (Print) before CommitPendingWrap runs, so this is a plain clear.
+        DiscardPendingWrapState();
         if (_terminal.Options.Wraparound)
         {
             WrapToNextLine();
         }
     }
 
+    // In-line operations (erase, insert/delete, scroll-region edits, mode
+    // changes) resolve pending wrap by MATERIALIZING any deferred trailing
+    // spaces through the normal autowrap path. Full-screen TUIs (for example
+    // mux) position content by padding with spaces instead of emitting explicit
+    // cursor motion, so those spaces carry real cursor position and must not be
+    // dropped when an erase/edit sequence arrives before the next printable.
     internal void ClearPendingWrapState()
+    {
+        FlushPendingWrapSpaces();
+        _buffer.ClearPendingWrap();
+    }
+
+    // Line-ending motions (CR, LF/VT/FF, IND, RI, NEL) and buffer resets resolve
+    // pending wrap by DISCARDING deferred trailing spaces. Padding written before
+    // a hard line break is not significant and must not create an extra row,
+    // matching ConPTY/Docker full-width row output.
+    internal void DiscardPendingWrapState()
     {
         _pendingWrapSpaceAttributes.Clear();
         _buffer.ClearPendingWrap();
@@ -890,50 +908,63 @@ public class InputHandler
 
     // CSI Handler Implementations
 
+    // Cursor-movement sequences resolve any pending wrap by MATERIALIZING deferred
+    // trailing spaces (via ClearPendingWrapState) before repositioning. Full-screen
+    // TUIs clear regions by writing runs of spaces that overflow the right margin and
+    // then reposition with an absolute CUP; those overflow spaces must wrap to fill the
+    // rows, not be orphaned. (A hard line break still discards them - see CR/LF.)
     private void CursorUp(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.SetCursor(_buffer.X, Math.Max(_buffer.Y - count, 0));
     }
 
     private void CursorDown(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.SetCursor(_buffer.X, Math.Min(_buffer.Y + count, _terminal.Rows - 1));
     }
 
     private void CursorForward(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.SetCursor(Math.Min(_buffer.X + count, _terminal.Cols - 1), _buffer.Y);
     }
 
     private void CursorBackward(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.SetCursor(Math.Max(_buffer.X - count, 0), _buffer.Y);
     }
 
     private void CursorNextLine(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.SetCursor(0, Math.Min(_buffer.Y + count, _terminal.Rows - 1));
     }
 
     private void CursorPrecedingLine(Params parameters)
     {
+        ClearPendingWrapState();
         var count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.SetCursor(0, Math.Max(_buffer.Y - count, 0));
     }
 
     private void CursorCharAbsolute(Params parameters)
     {
+        ClearPendingWrapState();
         var col = Math.Max(parameters.GetParam(0, 1), 1) - 1;
         _buffer.SetCursor(col, _buffer.Y);
     }
 
     private void CursorPosition(Params parameters)
     {
+        ClearPendingWrapState();
         var row = Math.Max(parameters.GetParam(0, 1), 1) - 1;
         var col = Math.Max(parameters.GetParam(1, 1), 1) - 1;
         row = GetAbsoluteCursorRow(row);
@@ -2148,7 +2179,7 @@ public class InputHandler
 
     private void IndexDown()
     {
-        ClearPendingWrapState();
+        DiscardPendingWrapState();
         if (_buffer.Y == _buffer.ScrollBottom)
         {
             _buffer.ScrollUp(1);
@@ -2167,7 +2198,7 @@ public class InputHandler
 
     private void ReverseIndex()
     {
-        ClearPendingWrapState();
+        DiscardPendingWrapState();
         if (_buffer.Y == _buffer.ScrollTop)
         {
             _buffer.ScrollDown(1);
@@ -2323,6 +2354,6 @@ public class InputHandler
     public void SetBuffer(Buffer.TerminalBuffer buffer)
     {
         _buffer = buffer;
-        ClearPendingWrapState();
+        DiscardPendingWrapState();
     }
 }

@@ -1,0 +1,36 @@
+{
+  "FormatVersion": 1,
+  "RecordingFile": "mux-startup.pty.bin",
+  "StartedAtUtc": "2026-08-07T22:04:48.5585749\u002B00:00",
+  "EndedAtUtc": "2026-08-07T22:04:56.2482563\u002B00:00",
+  "Process": "C:\\WINDOWS\\system32\\cmd.exe",
+  "Arguments": [
+    "/D",
+    "/K"
+  ],
+  "StartingDirectory": "C:\\Code\\Mux",
+  "Columns": 168,
+  "Rows": 51,
+  "Scrollback": 5000,
+  "ConvertEol": false,
+  "TermName": "xterm-256color",
+  "UsesLineEndingPaddingNormalizer": false,
+  "PinsViewportToBottomAfterWrite": false,
+  "OSDescription": "Microsoft Windows 10.0.26200",
+  "OSArchitecture": "X64",
+  "FrameworkDescription": ".NET 10.0.9",
+  "TermEnvironment": null,
+  "ColorTermEnvironment": null,
+  "ByteCount": 9876,
+  "ChunkSizes": [
+    16,
+    66,
+    5,
+    38,
+    49,
+    40,
+    268,
+    9378,
+    16
+  ]
+}

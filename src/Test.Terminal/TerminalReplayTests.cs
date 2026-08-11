@@ -195,6 +195,67 @@ namespace Test.Terminal
             Assert.Equal("\u754c", snapshot.VisibleRows[1].Text);
         }
 
+        // Full-screen TUIs (e.g. mux) position content by writing runs of spaces
+        // that overflow the right margin instead of using explicit cursor motion,
+        // then issue an in-line erase (CSI K) before the next visible glyph. Those
+        // overflow spaces carry real cursor position and must be materialized with
+        // autowrap, not discarded, or the whole frame collapses upward.
+        [Fact]
+        public void OverflowPaddingSpacesBeforeEraseInLineAreMaterialized()
+        {
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                4,
+                4,
+                new[] { Encoding.UTF8.GetBytes("ABCD      [KZ") });
+
+            Assert.Equal("ABCD", snapshot.VisibleRows[0].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[1].Text);
+            Assert.Equal("  Z", snapshot.VisibleRows[2].Text);
+        }
+
+        // The mirror case: overflow padding immediately before a hard line break is
+        // insignificant and must still be discarded (ConPTY/Docker full-width rows),
+        // even when many spaces accumulate past the margin.
+        [Fact]
+        public void OverflowPaddingSpacesBeforeLineEndingAreDiscarded()
+        {
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                4,
+                4,
+                new[] { Encoding.UTF8.GetBytes("ABCD      \r\nZ") });
+
+            Assert.Equal("ABCD", snapshot.VisibleRows[0].Text);
+            Assert.Equal("Z", snapshot.VisibleRows[1].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[2].Text);
+        }
+
+        // A full-screen TUI (mux) clears a region by writing one run of spaces that
+        // overflows the right margin across several rows, then repositions with an
+        // absolute CUP. The overflow spaces must materialize (wrap to fill every row of
+        // the region); if they are deferred and then orphaned by the cursor move, the
+        // region is not cleared and stale content (e.g. an old splash box) survives.
+        [Fact]
+        public void OverflowSpaceRunClearThenCursorMoveClearsEveryRow()
+        {
+            TerminalSnapshot snapshot = TerminalReplay.Replay(
+                4,
+                5,
+                new[]
+                {
+                    Encoding.UTF8.GetBytes(
+                        "[2;1HXXXX" +   // stale content on row 1
+                        "[3;1HYYYY" +   // stale content on row 2
+                        "[1;1H" +        // home
+                        "            " +        // 12 spaces = 3 rows (0,1,2) at width 4
+                        "[5;1HZ")        // reposition to row 4 and print
+                });
+
+            Assert.Equal(string.Empty, snapshot.VisibleRows[0].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[1].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[2].Text);
+            Assert.Equal("Z", snapshot.VisibleRows[4].Text);
+        }
+
         [Fact]
         public void DockerCursorPaddingDoesNotCreateExtraEntries()
         {

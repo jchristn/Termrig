@@ -1,0 +1,16 @@
+{
+  "FormatVersion": 1,
+  "RecordingFile": "mux-repl.pty.bin",
+  "Process": "C:\\WINDOWS\\system32\\cmd.exe",
+  "Arguments": ["/D", "/K"],
+  "StartingDirectory": "C:\\Code\\Mux",
+  "Columns": 168,
+  "Rows": 51,
+  "Scrollback": 5000,
+  "ConvertEol": false,
+  "TermName": "xterm-256color",
+  "UsesLineEndingPaddingNormalizer": false,
+  "PinsViewportToBottomAfterWrite": false,
+  "ByteCount": 12104,
+  "ChunkSizes": [12104]
+}
