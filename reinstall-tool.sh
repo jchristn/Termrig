@@ -37,4 +37,4 @@ if ! dotnet tool list --global | grep -qi '^termrig '; then
     exit 1
 fi
 
-echo "Installed Termrig as global command: tr"
+echo "Installed Termrig as global command: trig"

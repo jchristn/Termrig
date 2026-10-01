@@ -14,7 +14,7 @@
     <Description>Desktop terminal profile manager</Description>
     <PackageId>Termrig</PackageId>
     <PackAsTool>true</PackAsTool>
-    <ToolCommandName>tr</ToolCommandName>
+    <ToolCommandName>trig</ToolCommandName>
     <ApplicationIcon>Assets\termrig-logo.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>

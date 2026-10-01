@@ -28,7 +28,7 @@ First-pass package outputs:
 - Ubuntu: `.deb` staging on non-Linux hosts, and `.deb` plus portable archive on Linux.
 
 Native desktop packages install only the Termrig desktop app. They do not install
-the legacy `tr` command.
+the legacy `trig` command.
 
 ### Windows
 
@@ -86,8 +86,7 @@ chmod +x go.sh && ./go.sh
 ## Legacy Developer Command
 
 Termrig can still be installed from the repository as a developer-only .NET
-global tool named `tr`. This is not used by native desktop packages and is not
-recommended for Ubuntu because `tr` conflicts with an existing system command.
+global tool named `trig`. This is not used by native desktop packages.
 
 Install on Windows:
 
@@ -108,10 +107,10 @@ chmod +x install-tool.sh && ./install-tool.sh
 After installation, run Termrig from any terminal:
 
 ```sh
-tr
+trig
 ```
 
-The `tr` command starts the Termrig desktop app and relinquishes the terminal so you can keep using that terminal window.
+The `trig` command starts the Termrig desktop app and relinquishes the terminal so you can keep using that terminal window.
 
 Remove on Windows:
 

@@ -39,4 +39,4 @@ Platform packaging has extra host requirements:
 - Ubuntu `.deb`: Linux host with `dpkg-deb`. `desktop-file-validate` is used
   when available.
 
-Native desktop packages do not install the legacy `tr` developer command.
+Native desktop packages do not install the legacy `trig` developer command.

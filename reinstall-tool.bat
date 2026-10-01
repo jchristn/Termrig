@@ -11,14 +11,14 @@ echo Project: %PROJECT%
 echo Package source: %PACKAGE_DIR%
 echo.
 
-echo [1/6] Checking for running tr.exe processes...
-tasklist /FI "IMAGENAME eq tr.exe" 2>nul | find /I "tr.exe" >nul
+echo [1/6] Checking for running trig.exe processes...
+tasklist /FI "IMAGENAME eq trig.exe" 2>nul | find /I "trig.exe" >nul
 if %errorlevel% equ 0 (
-    echo A running tr.exe process is locking the global tool install.
-    echo Exit all Termrig ^(tr^) sessions and rerun reinstall-tool.bat.
+    echo A running trig.exe process is locking the global tool install.
+    echo Exit all Termrig ^(trig^) sessions and rerun reinstall-tool.bat.
     exit /b 1
 )
-echo No running tr.exe process found.
+echo No running trig.exe process found.
 echo.
 
 echo [2/6] Removing existing Termrig global tool if present...
@@ -29,7 +29,7 @@ if errorlevel 1 (
     if errorlevel 1 (
         type "%UNINSTALL_LOG%"
         del "%UNINSTALL_LOG%" >nul 2>nul
-        echo Failed to uninstall Termrig. Ensure no Termrig/tr processes are running and rerun this script.
+        echo Failed to uninstall Termrig. Ensure no Termrig/trig processes are running and rerun this script.
         exit /b 1
     )
     echo Termrig is not installed; continuing...
@@ -70,5 +70,5 @@ if %errorlevel% neq 0 (
     echo Verification failed: Termrig is not listed as a global tool.
     exit /b 1
 )
-echo Installed Termrig as global command: tr
+echo Installed Termrig as global command: trig
 exit /b 0

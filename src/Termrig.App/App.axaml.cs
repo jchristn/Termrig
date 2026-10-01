@@ -4,6 +4,7 @@ namespace Termrig.App
     using Avalonia.Controls;
     using Avalonia.Controls.ApplicationLifetimes;
     using Avalonia.Markup.Xaml;
+    using Avalonia.Platform;
     using Avalonia.Threading;
     using System;
     using System.Threading;
@@ -44,6 +45,8 @@ namespace Termrig.App
             {
                 CommandLineCommand.TryParse(desktop.Args ?? Array.Empty<string>(), out CommandLineCommand? startupCommand);
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                MacOSDockIcon.TryApply();
+                CreateMacOSMenuBarIcon(desktop);
                 SplashWindow? splash = null;
                 splash = new SplashWindow(delegate
                 {
@@ -79,6 +82,40 @@ namespace Termrig.App
             }
 
             base.OnFrameworkInitializationCompleted();
+        }
+
+        private void CreateMacOSMenuBarIcon(IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            if (!OperatingSystem.IsMacOS()) return;
+
+            NativeMenuItem showItem = new NativeMenuItem("Show Termrig");
+            showItem.Click += delegate { ShowMainWindow(); };
+
+            NativeMenuItem quitItem = new NativeMenuItem("Quit Termrig");
+            quitItem.Click += delegate { desktop.TryShutdown(); };
+
+            NativeMenu menu = new NativeMenu();
+            menu.Items.Add(showItem);
+            menu.Items.Add(new NativeMenuItemSeparator());
+            menu.Items.Add(quitItem);
+
+            TrayIcon trayIcon = new TrayIcon
+            {
+                Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Termrig/Assets/termrig-tray.png"))),
+                ToolTipText = "Termrig",
+                Menu = menu
+            };
+            MacOSProperties.SetIsTemplateIcon(trayIcon, true);
+
+            TrayIcon.SetIcons(this, new TrayIcons { trayIcon });
+        }
+
+        private void ShowMainWindow()
+        {
+            if (_MainWindow == null) return;
+            if (_MainWindow.WindowState == WindowState.Minimized) _MainWindow.WindowState = WindowState.Normal;
+            _MainWindow.Show();
+            _MainWindow.Activate();
         }
 
         private void RegisterCrashHandlers()

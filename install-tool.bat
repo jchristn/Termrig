@@ -20,7 +20,7 @@ dotnet tool list --global | findstr /I /R "^termrig " >nul
 if not errorlevel 1 (
     dotnet tool uninstall --global Termrig
     if errorlevel 1 (
-        echo Failed to uninstall existing Termrig tool. Close any running Termrig/tr processes and rerun this script.
+        echo Failed to uninstall existing Termrig tool. Close any running Termrig/trig processes and rerun this script.
         exit /b %errorlevel%
     )
 )
@@ -28,4 +28,4 @@ if not errorlevel 1 (
 dotnet tool install --global Termrig --version 0.1.0 --source "%PACKAGE_DIR%" --no-http-cache
 if errorlevel 1 exit /b %errorlevel%
 
-echo Installed Termrig as global command: tr
+echo Installed Termrig as global command: trig
