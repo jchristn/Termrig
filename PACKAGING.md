@@ -513,7 +513,7 @@ artifacts/packages/deb/termrig/
 
 ```text
 Package: termrig
-Version: 0.1.0
+Version: 0.1.1
 Section: utils
 Priority: optional
 Architecture: amd64
@@ -527,20 +527,20 @@ Description: Desktop terminal profile manager
 - [ ] Build package:
 
 ```sh
-dpkg-deb --build artifacts/packages/deb/termrig artifacts/packages/termrig_0.1.0_amd64.deb
+dpkg-deb --build artifacts/packages/deb/termrig artifacts/packages/termrig_0.1.1_amd64.deb
 ```
 
 - [ ] Inspect package:
 
 ```sh
-dpkg-deb --info artifacts/packages/termrig_0.1.0_amd64.deb
-dpkg-deb --contents artifacts/packages/termrig_0.1.0_amd64.deb
+dpkg-deb --info artifacts/packages/termrig_0.1.1_amd64.deb
+dpkg-deb --contents artifacts/packages/termrig_0.1.1_amd64.deb
 ```
 
 - [ ] Install package:
 
 ```sh
-sudo apt install ./artifacts/packages/termrig_0.1.0_amd64.deb
+sudo apt install ./artifacts/packages/termrig_0.1.1_amd64.deb
 ```
 
 - [ ] Uninstall package:
@@ -642,7 +642,7 @@ artifacts/logs/
 termrig-windows-x64-installer.exe.sha256
 termrig-macos-arm64.dmg.sha256
 termrig-macos-x64.dmg.sha256
-termrig_0.1.0_amd64.deb.sha256
+termrig_0.1.1_amd64.deb.sha256
 ```
 
 - [ ] Store signing credentials securely.
@@ -663,7 +663,7 @@ termrig_0.1.0_amd64.deb.sha256
 - [ ] Define release tag format:
 
 ```text
-v0.1.0
+v0.1.1
 ```
 
 ## Documentation Plan
@@ -686,7 +686,7 @@ v0.1.0
 - [ ] Add release note template:
 
 ```text
-## Termrig 0.1.0
+## Termrig 0.1.1
 
 ### Downloads
 - Windows x64 installer

@@ -4,7 +4,7 @@ setlocal
 set SCRIPT_DIR=%~dp0
 set PROJECT=%SCRIPT_DIR%src\Termrig.App\Termrig.App.csproj
 set PACKAGE_DIR=%SCRIPT_DIR%artifacts\tools
-set NUGET_PACKAGE_DIR=%USERPROFILE%\.nuget\packages\termrig\0.1.0
+set NUGET_PACKAGE_DIR=%USERPROFILE%\.nuget\packages\termrig\0.1.1
 
 if exist "%PACKAGE_DIR%" rmdir /s /q "%PACKAGE_DIR%"
 mkdir "%PACKAGE_DIR%"
@@ -25,7 +25,7 @@ if not errorlevel 1 (
     )
 )
 
-dotnet tool install --global Termrig --version 0.1.0 --source "%PACKAGE_DIR%" --no-http-cache
+dotnet tool install --global Termrig --version 0.1.1 --source "%PACKAGE_DIR%" --no-http-cache
 if errorlevel 1 exit /b %errorlevel%
 
 echo Installed Termrig as global command: trig

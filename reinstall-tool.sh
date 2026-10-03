@@ -4,7 +4,7 @@ set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT="$SCRIPT_DIR/src/Termrig.App/Termrig.App.csproj"
 PACKAGE_DIR="$SCRIPT_DIR/artifacts/tools"
-NUGET_PACKAGE_DIR="$HOME/.nuget/packages/termrig/0.1.0"
+NUGET_PACKAGE_DIR="$HOME/.nuget/packages/termrig/0.1.1"
 
 echo "Termrig tool reinstall"
 echo "Project: $PROJECT"
@@ -28,7 +28,7 @@ echo
 
 echo "[4/6] Packing and installing Termrig global tool..."
 dotnet pack "$PROJECT" --configuration Release --no-build --output "$PACKAGE_DIR"
-dotnet tool install --global Termrig --version 0.1.0 --source "$PACKAGE_DIR" --no-http-cache
+dotnet tool install --global Termrig --version 0.1.1 --source "$PACKAGE_DIR" --no-http-cache
 echo
 
 echo "[5/6] Verifying Termrig global tool..."

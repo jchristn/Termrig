@@ -4,7 +4,7 @@
 
 # Termrig
 
-**NOTE: Termrig is in ALPHA v0.1.0 and subject to change.**
+**NOTE: Termrig is in ALPHA v0.1.1 and subject to change.**
 
 Is it pretty?  NO.  Is it flashy?  NO.  Is it a runway model?  NO.
 
@@ -54,7 +54,7 @@ To build and install `Termrig.app` from source, see
 Install the generated Debian package:
 
 ```sh
-sudo apt install ./artifacts/packages/termrig_0.1.0_amd64.deb
+sudo apt install ./artifacts/packages/termrig_0.1.1_amd64.deb
 ```
 
 Uninstall the package:
@@ -202,9 +202,11 @@ dotnet build src/Termrig.slnx
 dotnet run --project src/Test.Automated/Test.Automated.csproj --framework net10.0
 dotnet test src/Test.Xunit/Test.Xunit.csproj
 dotnet test src/Test.Nunit/Test.Nunit.csproj
+dotnet test src/Test.Terminal/Test.Terminal.csproj
 ```
 
-Termrig targets .NET 10 and uses Avalonia for the desktop UI.
+Termrig targets .NET 10 and uses Avalonia 12.1 for the desktop UI, Porta.Pty 2.x for
+pseudo-terminal process hosting, and Wcwidth 4.x for Unicode cell-width calculation.
 
 ## Changelog
 
