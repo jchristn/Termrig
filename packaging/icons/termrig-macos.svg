@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Termrig macOS app icon">
+  <!-- Full-bleed artwork: macOS applies its own rounded mask. Transparent margins make
+       macOS 26+ place the icon on a grey plate, so this variant fills the whole square. -->
+  <rect width="1024" height="1024" fill="#10161D"/>
+  <rect width="1024" height="270" fill="#17212B"/>
+  <rect y="262" width="1024" height="16" fill="#43B581"/>
+  <circle cx="262" cy="150" r="40" fill="#FF5F57"/>
+  <circle cx="392" cy="150" r="40" fill="#FFBD2E"/>
+  <circle cx="522" cy="150" r="40" fill="#28C840"/>
+  <path d="M270 470L470 615L270 760" fill="none" stroke="#43B581" stroke-width="90" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M570 760H790" stroke="#E6EDF3" stroke-width="90" stroke-linecap="round"/>
+</svg>

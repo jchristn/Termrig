@@ -32,7 +32,7 @@ This script:
 2. Runs `packaging/macos/build-app.sh`, which:
    - publishes a self-contained build for your Mac's architecture
      (`osx-arm64` or `osx-x64`)
-   - generates `Termrig.icns` from `src/Termrig.App/Assets/termrig-logo.png`
+   - generates `Termrig.icns` from `packaging/icons/termrig-macos.png`
    - assembles the bundle using `packaging/macos/Info.plist`
    - signs the bundle ad hoc
    - installs it to `~/Applications/Termrig.app`
@@ -68,6 +68,10 @@ it to the install folder.
 - **Gatekeeper:** a bundle you build locally is not quarantined, so it opens
   without a prompt. If you copy it to another Mac, that Mac may block it.
   Right-click the app and choose **Open** to allow it.
+- **App icon:** the macOS icon is full-bleed artwork
+  (`packaging/icons/termrig-macos.svg`), and macOS applies its own rounded mask.
+  On macOS 26 and later, an icon with transparent margins sits on a grey plate.
+  After editing the SVG, re-render `termrig-macos.png` at 1024×1024.
 - **Stale icon:** if Finder or the Dock still shows an old icon after a rebuild,
   run `killall Dock`.
 

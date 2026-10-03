@@ -15,7 +15,7 @@ fi
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 PROJECT="$REPO_ROOT/src/Termrig.App/Termrig.App.csproj"
-ICON_SOURCE="$REPO_ROOT/src/Termrig.App/Assets/termrig-logo.png"
+ICON_SOURCE="$REPO_ROOT/packaging/icons/termrig-macos.png"
 INSTALL_DIR="${1:-$HOME/Applications}"
 
 case "$(uname -m)" in

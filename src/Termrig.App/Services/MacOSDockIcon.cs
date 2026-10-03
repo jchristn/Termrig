@@ -28,6 +28,10 @@ namespace Termrig.App.Services
         {
             if (!OperatingSystem.IsMacOS()) return;
 
+            // Inside Termrig.app the bundle's Termrig.icns already supplies the Dock icon.
+            string? processPath = Environment.ProcessPath;
+            if (processPath != null && processPath.Contains(".app/Contents/MacOS/", StringComparison.Ordinal)) return;
+
             try
             {
                 byte[] bytes;
