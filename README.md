@@ -46,6 +46,9 @@ Gatekeeper approval.
 
 Uninstall by deleting `/Applications/Termrig.app`.
 
+To build and install `Termrig.app` from source, see
+[INSTALL_ON_MAC.md](INSTALL_ON_MAC.md).
+
 ### Ubuntu
 
 Install the generated Debian package:
@@ -103,6 +106,9 @@ git clone https://github.com/jchristn/Termrig
 cd Termrig
 chmod +x install-tool.sh && ./install-tool.sh
 ```
+
+On macOS, `install-tool.sh` also builds `~/Applications/Termrig.app`; see
+[INSTALL_ON_MAC.md](INSTALL_ON_MAC.md).
 
 After installation, run Termrig from any terminal:
 

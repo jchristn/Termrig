@@ -22,3 +22,7 @@ fi
 dotnet tool install --global Termrig --version 0.1.0 --source "$PACKAGE_DIR" --no-http-cache
 
 echo "Installed Termrig as global command: trig"
+
+if [ "$(uname -s)" = "Darwin" ]; then
+    "$SCRIPT_DIR/packaging/macos/build-app.sh"
+fi
