@@ -22,7 +22,9 @@
 
   <ItemGroup>
     <Folder Include="Models\" />
-    <AvaloniaResource Include="Assets\**" />
+    <AvaloniaResource Include="Assets\**" Exclude="Assets\Fonts\*.txt" />
+    <!-- Bundled fonts are embedded as Avalonia resources; ship their licenses alongside the build output. -->
+    <None Include="Assets\Fonts\*.txt" Link="Licenses\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

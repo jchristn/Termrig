@@ -42,6 +42,16 @@ public static class CsiCommandExtensions
         { "q", CsiCommand.SelectCursorStyle }
     };
 
+    private static readonly HashSet<CsiCommand> _privateCapableCommands = new()
+    {
+        CsiCommand.DeviceAttributes,    // CSI > c (secondary DA)
+        CsiCommand.DeviceStatusReport,  // CSI ? n (DEC DSR)
+        CsiCommand.SetMode,             // CSI ? h (DECSET)
+        CsiCommand.ResetMode,           // CSI ? l (DECRST)
+        CsiCommand.EraseInDisplay,      // CSI ? J (DECSED)
+        CsiCommand.EraseInLine          // CSI ? K (DECSEL)
+    };
+
     /// <summary>
     /// Converts a CSI identifier string to a CsiCommand enum value.
     /// </summary>
@@ -51,7 +61,17 @@ public static class CsiCommandExtensions
     {
         // Handle DEC private mode sequences (e.g., "?h", "?l", ">c")
         var cleaned = identifier.TrimStart('?', '>');
-        return _commandMap.GetValueOrDefault(cleaned, CsiCommand.Unknown);
+        var command = _commandMap.GetValueOrDefault(cleaned, CsiCommand.Unknown);
+
+        // Only commands with a defined private form may carry a '?' or '>' prefix. Other prefixed
+        // sequences are distinct commands (e.g. "CSI > 4 m" is XTMODKEYS, "CSI ? u" is a kitty
+        // keyboard query, "CSI > 0 q" is XTVERSION) and must not be treated as SGR, DECRC, DECSCUSR, etc.
+        if (cleaned.Length != identifier.Length && !_privateCapableCommands.Contains(command))
+        {
+            return CsiCommand.Unknown;
+        }
+
+        return command;
     }
     
     /// <summary>

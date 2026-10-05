@@ -1068,6 +1068,7 @@ namespace Termrig.App.Views
                     CreateAsyncMenuItem("Rename", async delegate { await RenameTabAsync(tab).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Duplicate", async delegate { await DuplicateTabAsync(tab).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Edit", async delegate { await EditSelectedTabAsync().ConfigureAwait(true); }),
+                    CreateAsyncMenuItem("Clear History", async delegate { await ClearTabHistoryAsync(tab).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Delete", async delegate
                     {
                         Int32 index = _SelectedProfile?.Tabs.IndexOf(tab) ?? -1;
@@ -1201,6 +1202,26 @@ namespace Termrig.App.Views
             await _TerminalRestoreStore.DeleteAsync(_SelectedProfile, tab, CancellationToken.None).ConfigureAwait(true);
             RefreshTabs();
             TabsList.SelectedIndex = Math.Min(index, _SelectedProfile.Tabs.Count - 1);
+        }
+
+        private async Task ClearTabHistoryAsync(TerminalTabProfile tab)
+        {
+            if (_SelectedProfile == null) return;
+            TerminalProfile profile = _SelectedProfile;
+
+            DeleteConfirmationWindow confirmation = new DeleteConfirmationWindow(
+                "Clear history",
+                "Clear tab history?",
+                "This will clear the scrollback history and saved restore snapshot for the tab \"" + tab.Name + "\" in profile \"" + profile.Name + "\". Open terminals keep their visible screen.",
+                "Clear history");
+            if (!await confirmation.ShowDialog<bool>(this).ConfigureAwait(true)) return;
+
+            foreach (TerminalWorkspaceWindow window in _WorkspaceWindows.Where(item => item.ProfileId == profile.Id).ToList())
+            {
+                await window.ClearTabHistoryAsync(tab.Id).ConfigureAwait(true);
+            }
+
+            await _TerminalRestoreStore.DeleteAsync(profile, tab, CancellationToken.None).ConfigureAwait(true);
         }
 
         private async Task<bool> ConfirmDeleteProfileAsync(TerminalProfile profile)

@@ -373,6 +373,21 @@ public class TerminalBuffer
     }
 
     /// <summary>
+    /// Discards all scrollback lines above the visible screen. The visible screen and cursor are unchanged.
+    /// </summary>
+    public void ClearScrollback()
+    {
+        int count = _yBase;
+        if (count <= 0)
+            return;
+
+        _lines.TrimStart(count);
+        _yBase = 0;
+        _yDisp = 0;
+        Trimmed?.Invoke(count);
+    }
+
+    /// <summary>
     /// Sets the cursor position.
     /// </summary>
     public void SetCursor(int x, int y)

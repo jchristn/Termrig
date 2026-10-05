@@ -111,7 +111,13 @@ namespace Iciclecreek.Terminal
         // survives a visual-tree re-parent (e.g. floating window pop-out/dock-back).
         private bool _suppressCleanupOnDetach;
 
-        private sealed record CachedTextRun(FormattedText Text, int StartX, int CellCount, IBrush Background);
+        // FitToCells marks runs drawn from a fallback font: they are centered (and shrunk if needed)
+        // within their cells and baseline-aligned so they cannot push later glyphs off the cell grid.
+        private sealed record CachedTextRun(FormattedText Text, int StartX, int CellCount, IBrush Background, bool FitToCells);
+
+        // Glyph coverage of the primary font, used to isolate characters that need font fallback.
+        private FontFamily? _coverageFontFamily;
+        private GlyphTypeface? _coverageGlyphTypeface;
         // Cached render of one line. Validity is decided in O(1) by comparing the source line's
         // identity and Version (plus blink phase for lines that contain blinking cells), instead of
         // hashing every cell each frame.
@@ -845,6 +851,22 @@ namespace Iciclecreek.Terminal
                 _terminal.Selection.ClearSelection();
             }
 
+            this.RequestInvalidate();
+        }
+
+        /// <summary>
+        /// Discards the scrollback history while leaving the visible screen intact.
+        /// </summary>
+        public void ClearScrollback()
+        {
+            lock (_terminalLock)
+            {
+                _terminal.Selection.ClearSelection();
+                _terminal.ClearScrollback();
+                ClearVisibleLineCachesUnderLock();
+            }
+
+            _lineRenderCache.Clear();
             this.RequestInvalidate();
         }
 
@@ -2920,6 +2942,74 @@ namespace Iciclecreek.Terminal
             _charHeight = _measureText.Height;
         }
 
+        /// <summary>
+        /// Returns true when every code point in <paramref name="text"/> has a glyph in the primary font.
+        /// </summary>
+        private bool IsCoveredByPrimaryFont(string? text)
+        {
+            if (String.IsNullOrEmpty(text))
+                return true;
+
+            FontFamily family = FontFamily;
+            if (!ReferenceEquals(family, _coverageFontFamily))
+            {
+                _coverageFontFamily = family;
+                _coverageGlyphTypeface = FontManager.Current.TryGetGlyphTypeface(new Typeface(family), out GlyphTypeface? glyphTypeface)
+                    ? glyphTypeface
+                    : null;
+            }
+
+            if (_coverageGlyphTypeface == null)
+                return true;
+
+            var map = _coverageGlyphTypeface.CharacterToGlyphMap;
+
+            foreach (Rune rune in text.EnumerateRunes())
+            {
+                if (rune.Value < 0x20)
+                    continue;
+                if (!map.ContainsGlyph(rune.Value))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Draws a text run at a cell position. Runs that come from a fallback font are baseline-aligned
+        /// with the primary font and centered in their cells, or scaled down uniformly if they are too wide.
+        /// </summary>
+        private void DrawCellText(DrawingContext context, FormattedText text, double startX, double startY, double cellsWidth, bool fitToCells)
+        {
+            if (!fitToCells)
+            {
+                context.DrawText(text, new Point(startX, startY));
+                return;
+            }
+
+            double y = startY + (_measureText != null ? _measureText.Baseline - text.Baseline : 0);
+            double textWidth = text.WidthIncludingTrailingWhitespace;
+            if (textWidth <= 0 || cellsWidth <= 0)
+            {
+                context.DrawText(text, new Point(startX, y));
+                return;
+            }
+
+            if (textWidth <= cellsWidth)
+            {
+                context.DrawText(text, new Point(startX + (cellsWidth - textWidth) / 2, y));
+                return;
+            }
+
+            // Shrink uniformly to preserve the glyph's shape, keeping it vertically centered in the row.
+            double factor = cellsWidth / textWidth;
+            double scaledY = startY + (_charHeight - text.Height * factor) / 2;
+            using (context.PushTransform(Matrix.CreateScale(factor, factor) * Matrix.CreateTranslation(startX, scaledY)))
+            {
+                context.DrawText(text, new Point(0, 0));
+            }
+        }
+
         protected override Size MeasureOverride(Size availableSize)
         {
             UpdateTextMetrics();
@@ -3163,7 +3253,7 @@ namespace Iciclecreek.Terminal
                     var position = new Point(startX, startYPos);
 
                     context.FillRectangle(run.Background, rect);
-                    context.DrawText(run.Text, position);
+                    DrawCellText(context, run.Text, startX, startYPos, endX - startX, run.FitToCells);
                 }
                 return;
             }
@@ -3184,6 +3274,7 @@ namespace Iciclecreek.Terminal
                 string text = String.Empty;
                 int cellCount = 0;
                 int runStartX = 0;
+                bool fitToCells = false;
 
                 // Skip placeholder cells (width 0) that follow wide characters
                 if (cell.Width == 0)
@@ -3191,6 +3282,16 @@ namespace Iciclecreek.Terminal
                     Debug.Assert(cell.Content == BufferCell.Empty.Content, "Placeholder cell should be null content");
                     x++;
                     continue;
+                }
+                else if (cell.Width == 1 && !IsCoveredByPrimaryFont(cell.Content))
+                {
+                    // A glyph from a fallback font has its own advance width; draw it alone so it
+                    // stays inside its cell instead of shifting the rest of the run.
+                    text = cell.Content;
+                    cellCount = 1;
+                    runStartX = x;
+                    fitToCells = true;
+                    x++;
                 }
                 else if (cell.Width == 1)
                 {
@@ -3202,8 +3303,8 @@ namespace Iciclecreek.Terminal
                     {
                         var currentCell = line[x];
 
-                        // Stop if we hit a different attribute or a placeholder cell mid-run
-                        if (currentCell.Width != 1 || currentCell.Attributes != cell.Attributes)
+                        // Stop if we hit a different attribute, a placeholder cell, or a glyph that needs font fallback
+                        if (currentCell.Width != 1 || currentCell.Attributes != cell.Attributes || !IsCoveredByPrimaryFont(currentCell.Content))
                             break;
                         textBuilder.Append(currentCell.Content);
                         cellCount += currentCell.Width;
@@ -3218,6 +3319,7 @@ namespace Iciclecreek.Terminal
                     text = cell.Content;
                     cellCount = cell.Width;
                     runStartX = x;
+                    fitToCells = true;
                     x += cell.Width;  // Move past wide character and its placeholder
                 }
 
@@ -3247,12 +3349,11 @@ namespace Iciclecreek.Terminal
                 if (td != null)
                     formattedText.SetTextDecorations(td);
 
-                var position = new Point(startX, startYPos);
                 // Cache only content-dependent data, not screen position
-                textRuns.Add(new CachedTextRun(formattedText, runStartX, cellCount, background));
+                textRuns.Add(new CachedTextRun(formattedText, runStartX, cellCount, background, fitToCells));
 
                 context.FillRectangle(background, rect);
-                context.DrawText(formattedText, position);
+                DrawCellText(context, formattedText, startX, startYPos, endX - startX, fitToCells);
             }
 
             // Cache the text runs (but not when ReverseVideo mode is active, since it inverts every
@@ -3435,7 +3536,7 @@ namespace Iciclecreek.Terminal
                             typeface,
                             FontSize,
                             invertedBrush);
-                        context.DrawText(formattedText, new Point(posX, posY));
+                        DrawCellText(context, formattedText, posX, posY, cellWidth * Math.Max(1, cell.Width), !IsCoveredByPrimaryFont(charContent));
                     }
                     else
                     {

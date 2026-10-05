@@ -994,8 +994,10 @@ public class InputHandler
                 }
                 EraseInLine(parameters); // Current line to cursor
                 break;
+            case 3: // Erase scrollback (xterm extension): clears saved lines, not the screen
+                _buffer.ClearScrollback();
+                break;
             case 2: // Erase all
-            case 3: // Erase scrollback (extension)
                 for (int i = 0; i < _terminal.Rows; i++)
                 {
                     _buffer.Lines[_buffer.YBase + i]?.Fill(emptyCell);
@@ -1300,6 +1302,9 @@ public class InputHandler
                 case 48: // Extended background color
                     i = HandleExtendedColor(parameters, i, false);
                     break;
+                case 58: // Underline color (not rendered); skip its color arguments
+                    i = SkipExtendedColor(parameters.GetParam(i + 1, 0), i, parameters.Length);
+                    break;
                 default:
                     ApplySimpleCharAttribute(param);
                     break;
@@ -1334,11 +1339,32 @@ public class InputHandler
                 case 48:
                     i = HandleExtendedColor(parameters, i, false);
                     break;
+                case 58:
+                    if (i + 1 < parameters.Length && parameters[i + 1].Contains(':', StringComparison.Ordinal))
+                        i++;
+                    else
+                        i = SkipExtendedColor(i + 1 < parameters.Length ? ParseSgrInt(parameters[i + 1], 0) : 0, i, parameters.Length);
+                    break;
                 default:
                     ApplySimpleCharAttribute(param);
                     break;
             }
         }
+    }
+
+    /// <summary>
+    /// Returns the index of the last argument consumed by an extended color (38/48/58) at <paramref name="index"/>.
+    /// </summary>
+    private static int SkipExtendedColor(int colorType, int index, int length)
+    {
+        int consumed = colorType switch
+        {
+            2 => 4, // 2;r;g;b
+            5 => 2, // 5;n
+            _ => 0
+        };
+
+        return Math.Min(index + consumed, length - 1);
     }
 
     private void ApplySimpleCharAttribute(int param)
@@ -1432,7 +1458,8 @@ public class InputHandler
                 // Underline color is not rendered separately by the current renderer.
                 break;
             case 4:
-                _curAttr.SetUnderline(true);
+                // CSI 4:0 m turns underline off; 4:1..4:5 select an underline style.
+                _curAttr.SetUnderline(ParseSgrInt(parts.Length > 1 ? parts[1] : string.Empty, 1) != 0);
                 break;
             default:
                 ApplySimpleCharAttribute(param);

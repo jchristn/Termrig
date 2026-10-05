@@ -1309,6 +1309,22 @@ namespace Termrig.App.Views
             return tab.RestoreScrollbackLineLimit ?? Constants.DefaultTerminalRestoreLineLimit;
         }
 
+        /// <summary>
+        /// Clear the scrollback history of an open profile tab and delete its saved restore snapshot.
+        /// </summary>
+        /// <param name="tabId">Tab identifier.</param>
+        /// <returns>True if the tab is open in this workspace.</returns>
+        public async Task<bool> ClearTabHistoryAsync(string tabId)
+        {
+            TerminalSession? session = _Sessions.FirstOrDefault(item => item.IsProfileMember && item.TabProfile.Id == tabId);
+            if (session == null) return false;
+
+            session.Terminal.ClearScrollback();
+            Interlocked.Exchange(ref session.RestoreSaveDirty, 0);
+            await _TerminalRestoreStore.DeleteAsync(_Profile, session.TabProfile, CancellationToken.None).ConfigureAwait(true);
+            return true;
+        }
+
         private async Task ApplyRestoreSnapshotIfAvailableAsync(TerminalSession session)
         {
             if (!session.IsProfileMember)
@@ -1432,16 +1448,9 @@ namespace Termrig.App.Views
 
         private static void ApplyFontFamily(TerminalControl terminal, string fontFamily)
         {
-            string normalized = fontFamily;
-            if (fontFamily.Contains(",", StringComparison.Ordinal))
-            {
-                string[] parts = fontFamily.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                if (parts.Length > 0) normalized = parts[0];
-            }
-
             try
             {
-                terminal.FontFamily = new FontFamily(normalized);
+                terminal.FontFamily = TerminalFonts.Resolve(fontFamily);
             }
             catch (FormatException)
             {
@@ -1450,9 +1459,7 @@ namespace Termrig.App.Views
 
         private static string GetDefaultTerminalFontFamily()
         {
-            if (OperatingSystem.IsWindows()) return "Consolas";
-            if (OperatingSystem.IsMacOS()) return "Menlo";
-            return "DejaVu Sans Mono";
+            return TerminalFonts.DefaultFamilyName;
         }
 
         private async void ShowTerminalLaunchError(TerminalTabProfile tab, ShellLaunchPlan plan, Exception exception)

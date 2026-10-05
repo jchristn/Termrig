@@ -256,6 +256,8 @@ namespace Iciclecreek.Terminal
 
         public void ClearVisibleLineCaches() => _terminalView?.ClearVisibleLineCaches();
 
+        public void ClearScrollback() => _terminalView?.ClearScrollback();
+
         public void RequestRenderInvalidate()
         {
             if (_terminalView != null)

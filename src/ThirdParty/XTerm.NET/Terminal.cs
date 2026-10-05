@@ -403,6 +403,14 @@ public class Terminal
     }
 
     /// <summary>
+    /// Discards the normal buffer's scrollback history. The visible screen is unchanged.
+    /// </summary>
+    public void ClearScrollback()
+    {
+        _normalBuffer?.ClearScrollback();
+    }
+
+    /// <summary>
     /// Exports a bounded snapshot of the normal buffer for visual scrollback restore.
     /// </summary>
     public TerminalBufferSnapshot ExportBufferSnapshot(int maxLines)
