@@ -7,6 +7,7 @@ namespace Termrig.App.Views
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Termrig.Core;
     using Termrig.Core.Enums;
     using Termrig.Core.Models;
 
@@ -80,7 +81,8 @@ namespace Termrig.App.Views
             {
                 Name = "Terminal",
                 Shell = shell,
-                StartingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+                StartingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                FontFamily = Constants.DefaultTabFontFamily
             };
         }
 

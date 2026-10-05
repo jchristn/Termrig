@@ -39,6 +39,7 @@ namespace Termrig.App.Views
         private readonly TerminalRestoreStore _TerminalRestoreStore = new TerminalRestoreStore();
         private readonly string _RecoveryRunId = Guid.NewGuid().ToString("N");
         private const string RepositoryUrl = "https://github.com/jchristn/Termrig";
+        private const string DiscordUrl = "https://discord.gg/tRAN8HgvK5";
         private const string NoFolderLabel = "No folder";
         private const string SaveSuccessButtonClass = "saveSuccess";
         private const int SaveSuccessFeedbackMilliseconds = 900;
@@ -123,6 +124,7 @@ namespace Termrig.App.Views
             SaveProfileButton.Click += OnSaveProfileClicked;
             OpenProfileButton.Click += OnOpenProfileClicked;
             GitHubButton.Click += OnGitHubClicked;
+            DiscordButton.Click += OnDiscordClicked;
             AddSchemeButton.Click += OnAddSchemeClicked;
             EditSchemeButton.Click += OnEditSchemeClicked;
             DeleteSchemeButton.Click += OnDeleteSchemeClicked;
@@ -231,7 +233,8 @@ namespace Termrig.App.Views
                     {
                         Name = "Shell",
                         Shell = shell,
-                        StartingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+                        StartingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        FontFamily = Constants.DefaultTabFontFamily
                     }
                 }
             };
@@ -847,6 +850,17 @@ namespace Termrig.App.Views
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = RepositoryUrl,
+                UseShellExecute = true
+            };
+            Process? process = Process.Start(startInfo);
+            process?.Dispose();
+        }
+
+        private void OnDiscordClicked(object? sender, RoutedEventArgs e)
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = DiscordUrl,
                 UseShellExecute = true
             };
             Process? process = Process.Start(startInfo);
