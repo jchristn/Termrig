@@ -56,6 +56,7 @@ namespace Termrig.Core.Models
             {
                 if (Shell == ShellType.Cmd) return "cmd.exe";
                 if (Shell == ShellType.Bash) return "bash";
+                if (Shell == ShellType.Zsh) return "zsh";
                 return "PowerShell";
             }
         }

@@ -273,7 +273,31 @@ namespace Test.Shared
                         suiteId: "ShellCatalog",
                         caseId: "ShellDisplayNamesAreUserFacing",
                         displayName: "Shell display names are user-facing",
-                        executeAsync: ShellDisplayNamesAreUserFacingAsync)
+                        executeAsync: ShellDisplayNamesAreUserFacingAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
+                        caseId: "StartingDirectoryExpandsHomeAndFallsBackToHome",
+                        displayName: "Starting directory expands ~ and falls back to home",
+                        executeAsync: StartingDirectoryExpandsHomeAndFallsBackToHomeAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
+                        caseId: "WindowsPathsMapToHomeOnUnix",
+                        displayName: "Windows-style paths map onto home on macOS/Linux",
+                        executeAsync: WindowsPathsMapToHomeOnUnixAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
+                        caseId: "ForeignShellsFallBackToHostDefault",
+                        displayName: "Shells from another OS fall back to the host default",
+                        executeAsync: ForeignShellsFallBackToHostDefaultAsync),
+
+                    new TestCaseDescriptor(
+                        suiteId: "ShellCatalog",
+                        caseId: "LoginShellPathsMergeWithoutDuplicates",
+                        displayName: "Login shell PATH merges without duplicates",
+                        executeAsync: LoginShellPathsMergeWithoutDuplicatesAsync)
                 });
         }
 
@@ -967,6 +991,70 @@ namespace Test.Shared
             return Task.CompletedTask;
         }
 
+        private static Task StartingDirectoryExpandsHomeAndFallsBackToHomeAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            AssertEqual(Path.GetFullPath(home), ShellCatalog.NormalizeDirectoryPath("~"), "Expected ~ to expand to the home directory.");
+            AssertEqual(Path.GetFullPath(home), ShellCatalog.NormalizeDirectoryPath(String.Empty), "Expected empty directory to fall back to home.");
+
+            string missing = Path.Combine(Path.GetTempPath(), "TermrigMissing" + Guid.NewGuid().ToString("N"));
+            AssertEqual(Path.GetFullPath(home), ShellCatalog.NormalizeDirectoryPath(missing), "Expected missing directory to fall back to home.");
+            return Task.CompletedTask;
+        }
+
+        private static Task WindowsPathsMapToHomeOnUnixAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (OperatingSystem.IsWindows()) return Task.CompletedTask;
+
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string name = "TermrigMapTest" + Guid.NewGuid().ToString("N");
+            string target = Path.Combine(home, name);
+            try
+            {
+                Directory.CreateDirectory(target);
+                AssertEqual(target, ShellCatalog.NormalizeDirectoryPath("C:\\" + name), "Expected drive-rooted path to map onto home.");
+                AssertEqual(target, ShellCatalog.NormalizeDirectoryPath("C:\\Users\\someone\\" + name), "Expected Windows profile path to map onto home.");
+            }
+            finally
+            {
+                if (Directory.Exists(target)) Directory.Delete(target, true);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private static Task ForeignShellsFallBackToHostDefaultAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            ShellCatalog catalog = new ShellCatalog();
+            List<ShellDescriptor> shells = catalog.GetSupportedShells();
+            if (shells.Count < 1) return Task.CompletedTask;
+
+            ShellType foreign = OperatingSystem.IsWindows() ? ShellType.Bash : ShellType.Cmd;
+            ShellLaunchPlan plan = catalog.BuildLaunchPlan(new TerminalTabProfile
+            {
+                Name = "Foreign",
+                Shell = foreign,
+                StartingDirectory = Environment.CurrentDirectory
+            });
+
+            AssertEqual(shells[0].Executable, plan.Executable, "Expected foreign shell to launch the host default shell.");
+            return Task.CompletedTask;
+        }
+
+        private static Task LoginShellPathsMergeWithoutDuplicatesAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            string separator = Path.PathSeparator.ToString();
+            string merged = LoginShellEnvironment.MergePaths(
+                String.Join(separator, "/a", "/b"),
+                String.Join(separator, "/b", "/c"));
+            AssertEqual(String.Join(separator, "/a", "/b", "/c"), merged, "Merged PATH mismatch.");
+            return Task.CompletedTask;
+        }
+
         private static Task ShellDisplayNamesAreUserFacingAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
@@ -974,6 +1062,7 @@ namespace Test.Shared
             AssertEqual("cmd.exe", new TerminalTabProfile { Shell = ShellType.Cmd }.ShellDisplayName, "cmd.exe display name mismatch.");
             AssertEqual("PowerShell", new TerminalTabProfile { Shell = ShellType.PowerShell }.ShellDisplayName, "PowerShell display name mismatch.");
             AssertEqual("bash", new TerminalTabProfile { Shell = ShellType.Bash }.ShellDisplayName, "bash display name mismatch.");
+            AssertEqual("zsh", new TerminalTabProfile { Shell = ShellType.Zsh }.ShellDisplayName, "zsh display name mismatch.");
             return Task.CompletedTask;
         }
 

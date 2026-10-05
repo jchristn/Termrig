@@ -6,6 +6,7 @@ namespace Termrig.App
     using System.Linq;
     using System.Threading;
     using Termrig.App.Services;
+    using Termrig.Core.Services;
 
     /// <summary>
     /// Application entry point.
@@ -51,6 +52,8 @@ namespace Termrig.App
                 StartDetachedChild(args);
                 return;
             }
+
+            LoginShellEnvironment.Apply();
 
             string[] avaloniaArgs = args.Where(argument => argument != DetachedChildArgument).ToArray();
             RunAvaloniaApp(avaloniaArgs);

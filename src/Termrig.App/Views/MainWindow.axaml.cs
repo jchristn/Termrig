@@ -223,7 +223,8 @@ namespace Termrig.App.Views
 
         private static TerminalProfile CreateDefaultProfile()
         {
-            ShellType shell = OperatingSystem.IsWindows() ? ShellType.Cmd : ShellType.Bash;
+            ShellType shell = new ShellCatalog().GetSupportedShells().FirstOrDefault()?.Shell
+                ?? (OperatingSystem.IsWindows() ? ShellType.Cmd : ShellType.Bash);
             TerminalProfile profile = new TerminalProfile
             {
                 Name = "Default",

@@ -30,10 +30,25 @@ namespace Termrig.Core.Services
             }
             else
             {
+                string? zsh = ResolveUnixExecutable("zsh");
+                if (!String.IsNullOrWhiteSpace(zsh))
+                {
+                    shells.Add(new ShellDescriptor { Shell = ShellType.Zsh, Name = "zsh", Executable = zsh });
+                }
+
                 string? bash = ResolveUnixExecutable("bash");
                 if (!String.IsNullOrWhiteSpace(bash))
                 {
                     shells.Add(new ShellDescriptor { Shell = ShellType.Bash, Name = "bash", Executable = bash });
+                }
+
+                // List the user's login shell first so it becomes the default for new tabs.
+                string loginShell = Path.GetFileName(Environment.GetEnvironmentVariable("SHELL") ?? String.Empty);
+                ShellDescriptor? preferred = shells.FirstOrDefault(item => String.Equals(item.Name, loginShell, StringComparison.Ordinal));
+                if (preferred != null)
+                {
+                    shells.Remove(preferred);
+                    shells.Insert(0, preferred);
                 }
             }
 
@@ -51,7 +66,15 @@ namespace Termrig.Core.Services
         {
             ArgumentNullException.ThrowIfNull(tab);
 
-            ShellDescriptor? descriptor = GetSupportedShells().FirstOrDefault(item => item.Shell == tab.Shell);
+            List<ShellDescriptor> shells = GetSupportedShells();
+            ShellDescriptor? descriptor = shells.FirstOrDefault(item => item.Shell == tab.Shell);
+
+            // Profiles authored on another OS (e.g. cmd.exe tabs opened on macOS) fall back to the host default shell.
+            if (descriptor == null && IsWindowsOnlyShell(tab.Shell) != RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                descriptor = shells.FirstOrDefault();
+            }
+
             if (descriptor == null) throw new InvalidOperationException("Shell " + tab.Shell + " is not supported on this host.");
 
             ShellLaunchPlan plan = new ShellLaunchPlan
@@ -61,12 +84,12 @@ namespace Termrig.Core.Services
                 StartupCommands = GetStartupScriptCommands(tab.StartupScript)
             };
 
-            if (tab.Shell == ShellType.Cmd)
+            if (descriptor.Shell == ShellType.Cmd)
             {
                 plan.Arguments.Add("/D");
                 plan.Arguments.Add("/K");
             }
-            else if (tab.Shell == ShellType.PowerShell)
+            else if (descriptor.Shell == ShellType.PowerShell)
             {
                 plan.Arguments.Add("-NoLogo");
                 plan.Arguments.Add("-NoProfile");
@@ -74,8 +97,10 @@ namespace Termrig.Core.Services
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) plan.Arguments.Add("Bypass");
                 plan.Arguments.Add("-NoExit");
             }
-            else if (tab.Shell == ShellType.Bash)
+            if (descriptor.Shell == ShellType.Bash || descriptor.Shell == ShellType.Zsh)
             {
+                // macOS terminals conventionally start login shells so ~/.zprofile and ~/.bash_profile are read.
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) plan.Arguments.Add("-l");
                 plan.Arguments.Add("-i");
             }
 
@@ -86,7 +111,7 @@ namespace Termrig.Core.Services
         /// Resolve a directory to its absolute path using the host filesystem's path casing where possible.
         /// </summary>
         /// <param name="directory">Directory path.</param>
-        /// <returns>Canonical directory path when it exists; otherwise the current directory.</returns>
+        /// <returns>Canonical directory path when it exists; otherwise the user's home directory.</returns>
         public static string NormalizeDirectoryPath(string directory)
         {
             string resolved = ResolveStartingDirectory(directory);
@@ -181,10 +206,60 @@ namespace Termrig.Core.Services
             return candidates.FirstOrDefault(File.Exists);
         }
 
+        private static bool IsWindowsOnlyShell(ShellType shell)
+        {
+            return shell == ShellType.Cmd || shell == ShellType.PowerShell;
+        }
+
         private static string ResolveStartingDirectory(string startingDirectory)
         {
-            if (!String.IsNullOrWhiteSpace(startingDirectory) && Directory.Exists(startingDirectory)) return Path.GetFullPath(startingDirectory);
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!String.IsNullOrWhiteSpace(startingDirectory))
+            {
+                string expanded = ExpandHomeDirectory(startingDirectory.Trim(), home);
+                if (Directory.Exists(expanded)) return Path.GetFullPath(expanded);
+
+                string? mapped = MapForeignPathToHome(expanded, home);
+                if (mapped != null) return mapped;
+            }
+
+            if (!String.IsNullOrWhiteSpace(home) && Directory.Exists(home)) return home;
             return Environment.CurrentDirectory;
+        }
+
+        private static string ExpandHomeDirectory(string directory, string home)
+        {
+            if (String.IsNullOrWhiteSpace(home)) return directory;
+            if (directory == "~") return home;
+            if (directory.StartsWith("~/", StringComparison.Ordinal) || directory.StartsWith("~\\", StringComparison.Ordinal))
+            {
+                return Path.Combine(home, directory.Substring(2));
+            }
+
+            return Environment.ExpandEnvironmentVariables(directory)
+                .Replace("$HOME", home, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Map a Windows-style path (e.g. C:\Users\name\Code\Project or C:\Code\Project) onto the
+        /// user's home directory on macOS or Linux, so profiles authored on Windows keep working.
+        /// </summary>
+        private static string? MapForeignPathToHome(string directory, string home)
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || String.IsNullOrWhiteSpace(home)) return null;
+            if (directory.Length < 3 || !Char.IsLetter(directory[0]) || directory[1] != ':') return null;
+
+            List<string> parts = directory.Substring(2)
+                .Split(new char[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries)
+                .ToList();
+            if (parts.Count >= 2 && String.Equals(parts[0], "Users", StringComparison.OrdinalIgnoreCase))
+            {
+                parts.RemoveRange(0, 2);
+            }
+
+            if (parts.Count < 1) return null;
+            string candidate = Path.Combine(new string[] { home }.Concat(parts).ToArray());
+            return Directory.Exists(candidate) ? Path.GetFullPath(candidate) : null;
         }
 
         #endregion

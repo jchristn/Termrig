@@ -18,6 +18,11 @@ namespace Termrig.Core.Enums
         /// <summary>
         /// Bash shell on macOS or Linux.
         /// </summary>
-        Bash = 2
+        Bash = 2,
+
+        /// <summary>
+        /// Z shell on macOS or Linux.
+        /// </summary>
+        Zsh = 3
     }
 }
