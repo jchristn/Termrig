@@ -68,5 +68,10 @@ namespace Termrig.App.Models
         /// Non-zero when a debounced restore snapshot save worker is active.
         /// </summary>
         public int RestoreSaveScheduled;
+
+        /// <summary>
+        /// Stopwatch timestamp of the most recent shell output; zero until the shell has produced output.
+        /// </summary>
+        public long LastOutputTimestamp;
     }
 }

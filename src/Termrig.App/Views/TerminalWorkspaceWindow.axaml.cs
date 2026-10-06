@@ -9,6 +9,7 @@ namespace Termrig.App.Views
     using Iciclecreek.Terminal;
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -49,6 +50,9 @@ namespace Termrig.App.Views
         private const double MaximumTerminalFontSize = 36;
         private const string AttentionIndicatorTag = "TerminalAttentionIndicator";
         private static readonly TimeSpan RestoreSaveDebounce = TimeSpan.FromSeconds(3);
+        private static readonly TimeSpan ShellReadyQuietPeriod = TimeSpan.FromMilliseconds(200);
+        private static readonly TimeSpan ShellReadyTimeout = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan ShellReadyPollInterval = TimeSpan.FromMilliseconds(25);
 
         #endregion
 
@@ -294,6 +298,7 @@ namespace Termrig.App.Views
             try
             {
                 await ApplyRestoreSnapshotIfAvailableAsync(session).ConfigureAwait(true);
+                session.LastOutputTimestamp = 0;
                 await session.Terminal.LaunchProcess(plan.StartingDirectory, plan.Executable, plan.Arguments.ToArray()).ConfigureAwait(true);
                 if (session.IsClosingByTermrig) return;
                 await RunStartupCommandsAsync(session, plan.StartupCommands).ConfigureAwait(true);
@@ -1202,6 +1207,7 @@ namespace Termrig.App.Views
 
             TerminalSession? session = GetSessionForTerminal(terminal);
             if (session == null) return;
+            session.LastOutputTimestamp = Stopwatch.GetTimestamp();
             QueueRestoreSnapshotSave(session);
         }
 
@@ -1229,7 +1235,7 @@ namespace Termrig.App.Views
 
             try
             {
-                await Task.Delay(250).ConfigureAwait(true);
+                await WaitForShellReadyAsync(session).ConfigureAwait(true);
                 foreach (string command in startupCommands)
                 {
                     if (session.IsClosingByTermrig) return;
@@ -1240,6 +1246,21 @@ namespace Termrig.App.Views
             catch (Exception exception)
             {
                 WriteTerminalCrashLog(session.TabProfile, "Terminal startup script failed.", exception.ToString());
+            }
+        }
+
+        /// <summary>
+        /// Wait until the shell has drawn its prompt, approximated as output followed by a quiet period.
+        /// Typing before the line editor starts makes the PTY echo the command above the prompt.
+        /// </summary>
+        private static async Task WaitForShellReadyAsync(TerminalSession session)
+        {
+            long started = Stopwatch.GetTimestamp();
+            while (!session.IsClosingByTermrig && Stopwatch.GetElapsedTime(started) < ShellReadyTimeout)
+            {
+                long lastOutput = session.LastOutputTimestamp;
+                if (lastOutput != 0 && Stopwatch.GetElapsedTime(lastOutput) >= ShellReadyQuietPeriod) return;
+                await Task.Delay(ShellReadyPollInterval).ConfigureAwait(true);
             }
         }
 
