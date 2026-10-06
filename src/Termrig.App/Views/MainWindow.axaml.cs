@@ -1042,6 +1042,7 @@ namespace Termrig.App.Views
                 {
                     CreateAsyncMenuItem("Open", async delegate { await OpenProfileFromContextAsync(profile).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Rename", async delegate { await RenameProfileAsync(profile).ConfigureAwait(true); }),
+                    CreateAsyncMenuItem("Clear History", async delegate { await ClearProfileHistoryAsync(profile).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Delete", async delegate { await DeleteProfileAsync(profile).ConfigureAwait(true); })
                 }
             };
@@ -1222,6 +1223,27 @@ namespace Termrig.App.Views
             }
 
             await _TerminalRestoreStore.DeleteAsync(profile, tab, CancellationToken.None).ConfigureAwait(true);
+        }
+
+        private async Task ClearProfileHistoryAsync(TerminalProfile profile)
+        {
+            DeleteConfirmationWindow confirmation = new DeleteConfirmationWindow(
+                "Clear history",
+                "Clear profile history?",
+                "This will clear the scrollback history and saved restore snapshots for all " + BuildTabCountText(profile.Tabs.Count) + " in profile \"" + profile.Name + "\". Open terminals keep their visible screen.",
+                "Clear history");
+            if (!await confirmation.ShowDialog<bool>(this).ConfigureAwait(true)) return;
+
+            List<TerminalWorkspaceWindow> windows = _WorkspaceWindows.Where(item => item.ProfileId == profile.Id).ToList();
+            foreach (TerminalTabProfile tab in profile.Tabs.ToList())
+            {
+                foreach (TerminalWorkspaceWindow window in windows)
+                {
+                    await window.ClearTabHistoryAsync(tab.Id).ConfigureAwait(true);
+                }
+
+                await _TerminalRestoreStore.DeleteAsync(profile, tab, CancellationToken.None).ConfigureAwait(true);
+            }
         }
 
         private async Task<bool> ConfirmDeleteProfileAsync(TerminalProfile profile)
