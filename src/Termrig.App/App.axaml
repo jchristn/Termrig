@@ -3,31 +3,153 @@
              x:Class="Termrig.App.App"
              Name="Termrig"
              RequestedThemeVariant="Dark">
-  
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Design tokens, shared with Armada Harbor's dark theme: window, card, hover, border, text, dim text,
+                 accent, status colors and inputs. Fluent's own keys are overridden below so stock controls (accent
+                 buttons, inputs, lists) pick up the same colors. -->
+            <CornerRadius x:Key="ControlCornerRadius">6</CornerRadius>
+            <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
+            <CornerRadius x:Key="TermrigCardCornerRadius">8</CornerRadius>
+
+            <SolidColorBrush x:Key="TermrigWindowBrush" Color="#080D1A" />
+            <SolidColorBrush x:Key="TermrigCardBrush" Color="#111827" />
+            <SolidColorBrush x:Key="TermrigHoverBrush" Color="#1E293B" />
+            <SolidColorBrush x:Key="TermrigBorderBrush" Color="#1E293B" />
+            <SolidColorBrush x:Key="TermrigTextBrush" Color="#F1F5F9" />
+            <SolidColorBrush x:Key="TermrigSecondaryTextBrush" Color="#94A3B8" />
+            <SolidColorBrush x:Key="TermrigHelpTextBrush" Color="#8B9AB0" />
+            <SolidColorBrush x:Key="TermrigAccentBrush" Color="#60A5FA" />
+            <SolidColorBrush x:Key="TermrigAccentSoftBrush" Color="#172554" />
+            <SolidColorBrush x:Key="TermrigAccentSoftTextBrush" Color="#93C5FD" />
+            <SolidColorBrush x:Key="TermrigSuccessBrush" Color="#22C55E" />
+            <SolidColorBrush x:Key="TermrigWarningBrush" Color="#FBBF24" />
+            <SolidColorBrush x:Key="TermrigDangerBrush" Color="#F87171" />
+            <SolidColorBrush x:Key="TermrigFolderBrush" Color="#FBBF24" />
+            <SolidColorBrush x:Key="TermrigInputBrush" Color="#111827" />
+            <SolidColorBrush x:Key="TermrigInputBorderBrush" Color="#334155" />
+
+            <Color x:Key="SystemAccentColor">#2563EB</Color>
+            <Color x:Key="SystemAccentColorDark1">#1D4ED8</Color>
+            <Color x:Key="SystemAccentColorDark2">#1E40AF</Color>
+            <Color x:Key="SystemAccentColorDark3">#1E3A8A</Color>
+            <Color x:Key="SystemAccentColorLight1">#3B82F6</Color>
+            <Color x:Key="SystemAccentColorLight2">#60A5FA</Color>
+            <Color x:Key="SystemAccentColorLight3">#93C5FD</Color>
+            <SolidColorBrush x:Key="AccentButtonBackground" Color="#2563EB" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#1D4ED8" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#1E40AF" />
+            <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ButtonBackground" Color="#111827" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#1E293B" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#273449" />
+            <SolidColorBrush x:Key="ButtonForeground" Color="#F1F5F9" />
+            <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#F1F5F9" />
+            <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#F1F5F9" />
+            <SolidColorBrush x:Key="ButtonBorderBrush" Color="#334155" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#475569" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#475569" />
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#0F172A" />
+            <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#1E293B" />
+            <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="#64748B" />
+            <SolidColorBrush x:Key="RepeatButtonBackgroundDisabled" Color="#0F172A" />
+            <SolidColorBrush x:Key="ToggleButtonBackground" Color="#111827" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#1E293B" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#273449" />
+            <SolidColorBrush x:Key="ToggleButtonForeground" Color="#F1F5F9" />
+            <SolidColorBrush x:Key="ToggleButtonForegroundPointerOver" Color="#F1F5F9" />
+            <SolidColorBrush x:Key="ToggleButtonBorderBrush" Color="#334155" />
+            <SolidColorBrush x:Key="ToggleButtonBorderBrushPointerOver" Color="#475569" />
+            <SolidColorBrush x:Key="TextControlBackground" Color="#111827" />
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#111827" />
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#111827" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#334155" />
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#475569" />
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#60A5FA" />
+            <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="#0F172A" />
+            <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="#1E293B" />
+            <SolidColorBrush x:Key="TextControlForegroundDisabled" Color="#64748B" />
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="#111827" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#1E293B" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#334155" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#475569" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundDisabled" Color="#0F172A" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled" Color="#1E293B" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#111827" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#334155" />
+            <SolidColorBrush x:Key="MenuFlyoutPresenterBackground" Color="#111827" />
+            <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="#334155" />
+            <SolidColorBrush x:Key="ListBoxItemBackgroundPointerOver" Color="#1E293B" />
+            <SolidColorBrush x:Key="TabItemHeaderSelectedPipeFill" Color="#60A5FA" />
+        </ResourceDictionary>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+
         <Style Selector="Window">
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Background" Value="#0F141A"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Background" Value="{DynamicResource TermrigWindowBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TermrigTextBrush}"/>
         </Style>
-        <Style Selector="Button">
-            <Setter Property="Background" Value="#24303A"/>
-            <Setter Property="Foreground" Value="#E6EDF3"/>
-            <Setter Property="BorderBrush" Value="#3A4652"/>
+
+        <!-- A section of a page: a bordered card a step above the window background. -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource TermrigCardBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TermrigBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="10,5"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource TermrigCardCornerRadius}"/>
+            <Setter Property="Padding" Value="16,14"/>
+        </Style>
+
+        <Style Selector="TextBlock.title">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.dim, SelectableTextBlock.dim">
+            <Setter Property="Foreground" Value="{DynamicResource TermrigSecondaryTextBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.help">
+            <Setter Property="Foreground" Value="{DynamicResource TermrigHelpTextBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.error">
+            <Setter Property="Foreground" Value="{DynamicResource TermrigDangerBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style Selector="Button">
+            <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+            <Setter Property="Padding" Value="12,5"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style Selector="Button.compact">
-            <Setter Property="Padding" Value="9,4"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10,4"/>
             <Setter Property="MinHeight" Value="28"/>
-            <Setter Property="Background" Value="#202A33"/>
         </Style>
+        <!-- Secondary header actions: quiet until hovered, so the primary (accent) action stands out. -->
+        <Style Selector="Button.subtle">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TermrigSecondaryTextBrush}"/>
+            <Setter Property="Padding" Value="10,5"/>
+        </Style>
+        <Style Selector="Button.subtle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource TermrigHoverBrush}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TermrigTextBrush}"/>
+        </Style>
+        <!-- A small square icon button. -->
         <Style Selector="Button.icon">
             <Setter Property="Padding" Value="0"/>
             <Setter Property="FontSize" Value="13"/>
@@ -35,45 +157,34 @@
             <Setter Property="Height" Value="28"/>
             <Setter Property="MinWidth" Value="28"/>
             <Setter Property="MinHeight" Value="28"/>
-            <Setter Property="Background" Value="#202A33"/>
-        </Style>
-        <Style Selector="Button.saveSuccess">
-            <Setter Property="Background" Value="#238636"/>
-            <Setter Property="BorderBrush" Value="#2EA043"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-        </Style>
-        <Style Selector="Button.saveSuccess:pointerover">
-            <Setter Property="Background" Value="#238636"/>
-            <Setter Property="BorderBrush" Value="#2EA043"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-        </Style>
-        <Style Selector="Button.saveSuccess:pressed">
-            <Setter Property="Background" Value="#1F7A31"/>
-            <Setter Property="BorderBrush" Value="#2EA043"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
         </Style>
         <Style Selector="Button.destructive">
-            <Setter Property="Background" Value="#352329"/>
-            <Setter Property="BorderBrush" Value="#70404A"/>
-            <Setter Property="Foreground" Value="#FFD7D7"/>
+            <Setter Property="Foreground" Value="{DynamicResource TermrigDangerBrush}"/>
         </Style>
+        <Style Selector="Button.destructive:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource TermrigDangerBrush}"/>
+        </Style>
+        <Style Selector="Button.danger">
+            <Setter Property="Background" Value="#B91C1C"/>
+            <Setter Property="BorderBrush" Value="#DC2626"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+        </Style>
+        <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#991B1B"/>
+            <Setter Property="BorderBrush" Value="#DC2626"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+        </Style>
+
         <Style Selector="TextBox">
-            <Setter Property="Background" Value="#141B22"/>
-            <Setter Property="Foreground" Value="#E6EDF3"/>
-            <Setter Property="BorderBrush" Value="#35424F"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="ScrollViewer.AllowAutoHide" Value="False"/>
         </Style>
-        <Style Selector="ComboBox">
-            <Setter Property="Background" Value="#141B22"/>
-            <Setter Property="Foreground" Value="#E6EDF3"/>
-            <Setter Property="BorderBrush" Value="#35424F"/>
-            <Setter Property="FontSize" Value="12"/>
+        <Style Selector="ScrollViewer">
+            <Setter Property="AllowAutoHide" Value="False"/>
         </Style>
+
         <Style Selector="ListBox">
-            <Setter Property="Background" Value="#10161D"/>
-            <Setter Property="Foreground" Value="#E6EDF3"/>
-            <Setter Property="BorderBrush" Value="#283540"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="ScrollViewer.AllowAutoHide" Value="False"/>
         </Style>
         <Style Selector="ListBox.profileList">
             <Setter Property="Padding" Value="0"/>
@@ -82,26 +193,29 @@
         <Style Selector="ListBox.profileList ListBoxItem">
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0,1"/>
-            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="CornerRadius" Value="6"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         </Style>
         <Style Selector="ListBox.profileList ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0"/>
+            <Setter Property="CornerRadius" Value="6"/>
         </Style>
         <Style Selector="ListBox.profileList ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#203A50"/>
-            <Setter Property="BorderBrush" Value="#58A6FF"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource TermrigAccentSoftBrush}"/>
+        </Style>
+        <Style Selector="ListBox.profileList ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource TermrigAccentSoftBrush}"/>
         </Style>
         <Style Selector="ListBoxItem.draggingItem /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#315E7A"/>
-            <Setter Property="BorderBrush" Value="#8BD5FF"/>
+            <Setter Property="Background" Value="#1E3A8A"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TermrigAccentBrush}"/>
             <Setter Property="BorderThickness" Value="2"/>
         </Style>
         <Style Selector="ListBoxItem.dropTargetItem /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#23435A"/>
-            <Setter Property="BorderBrush" Value="#58A6FF"/>
+            <Setter Property="Background" Value="{DynamicResource TermrigAccentSoftBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TermrigAccentBrush}"/>
             <Setter Property="BorderThickness" Value="2"/>
         </Style>
         <Style Selector="ListBox.tabsTable">
@@ -111,31 +225,26 @@
         <Style Selector="ListBox.tabsTable ListBoxItem">
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0"/>
-            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="MinHeight" Value="36"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         </Style>
         <Style Selector="ListBox.tabsTable ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0"/>
         </Style>
-        <Style Selector="ListBox.tabsTable ListBoxItem:selected">
-            <Setter Property="Background" Value="#203A50"/>
-        </Style>
         <Style Selector="ListBox.tabsTable ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#203A50"/>
-            <Setter Property="BorderBrush" Value="#58A6FF"/>
-            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Background" Value="{DynamicResource TermrigAccentSoftBrush}"/>
         </Style>
+        <Style Selector="ListBox.tabsTable ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource TermrigAccentSoftBrush}"/>
+        </Style>
+
         <Style Selector="TabControl">
-            <Setter Property="Background" Value="#0F141A"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Padding" Value="0"/>
         </Style>
         <Style Selector="TabItem">
             <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Background" Value="#151B22"/>
-            <Setter Property="Foreground" Value="#E6EDF3"/>
-            <Setter Property="BorderBrush" Value="#35424F"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="MinHeight" Value="24"/>
         </Style>

@@ -25,7 +25,7 @@ namespace Termrig.App.Views
     /// <summary>
     /// Main profile management window.
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, IColorSchemeHost
     {
         #region Private-Members
 
@@ -40,22 +40,6 @@ namespace Termrig.App.Views
         private readonly string _RecoveryRunId = Guid.NewGuid().ToString("N");
         private const string RepositoryUrl = "https://github.com/jchristn/Termrig";
         private const string DiscordUrl = "https://discord.gg/tRAN8HgvK5";
-        private const string NoFolderLabel = "No folder";
-        private const string SaveSuccessButtonClass = "saveSuccess";
-        private const int SaveSuccessFeedbackMilliseconds = 900;
-        private readonly List<string> _FontFamilies = new List<string>
-        {
-            "Default terminal font",
-            "Cascadia Mono",
-            "Cascadia Code",
-            "Consolas",
-            "Courier New",
-            "JetBrains Mono",
-            "Menlo",
-            "Monaco",
-            "DejaVu Sans Mono",
-            "Fira Code"
-        };
         private List<ColorScheme> _ColorSchemes = ColorSchemeCatalog.GetSchemes();
         private List<ProfileFolder> _ProfileFolders = new List<ProfileFolder>();
         private List<TerminalProfile> _Profiles = new List<TerminalProfile>();
@@ -80,7 +64,6 @@ namespace Termrig.App.Views
         private TerminalProfile? _LastProfileDropTargetProfile = null;
         private int? _LastTabDropIndex = null;
         private bool _SuppressProfileSelectionChanged = false;
-        private bool _IsRefreshingProfileEditor = false;
         private const string DraggingItemClass = "draggingItem";
         private const string DropTargetItemClass = "dropTargetItem";
         private const double DragStartThreshold = 4;
@@ -91,8 +74,6 @@ namespace Termrig.App.Views
         private CancellationTokenSource? _ConfigAssetReloadCts;
         private readonly object _ConfigAssetReloadGate = new object();
         private const int ConfigAssetReloadDebounceMilliseconds = 300;
-        private object? _SaveProfileButtonContent = null;
-        private CancellationTokenSource? _SaveProfileFeedbackCts = null;
 
         #endregion
 
@@ -104,10 +85,8 @@ namespace Termrig.App.Views
         public MainWindow()
         {
             InitializeComponent();
-            _SaveProfileButtonContent = SaveProfileButton.Content;
             WireEvents();
             BuildMacOSMenu();
-            InitializeLists();
             Dispatcher.UIThread.Post(LoadProfilesAsync, DispatcherPriority.Background);
         }
 
@@ -119,17 +98,15 @@ namespace Termrig.App.Views
         {
             Closed += OnMainWindowClosed;
             NewProfileButton.Click += OnNewProfileClicked;
-            DeleteProfileButton.Click += OnDeleteProfileClicked;
+            EmptyNewProfileButton.Click += OnNewProfileClicked;
+            DeleteProfileButton.Click += OnDeleteSelectedClicked;
             NewFolderButton.Click += OnNewFolderClicked;
+            RenameFolderButton.Click += OnRenameFolderClicked;
             DeleteFolderButton.Click += OnDeleteFolderClicked;
-            SaveProfileButton.Click += OnSaveProfileClicked;
+            ProfileSettingsButton.Click += OnProfileSettingsClicked;
             OpenProfileButton.Click += OnOpenProfileClicked;
             GitHubButton.Click += OnGitHubClicked;
             DiscordButton.Click += OnDiscordClicked;
-            AddSchemeButton.Click += OnAddSchemeClicked;
-            EditSchemeButton.Click += OnEditSchemeClicked;
-            DeleteSchemeButton.Click += OnDeleteSchemeClicked;
-            ResetSchemesButton.Click += OnResetSchemesClicked;
             AddTabButton.Click += OnAddTabClicked;
             EditTabButton.Click += OnEditTabClicked;
             DeleteTabButton.Click += OnDeleteTabClicked;
@@ -140,11 +117,6 @@ namespace Termrig.App.Views
             ProfileList.ContextRequested += OnProfileListContextRequested;
             TabsList.ContextRequested += OnTabsListContextRequested;
             ProfileList.SelectionChanged += OnProfileSelectionChanged;
-            GlobalSchemeCombo.SelectionChanged += OnGlobalSchemeChanged;
-            ProfileFolderCombo.SelectionChanged += OnProfileFolderChanged;
-            AutoOpenProfileBox.IsCheckedChanged += OnAutoOpenProfileChanged;
-            SchemeBackgroundPicker.ColorChanged += OnColorPickerChanged;
-            SchemeForegroundPicker.ColorChanged += OnColorPickerChanged;
             ProfileList.AddHandler(PointerPressedEvent, OnProfileListPointerPressed, RoutingStrategies.Bubble, true);
             TabsList.AddHandler(PointerPressedEvent, OnTabsListPointerPressed, RoutingStrategies.Bubble, true);
             ProfileList.AddHandler(PointerMovedEvent, OnProfileListPointerMoved, RoutingStrategies.Bubble, true);
@@ -168,28 +140,19 @@ namespace Termrig.App.Views
                 MacOSMenu.CreateItem("New Folder…", delegate { OnNewFolderClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.N, KeyModifiers.Shift)),
                 new NativeMenuItemSeparator(),
                 MacOSMenu.CreateItem("Open Profile", delegate { OnOpenProfileClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.O)),
-                MacOSMenu.CreateItem("Save Profile", delegate { OnSaveProfileClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.S)),
+                MacOSMenu.CreateItem("Profile Settings…", delegate { OnProfileSettingsClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.OemComma)),
                 new NativeMenuItemSeparator(),
                 MacOSMenu.CreateItem("New Tab…", delegate { OnAddTabClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.T)),
                 MacOSMenu.CreateItem("Edit Tab…", delegate { OnEditTabClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.E)),
                 new NativeMenuItemSeparator(),
-                MacOSMenu.CreateItem("Delete Profile…", delegate { OnDeleteProfileClicked(this, new RoutedEventArgs()); }),
-                MacOSMenu.CreateItem("Delete Folder…", delegate { OnDeleteFolderClicked(this, new RoutedEventArgs()); }));
+                MacOSMenu.CreateItem("Delete…", delegate { OnDeleteSelectedClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.Back)));
 
             MacOSMenu.ApplyWindowMenu(this, fileMenu, MacOSMenu.CreateTextEditMenu(this), null);
         }
 
         private void OnMainWindowClosed(object? sender, EventArgs e)
         {
-            CancelSaveProfileFeedback();
             StopConfigAssetWatcher();
-        }
-
-        private void InitializeLists()
-        {
-            RefreshColorSchemeList(null);
-            RefreshProfileFolderList(null);
-            ProfileFontFamilyCombo.ItemsSource = _FontFamilies;
         }
 
         private async void LoadProfilesAsync()
@@ -199,10 +162,7 @@ namespace Termrig.App.Views
                 WorkspaceRecoveryState? pendingCrashState = await GetPendingCrashStateAsync().ConfigureAwait(true);
 
                 _ColorSchemes = await _ColorSchemeStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
-                RefreshColorSchemeList(null);
-
                 _ProfileFolders = await _ProfileFolderStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
-                RefreshProfileFolderList(null);
 
                 _Profiles = await _ProfileStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
                 bool profilesChanged = ReconcileProfileFolders();
@@ -293,33 +253,61 @@ namespace Termrig.App.Views
 
         private void RefreshEditor()
         {
-            _IsRefreshingProfileEditor = true;
-            try
-            {
-                if (_SelectedProfile == null)
-                {
-                    ProfileNameBox.Text = String.Empty;
-                    ProfileFolderCombo.SelectedItem = NoFolderLabel;
-                    AutoOpenProfileBox.IsChecked = false;
-                    TabsList.ItemsSource = null;
-                    return;
-                }
+            bool hasProfile = _SelectedProfile != null;
+            bool hasFolder = !hasProfile && _SelectedFolder != null;
 
-                ProfileNameBox.Text = _SelectedProfile.Name;
-                GlobalSchemeCombo.SelectedItem = _SelectedProfile.GlobalColorScheme.Name;
-                SchemeNameBox.Text = _SelectedProfile.GlobalColorScheme.Name;
-                SchemeBackgroundPicker.Color = ParseColor(_SelectedProfile.GlobalColorScheme.Background);
-                SchemeForegroundPicker.Color = ParseColor(_SelectedProfile.GlobalColorScheme.Foreground);
-                ProfileFolderCombo.SelectedItem = GetFolderComboItem(_SelectedProfile.FolderId);
-                AutoOpenProfileBox.IsChecked = _SelectedProfile.AutoOpen;
-                ProfileFontFamilyCombo.SelectedItem = _SelectedProfile.FontFamily ?? "Default terminal font";
-                ProfileFontSizeBox.Text = _SelectedProfile.FontSize.HasValue ? _SelectedProfile.FontSize.Value.ToString("0.##") : String.Empty;
-                RefreshTabs();
-            }
-            finally
+            ProfileActions.IsVisible = hasProfile;
+            FolderActions.IsVisible = hasFolder;
+            EmptyActions.IsVisible = !hasProfile && !hasFolder;
+            SchemePreview.IsVisible = hasProfile;
+            FolderPreview.IsVisible = hasFolder;
+            TabsCard.IsVisible = hasProfile;
+            FolderCard.IsVisible = hasFolder;
+
+            if (_SelectedProfile != null)
             {
-                _IsRefreshingProfileEditor = false;
+                SelectionNameText.Text = _SelectedProfile.Name;
+                SelectionSummaryText.Text = BuildProfileSummary(_SelectedProfile);
+                SchemePreview.Background = new SolidColorBrush(ParseColor(_SelectedProfile.GlobalColorScheme.Background));
+                SchemePreviewText.Foreground = new SolidColorBrush(ParseColor(_SelectedProfile.GlobalColorScheme.Foreground));
+                SchemePreviewText.FontFamily = TerminalFonts.Resolve(_SelectedProfile.FontFamily);
+                ToolTip.SetTip(SchemePreview, _SelectedProfile.GlobalColorScheme.Name);
             }
+            else if (_SelectedFolder != null)
+            {
+                List<TerminalProfile> profiles = _Profiles.Where(item => item.FolderId == _SelectedFolder.Id).ToList();
+                SelectionNameText.Text = _SelectedFolder.Name;
+                SelectionSummaryText.Text = "Folder · " + BuildProfileCountText(profiles.Count);
+                FolderContentsText.Text = profiles.Count == 0
+                    ? "This folder is empty."
+                    : String.Join(", ", profiles.Select(item => item.Name));
+            }
+            else
+            {
+                SelectionNameText.Text = "No profile selected";
+                SelectionSummaryText.Text = _Profiles.Count == 0
+                    ? "Create a profile to describe the tabs a workspace opens with."
+                    : "Select a profile on the left, or create a new one.";
+            }
+
+            RefreshTabs();
+        }
+
+        private string BuildProfileSummary(TerminalProfile profile)
+        {
+            List<string> parts = new List<string> { BuildTabCountText(profile.Tabs.Count) };
+            ProfileFolder? folder = FindFolderById(profile.FolderId);
+            if (folder != null) parts.Add("in " + folder.Name);
+            parts.Add(profile.GlobalColorScheme.Name);
+
+            string font = String.IsNullOrWhiteSpace(profile.FontFamily) ? "Default font" : profile.FontFamily;
+            if (profile.FontSize.HasValue) font += " " + profile.FontSize.Value.ToString("0.##") + " pt";
+            parts.Add(font);
+
+            if (profile.AutoOpen) parts.Add("opens at startup");
+            int openCount = _WorkspaceWindows.Count(item => item.ProfileId == profile.Id);
+            if (openCount > 0) parts.Add(openCount == 1 ? "open now" : openCount + " windows open");
+            return String.Join(" · ", parts);
         }
 
         private void RefreshTabs()
@@ -327,103 +315,19 @@ namespace Termrig.App.Views
             TabsList.ItemsSource = null;
             if (_SelectedProfile == null)
             {
+                TabsCountText.Text = String.Empty;
+                TabsEmptyState.IsVisible = false;
                 return;
             }
 
             TabsList.ItemsSource = _SelectedProfile.Tabs;
+            TabsCountText.Text = _SelectedProfile.Tabs.Count > 0 ? BuildTabCountText(_SelectedProfile.Tabs.Count) : String.Empty;
+            TabsEmptyState.IsVisible = _SelectedProfile.Tabs.Count == 0;
         }
 
-        private void ApplyEditorToProfile()
+        private async Task SaveProfilesAsync()
         {
-            if (_SelectedProfile == null) return;
-            if (!String.IsNullOrWhiteSpace(ProfileNameBox.Text)) _SelectedProfile.Name = ProfileNameBox.Text;
-            if (GlobalSchemeCombo.SelectedItem is string selectedScheme)
-            {
-                _SelectedProfile.GlobalColorScheme = CloneScheme(FindSchemeByName(selectedScheme));
-            }
-
-            if (!String.IsNullOrWhiteSpace(SchemeNameBox.Text)) _SelectedProfile.GlobalColorScheme.Name = SchemeNameBox.Text;
-            _SelectedProfile.GlobalColorScheme.Background = ToHex(SchemeBackgroundPicker.Color);
-            _SelectedProfile.GlobalColorScheme.Foreground = ToHex(SchemeForegroundPicker.Color);
-            if (TryGetSelectedProfileFolderId(out string folderId))
-            {
-                _SelectedProfile.FolderId = folderId;
-            }
-
-            _SelectedProfile.AutoOpen = AutoOpenProfileBox.IsChecked == true;
-            _SelectedProfile.FontFamily = ProfileFontFamilyCombo.SelectedItem is string fontFamily && fontFamily != "Default terminal font" ? fontFamily : null;
-            if (String.IsNullOrWhiteSpace(ProfileFontSizeBox.Text))
-            {
-                _SelectedProfile.FontSize = null;
-            }
-            else if (Double.TryParse(ProfileFontSizeBox.Text, out double fontSize))
-            {
-                _SelectedProfile.FontSize = fontSize;
-            }
-        }
-
-        private async void OnSaveProfileClicked(object? sender, RoutedEventArgs e)
-        {
-            string? selectedProfileId = _SelectedProfile?.Id;
-            ApplyEditorToProfile();
             await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
-            RefreshProfiles(selectedProfileId);
-            RestoreSelectedProfile(selectedProfileId);
-            ShowSaveProfileSuccessFeedback();
-        }
-
-        private void ShowSaveProfileSuccessFeedback()
-        {
-            CancelSaveProfileFeedback();
-
-            CancellationTokenSource cts = new CancellationTokenSource();
-            _SaveProfileFeedbackCts = cts;
-            SaveProfileButton.Content = CreateSaveProfileSuccessIcon();
-            if (!SaveProfileButton.Classes.Contains(SaveSuccessButtonClass))
-            {
-                SaveProfileButton.Classes.Add(SaveSuccessButtonClass);
-            }
-
-            _ = RestoreSaveProfileButtonAsync(cts);
-        }
-
-        private void CancelSaveProfileFeedback()
-        {
-            _SaveProfileFeedbackCts?.Cancel();
-            _SaveProfileFeedbackCts = null;
-        }
-
-        private async Task RestoreSaveProfileButtonAsync(CancellationTokenSource cts)
-        {
-            try
-            {
-                await Task.Delay(SaveSuccessFeedbackMilliseconds, cts.Token).ConfigureAwait(true);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            finally
-            {
-                cts.Dispose();
-            }
-
-            if (_SaveProfileFeedbackCts != cts) return;
-
-            SaveProfileButton.Classes.Remove(SaveSuccessButtonClass);
-            SaveProfileButton.Content = _SaveProfileButtonContent;
-            _SaveProfileFeedbackCts = null;
-        }
-
-        private static PathIcon CreateSaveProfileSuccessIcon()
-        {
-            return new PathIcon
-            {
-                Width = 16,
-                Height = 16,
-                Foreground = Brushes.White,
-                Data = Geometry.Parse("M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z")
-            };
         }
 
         private void OnNewProfileClicked(object? sender, RoutedEventArgs e)
@@ -434,13 +338,48 @@ namespace Termrig.App.Views
             _Profiles.Add(profile);
             RefreshProfiles(profile.Id);
             RestoreSelectedProfile(profile.Id);
+            _ = SaveProfilesAsync();
         }
 
-        private async void OnDeleteProfileClicked(object? sender, RoutedEventArgs e)
+        private async void OnDeleteSelectedClicked(object? sender, RoutedEventArgs e)
         {
-            TerminalProfile? profile = GetSelectedProfileListItem()?.Profile;
-            if (profile == null) return;
-            await DeleteProfileAsync(profile).ConfigureAwait(true);
+            ProfileListItem? item = GetSelectedProfileListItem();
+            if (item?.Profile != null)
+            {
+                await DeleteProfileAsync(item.Profile).ConfigureAwait(true);
+            }
+            else if (item?.Folder != null)
+            {
+                await DeleteFolderAsync(item.Folder).ConfigureAwait(true);
+            }
+        }
+
+        private async void OnProfileSettingsClicked(object? sender, RoutedEventArgs e)
+        {
+            if (_SelectedProfile == null) return;
+            await EditProfileSettingsAsync(_SelectedProfile).ConfigureAwait(true);
+        }
+
+        private async Task EditProfileSettingsAsync(TerminalProfile profile)
+        {
+            ProfileSettingsWindow settings = new ProfileSettingsWindow(profile, _ProfileFolders, this);
+            ProfileSettingsResult? result = await settings.ShowDialog<ProfileSettingsResult?>(this).ConfigureAwait(true);
+            if (result == null)
+            {
+                // Scheme list changes made in the dialog are already saved; show them.
+                RefreshEditor();
+                return;
+            }
+
+            profile.Name = result.Name;
+            profile.FolderId = result.FolderId;
+            profile.AutoOpen = result.AutoOpen;
+            profile.GlobalColorScheme = result.ColorScheme;
+            profile.FontFamily = result.FontFamily;
+            profile.FontSize = result.FontSize;
+            await SaveProfilesAsync().ConfigureAwait(true);
+            RefreshProfiles(profile.Id);
+            RestoreSelectedProfile(profile.Id);
         }
 
         private async void OnNewFolderClicked(object? sender, RoutedEventArgs e)
@@ -458,7 +397,6 @@ namespace Termrig.App.Views
             };
             _ProfileFolders.Add(folder);
             await _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None).ConfigureAwait(true);
-            RefreshProfileFolderList(folder.Name);
             RefreshProfiles(null, folder.Id);
             _SelectedFolder = folder;
             RefreshEditor();
@@ -480,7 +418,6 @@ namespace Termrig.App.Views
 
         private async void OnOpenProfileClicked(object? sender, RoutedEventArgs e)
         {
-            ApplyEditorToProfile();
             if (_SelectedProfile == null) return;
             await OpenWorkspaceAsync(_SelectedProfile).ConfigureAwait(true);
         }
@@ -500,7 +437,6 @@ namespace Termrig.App.Views
 
             if (GetSelectedProfileListItem()?.Profile == null) return;
 
-            ApplyEditorToProfile();
             if (_SelectedProfile == null) return;
             await OpenWorkspaceAsync(_SelectedProfile).ConfigureAwait(true);
         }
@@ -643,7 +579,6 @@ namespace Termrig.App.Views
         {
             string? selectedProfileId = _SelectedProfile?.Id;
             string? selectedFolderId = _SelectedFolder?.Id;
-            string? selectedSchemeName = GlobalSchemeCombo.SelectedItem as string;
 
             try
             {
@@ -663,9 +598,6 @@ namespace Termrig.App.Views
                     await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
                 }
 
-                RefreshColorSchemeList(selectedSchemeName);
-                string? selectedFolderName = _ProfileFolders.FirstOrDefault(item => item.Id == selectedFolderId)?.Name;
-                RefreshProfileFolderList(selectedFolderName);
                 RefreshProfiles(selectedProfileId, selectedFolderId);
                 if (!String.IsNullOrWhiteSpace(selectedProfileId))
                 {
@@ -809,9 +741,11 @@ namespace Termrig.App.Views
             string workspaceId = Guid.NewGuid().ToString("N");
             TerminalWorkspaceWindow window = new TerminalWorkspaceWindow(profile, _ProfileStore, _ShellCatalog, _ColorSchemes, workspaceId);
             _WorkspaceWindows.Add(window);
+            RefreshEditor();
             window.Closed += async delegate
             {
                 _WorkspaceWindows.Remove(window);
+                RefreshEditor();
                 await RegisterWorkspaceClosedAsync(window.WorkspaceId).ConfigureAwait(true);
             };
             await RegisterWorkspaceOpenedAsync(window).ConfigureAwait(true);
@@ -887,79 +821,97 @@ namespace Termrig.App.Views
             process?.Dispose();
         }
 
-        private async void OnAddSchemeClicked(object? sender, RoutedEventArgs e)
+        /// <inheritdoc />
+        public IReadOnlyList<ColorScheme> ColorSchemes
         {
-            ColorSchemeEditorWindow editor = new ColorSchemeEditorWindow();
-            ColorScheme? scheme = await editor.ShowDialog<ColorScheme?>(this).ConfigureAwait(true);
-            if (scheme == null) return;
-
-            string uniqueName = GetUniqueSchemeName(scheme.Name, null);
-            scheme.Name = uniqueName;
-            _ColorSchemes.Add(scheme);
-            await _ColorSchemeStore.SaveAsync(_ColorSchemes, CancellationToken.None).ConfigureAwait(true);
-            RefreshColorSchemeList(scheme.Name);
-            ApplySelectedGlobalScheme();
+            get
+            {
+                return _ColorSchemes;
+            }
         }
 
-        private async void OnEditSchemeClicked(object? sender, RoutedEventArgs e)
+        /// <inheritdoc />
+        public async Task<string?> AddColorSchemeAsync(Window owner)
         {
-            if (!(GlobalSchemeCombo.SelectedItem is string selectedScheme)) return;
-            Int32 index = _ColorSchemes.FindIndex(item => item.Name == selectedScheme);
-            if (index < 0) return;
+            ColorSchemeEditorWindow editor = new ColorSchemeEditorWindow();
+            ColorScheme? scheme = await editor.ShowDialog<ColorScheme?>(owner).ConfigureAwait(true);
+            if (scheme == null) return null;
+
+            scheme.Name = GetUniqueSchemeName(scheme.Name, null);
+            _ColorSchemes.Add(scheme);
+            await _ColorSchemeStore.SaveAsync(_ColorSchemes, CancellationToken.None).ConfigureAwait(true);
+            return scheme.Name;
+        }
+
+        /// <inheritdoc />
+        public async Task<string?> EditColorSchemeAsync(Window owner, string name)
+        {
+            Int32 index = _ColorSchemes.FindIndex(item => item.Name == name);
+            if (index < 0) return null;
 
             ColorSchemeEditorWindow editor = new ColorSchemeEditorWindow(_ColorSchemes[index]);
-            ColorScheme? scheme = await editor.ShowDialog<ColorScheme?>(this).ConfigureAwait(true);
-            if (scheme == null) return;
+            ColorScheme? scheme = await editor.ShowDialog<ColorScheme?>(owner).ConfigureAwait(true);
+            if (scheme == null) return null;
 
             scheme.Name = GetUniqueSchemeName(scheme.Name, index);
             _ColorSchemes[index] = scheme;
             await _ColorSchemeStore.SaveAsync(_ColorSchemes, CancellationToken.None).ConfigureAwait(true);
-            RefreshProfilesUsingScheme(selectedScheme, scheme);
-            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
-            RefreshColorSchemeList(scheme.Name);
-            ApplySelectedGlobalScheme();
+            RefreshProfilesUsingScheme(name, scheme);
+            await SaveProfilesAsync().ConfigureAwait(true);
+            return scheme.Name;
         }
 
-        private async void OnDeleteSchemeClicked(object? sender, RoutedEventArgs e)
+        /// <inheritdoc />
+        public async Task<string?> DeleteColorSchemeAsync(Window owner, string name)
         {
-            if (_ColorSchemes.Count <= 1) return;
-            if (!(GlobalSchemeCombo.SelectedItem is string selectedScheme)) return;
+            if (_ColorSchemes.Count <= 1) return null;
+            Int32 index = _ColorSchemes.FindIndex(item => item.Name == name);
+            if (index < 0) return null;
 
-            Int32 index = _ColorSchemes.FindIndex(item => item.Name == selectedScheme);
-            if (index < 0) return;
+            int usedBy = _Profiles.Count(item => item.GlobalColorScheme.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            DeleteConfirmationWindow confirmation = new DeleteConfirmationWindow(
+                "Delete color scheme",
+                "Delete color scheme?",
+                "This will delete the color scheme \"" + name + "\"." + (usedBy > 0 ? " " + BuildProfileCountText(usedBy) + " using it will switch to the next scheme." : String.Empty),
+                "Delete scheme");
+            if (!await confirmation.ShowDialog<bool>(owner).ConfigureAwait(true)) return null;
 
             _ColorSchemes.RemoveAt(index);
             await _ColorSchemeStore.SaveAsync(_ColorSchemes, CancellationToken.None).ConfigureAwait(true);
 
             ColorScheme fallback = _ColorSchemes[Math.Min(index, _ColorSchemes.Count - 1)];
-            RefreshProfilesUsingScheme(selectedScheme, fallback);
-            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
-            RefreshColorSchemeList(fallback.Name);
-            ApplySelectedGlobalScheme();
+            RefreshProfilesUsingScheme(name, fallback);
+            await SaveProfilesAsync().ConfigureAwait(true);
+            return fallback.Name;
         }
 
-        private async void OnResetSchemesClicked(object? sender, RoutedEventArgs e)
+        /// <inheritdoc />
+        public async Task<string?> ResetColorSchemesAsync(Window owner, string? selectedName)
         {
-            string? selectedName = GlobalSchemeCombo.SelectedItem as string;
+            DeleteConfirmationWindow confirmation = new DeleteConfirmationWindow(
+                "Reset color schemes",
+                "Restore the built-in color schemes?",
+                "Custom color schemes will be removed, and profiles or tabs using them will switch to a built-in scheme.",
+                "Reset schemes");
+            if (!await confirmation.ShowDialog<bool>(owner).ConfigureAwait(true)) return null;
+
             _ColorSchemes = await _ColorSchemeStore.ResetDefaultsAsync(CancellationToken.None).ConfigureAwait(true);
-            string replacementName = _ColorSchemes.Any(item => item.Name == selectedName) ? selectedName! : _ColorSchemes[0].Name;
             ReconcileProfilesWithAvailableSchemes(_ColorSchemes[0]);
-            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
-            RefreshColorSchemeList(replacementName);
-            ApplySelectedGlobalScheme();
+            await SaveProfilesAsync().ConfigureAwait(true);
+            return _ColorSchemes.Any(item => item.Name == selectedName) ? selectedName : _ColorSchemes[0].Name;
         }
 
         private async void OnAddTabClicked(object? sender, RoutedEventArgs e)
         {
             if (_SelectedProfile == null) return;
-            ApplyEditorToProfile();
 
             TerminalTabEditorWindow editor = new TerminalTabEditorWindow(null, _ShellCatalog.GetSupportedShells(), _ColorSchemes);
             TerminalTabProfile? tab = await editor.ShowDialog<TerminalTabProfile?>(this).ConfigureAwait(true);
             if (tab == null) return;
             _SelectedProfile.Tabs.Add(tab);
             ApplyProfileFontDefaultForShell(tab.Shell);
-            RefreshTabs();
+            await SaveProfilesAsync().ConfigureAwait(true);
+            RefreshEditor();
             TabsList.SelectedIndex = _SelectedProfile.Tabs.Count - 1;
         }
 
@@ -992,16 +944,15 @@ namespace Termrig.App.Views
                 await _TerminalRestoreStore.DeleteAsync(_SelectedProfile, tab, CancellationToken.None).ConfigureAwait(true);
             }
 
-            RefreshTabs();
+            await SaveProfilesAsync().ConfigureAwait(true);
+            RefreshEditor();
+            TabsList.SelectedIndex = index;
         }
 
         private void ApplyProfileFontDefaultForShell(ShellType shell)
         {
             if (_SelectedProfile == null) return;
-            if (TerminalProfileDefaults.ApplyShellFontDefaults(_SelectedProfile, shell))
-            {
-                ProfileFontFamilyCombo.SelectedItem = Constants.CmdTerminalFontFamily;
-            }
+            TerminalProfileDefaults.ApplyShellFontDefaults(_SelectedProfile, shell);
         }
 
         private async void OnDeleteTabClicked(object? sender, RoutedEventArgs e)
@@ -1060,6 +1011,7 @@ namespace Termrig.App.Views
                 ItemsSource = new MenuItem[]
                 {
                     CreateAsyncMenuItem("Open", async delegate { await OpenProfileFromContextAsync(profile).ConfigureAwait(true); }),
+                    CreateAsyncMenuItem("Settings…", async delegate { await EditProfileSettingsAsync(profile).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Rename", async delegate { await RenameProfileAsync(profile).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Clear History", async delegate { await ClearProfileHistoryAsync(profile).ConfigureAwait(true); }),
                     CreateAsyncMenuItem("Delete", async delegate { await DeleteProfileAsync(profile).ConfigureAwait(true); })
@@ -1114,11 +1066,6 @@ namespace Termrig.App.Views
 
         private async Task OpenProfileFromContextAsync(TerminalProfile profile)
         {
-            if (_SelectedProfile == profile)
-            {
-                ApplyEditorToProfile();
-            }
-
             await OpenWorkspaceAsync(profile).ConfigureAwait(true);
         }
 
@@ -1157,8 +1104,8 @@ namespace Termrig.App.Views
 
             folder.Name = GetUniqueFolderName(value, folder.Id);
             await _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None).ConfigureAwait(true);
-            RefreshProfileFolderList(folder.Name);
             RefreshProfiles(null, folder.Id);
+            RefreshEditor();
         }
 
         private async Task DeleteFolderAsync(ProfileFolder folder)
@@ -1174,7 +1121,6 @@ namespace Termrig.App.Views
 
             await _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None).ConfigureAwait(true);
             await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
-            RefreshProfileFolderList(null);
             RefreshProfiles();
             SelectFirstProfileRow();
         }
@@ -1185,12 +1131,11 @@ namespace Termrig.App.Views
             Int32 index = _SelectedProfile.Tabs.IndexOf(tab);
             if (index < 0) return;
 
-            ApplyEditorToProfile();
             TerminalTabProfile duplicate = tab.CloneForDuplicate();
             _SelectedProfile.Tabs.Insert(index + 1, duplicate);
             ApplyProfileFontDefaultForShell(duplicate.Shell);
-            await _ProfileStore.SaveAsync(_Profiles, CancellationToken.None).ConfigureAwait(true);
-            RefreshTabs();
+            await SaveProfilesAsync().ConfigureAwait(true);
+            RefreshEditor();
             TabsList.SelectedIndex = index + 1;
         }
 
@@ -1205,6 +1150,7 @@ namespace Termrig.App.Views
             if (String.IsNullOrWhiteSpace(value)) return;
 
             tab.Name = value.Trim();
+            await SaveProfilesAsync().ConfigureAwait(true);
             RefreshTabs();
             TabsList.SelectedIndex = index;
         }
@@ -1220,7 +1166,8 @@ namespace Termrig.App.Views
 
             _SelectedProfile.Tabs.RemoveAt(index);
             await _TerminalRestoreStore.DeleteAsync(_SelectedProfile, tab, CancellationToken.None).ConfigureAwait(true);
-            RefreshTabs();
+            await SaveProfilesAsync().ConfigureAwait(true);
+            RefreshEditor();
             TabsList.SelectedIndex = Math.Min(index, _SelectedProfile.Tabs.Count - 1);
         }
 
@@ -1316,45 +1263,6 @@ namespace Termrig.App.Views
             _SelectedFolder = null;
             _SelectedProfile = item?.Profile;
             RefreshEditor();
-        }
-
-        private void OnGlobalSchemeChanged(object? sender, SelectionChangedEventArgs e)
-        {
-            ApplySelectedGlobalScheme();
-        }
-
-        private void OnProfileFolderChanged(object? sender, SelectionChangedEventArgs e)
-        {
-            if (_IsRefreshingProfileEditor || _SelectedProfile == null) return;
-
-            ApplyEditorToProfile();
-            RefreshProfiles(_SelectedProfile.Id);
-        }
-
-        private void OnAutoOpenProfileChanged(object? sender, RoutedEventArgs e)
-        {
-            if (_IsRefreshingProfileEditor || _SelectedProfile == null) return;
-
-            ApplyEditorToProfile();
-            RefreshProfiles(_SelectedProfile.Id);
-        }
-
-        private void ApplySelectedGlobalScheme()
-        {
-            if (_SelectedProfile == null) return;
-            if (GlobalSchemeCombo.SelectedItem is string selectedScheme)
-            {
-                ColorScheme scheme = FindSchemeByName(selectedScheme);
-                _SelectedProfile.GlobalColorScheme = CloneScheme(scheme);
-                SchemeNameBox.Text = scheme.Name;
-                SchemeBackgroundPicker.Color = ParseColor(scheme.Background);
-                SchemeForegroundPicker.Color = ParseColor(scheme.Foreground);
-            }
-        }
-
-        private void OnColorPickerChanged(object? sender, ColorChangedEventArgs e)
-        {
-            ApplyEditorToProfile();
         }
 
         private void OnProfileListPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -1565,7 +1473,6 @@ namespace Termrig.App.Views
                 return;
             }
 
-            ApplyEditorToProfile();
             TerminalProfile? targetProfile = GetProfileFromListBoxItem(GetDropListBoxItem(e));
             if (targetProfile == null)
             {
@@ -1587,7 +1494,6 @@ namespace Termrig.App.Views
         private async Task MoveDraggedProfileAsync(int targetIndex, string targetFolderId)
         {
             if (_DraggedProfile == null) return;
-            ApplyEditorToProfile();
 
             string selectedProfileId = _DraggedProfile.Id;
             Int32 sourceIndex = _Profiles.IndexOf(_DraggedProfile);
@@ -1608,7 +1514,6 @@ namespace Termrig.App.Views
         private async Task MoveDraggedTabToProfileAsync(TerminalProfile? targetProfile, int targetIndex)
         {
             if (_DraggedTab == null || _DraggedTabSourceProfile == null || targetProfile == null) return;
-            ApplyEditorToProfile();
 
             TerminalProfile sourceProfile = _DraggedTabSourceProfile;
             Int32 sourceIndex = sourceProfile.Tabs.IndexOf(_DraggedTab);
@@ -1780,6 +1685,7 @@ namespace Termrig.App.Views
             _SelectedProfile.Tabs.Insert(newIndex, tab);
             RefreshTabs();
             TabsList.SelectedIndex = newIndex;
+            _ = SaveProfilesAsync();
         }
 
         private List<ProfileListItem> BuildProfileListItems()
@@ -1884,63 +1790,6 @@ namespace Termrig.App.Views
             return lastIndex >= 0 ? lastIndex + 1 : _Profiles.Count;
         }
 
-        private void RefreshProfileFolderList(string? selectedName)
-        {
-            List<string> folders = new List<string> { NoFolderLabel };
-            folders.AddRange(_ProfileFolders.Select(item => item.Name));
-            bool wasRefreshing = _IsRefreshingProfileEditor;
-            _IsRefreshingProfileEditor = true;
-            try
-            {
-                ProfileFolderCombo.ItemsSource = folders;
-                if (!String.IsNullOrWhiteSpace(selectedName) && folders.Any(item => item.Equals(selectedName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    ProfileFolderCombo.SelectedItem = folders.First(item => item.Equals(selectedName, StringComparison.OrdinalIgnoreCase));
-                }
-                else if (ProfileFolderCombo.SelectedItem is string selectedFolder && folders.Any(item => item.Equals(selectedFolder, StringComparison.OrdinalIgnoreCase)))
-                {
-                    ProfileFolderCombo.SelectedItem = folders.First(item => item.Equals(selectedFolder, StringComparison.OrdinalIgnoreCase));
-                }
-                else
-                {
-                    ProfileFolderCombo.SelectedItem = NoFolderLabel;
-                }
-            }
-            finally
-            {
-                _IsRefreshingProfileEditor = wasRefreshing;
-            }
-        }
-
-        private string GetFolderComboItem(string? folderId)
-        {
-            if (String.IsNullOrWhiteSpace(folderId)) return NoFolderLabel;
-
-            ProfileFolder? folder = FindFolderById(folderId);
-            return folder == null ? NoFolderLabel : folder.Name;
-        }
-
-        private string GetSelectedProfileFolderId()
-        {
-            if (!(ProfileFolderCombo.SelectedItem is string selectedFolder) || selectedFolder == NoFolderLabel) return String.Empty;
-
-            ProfileFolder? folder = _ProfileFolders.FirstOrDefault(item => item.Name.Equals(selectedFolder, StringComparison.OrdinalIgnoreCase));
-            return folder?.Id ?? String.Empty;
-        }
-
-        private bool TryGetSelectedProfileFolderId(out string folderId)
-        {
-            folderId = String.Empty;
-            if (!(ProfileFolderCombo.SelectedItem is string selectedFolder)) return false;
-            if (selectedFolder == NoFolderLabel) return true;
-
-            ProfileFolder? folder = _ProfileFolders.FirstOrDefault(item => item.Name.Equals(selectedFolder, StringComparison.OrdinalIgnoreCase));
-            if (folder == null) return false;
-
-            folderId = folder.Id;
-            return true;
-        }
-
         private string GetNewProfileFolderId()
         {
             if (_SelectedFolder != null) return _SelectedFolder.Id;
@@ -2023,15 +1872,6 @@ namespace Termrig.App.Views
         private static string BuildProfileCountText(int profileCount)
         {
             return profileCount == 1 ? "1 profile" : profileCount + " profiles";
-        }
-
-        private void RefreshColorSchemeList(string? selectedName)
-        {
-            GlobalSchemeCombo.ItemsSource = _ColorSchemes.Select(item => item.Name).ToList();
-            if (!String.IsNullOrWhiteSpace(selectedName) && _ColorSchemes.Any(item => item.Name == selectedName))
-            {
-                GlobalSchemeCombo.SelectedItem = selectedName;
-            }
         }
 
         private ColorScheme FindSchemeByName(string? name)
@@ -2158,11 +1998,6 @@ namespace Termrig.App.Views
             {
                 return Color.Parse("#101419");
             }
-        }
-
-        private static string ToHex(Color color)
-        {
-            return "#" + color.R.ToString("X2") + color.G.ToString("X2") + color.B.ToString("X2");
         }
 
         #endregion

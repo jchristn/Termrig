@@ -5,191 +5,197 @@
         x:Class="Termrig.App.Views.MainWindow"
         Icon="/Assets/termrig-logo.ico"
         Title="Termrig | Profiles"
-        Width="1180"
-        Height="720"
-        MinWidth="980"
-        MinHeight="600">
-    <Grid RowDefinitions="Auto,*" Background="#0F141A">
-        <Border Grid.Row="0" Background="#151B22" Padding="18,14">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Image Source="/Assets/termrig-logo.ico" Width="24" Height="24"/>
-                    <TextBlock Text="Termrig" Foreground="#FFFFFF" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                </StackPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button x:Name="OpenProfileButton" Content="&#x1F4C1; Open" Classes="compact" MinWidth="96"/>
-                    <Button x:Name="SaveProfileButton" Content="&#x1F4BE; Save" Classes="compact" MinWidth="96"/>
-                    <Button x:Name="GitHubButton" Classes="compact" Width="34" Height="28" MinWidth="34" MinHeight="28" Padding="0" ToolTip.Tip="Open GitHub repository">
-                        <PathIcon Width="16" Height="16" Foreground="#E6EDF3" Data="M8 0C3.58 0 0 3.67 0 8.2c0 3.63 2.29 6.7 5.47 7.78.4.08.55-.18.55-.4 0-.2-.01-.85-.01-1.54-2.01.38-2.53-.5-2.69-.96-.09-.24-.48-.96-.82-1.15-.28-.15-.68-.52-.01-.53.63-.01 1.08.59 1.23.84.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.09-1.78-.21-3.64-.91-3.64-4.04 0-.89.31-1.62.82-2.19-.08-.21-.36-1.04.08-2.16 0 0 .67-.22 2.2.84.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.95.08 2.16.51.57.82 1.3.82 2.19 0 3.14-1.87 3.83-3.65 4.04.29.26.54.75.54 1.52 0 1.09-.01 1.97-.01 2.24 0 .22.15.48.55.4A8.12 8.12 0 0 0 16 8.2C16 3.67 12.42 0 8 0Z"/>
-                    </Button>
-                    <Button x:Name="DiscordButton" Classes="compact" Width="34" Height="28" MinWidth="34" MinHeight="28" Padding="0" ToolTip.Tip="Join the Discord server">
-                        <PathIcon Width="16" Height="16" Foreground="#E6EDF3" Data="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612"/>
-                    </Button>
-                </StackPanel>
-            </DockPanel>
-        </Border>
+        Width="1080"
+        Height="700"
+        MinWidth="820"
+        MinHeight="520">
+    <Grid RowDefinitions="Auto,*" RowSpacing="14" Margin="20,14,20,20">
 
-        <Grid Grid.Row="1" ColumnDefinitions="280,*">
-            <Border Grid.Column="0" Background="#10161D" BorderBrush="#26313B" BorderThickness="0,0,1,0" Padding="14">
-                <DockPanel>
-                    <StackPanel DockPanel.Dock="Top" Spacing="8">
-                        <TextBlock Text="Profiles" FontSize="14" FontWeight="SemiBold" Foreground="#D7DEE8"/>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="NewProfileButton" Classes="compact">
-                                <TextBlock Text="+ New" VerticalAlignment="Center" LineHeight="14"/>
+        <!-- Who this is, and the secondary places to go. -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+            <Image Grid.Column="0" Source="/Assets/termrig-logo.png" Width="30" Height="30" VerticalAlignment="Center"/>
+            <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
+                <TextBlock Text="Termrig" FontSize="15" FontWeight="SemiBold"/>
+                <TextBlock Classes="dim" FontSize="12" Text="Terminal profiles and workspaces"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                <Button x:Name="GitHubButton" Classes="subtle" Content="GitHub" ToolTip.Tip="Open the Termrig repository on GitHub"/>
+                <Button x:Name="DiscordButton" Classes="subtle" Content="Discord" ToolTip.Tip="Join the Termrig Discord server"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnDefinitions="260,*" ColumnSpacing="14">
+
+            <!-- Profiles and folders. -->
+            <Border Grid.Column="0" Classes="card" Padding="12,12">
+                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="4,0,0,0">
+                        <TextBlock Grid.Column="0" Classes="title" Text="Profiles" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                            <Button x:Name="NewProfileButton" Classes="icon" ToolTip.Tip="New profile">
+                                <PathIcon Width="13" Height="13" Data="M11 4H13V11H20V13H13V20H11V13H4V11H11V4Z"/>
                             </Button>
-                            <Button x:Name="NewFolderButton" Classes="compact" ToolTip.Tip="New folder">
-                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                                    <TextBlock Text="+" VerticalAlignment="Center" LineHeight="14"/>
-                                    <PathIcon Width="14" Height="14" Foreground="#E6EDF3" Data="M3 6C3 4.895 3.895 4 5 4H10L12 6H19C20.105 6 21 6.895 21 8V18C21 19.105 20.105 20 19 20H5C3.895 20 3 19.105 3 18V6Z"/>
-                                </StackPanel>
+                            <Button x:Name="NewFolderButton" Classes="icon" ToolTip.Tip="New folder">
+                                <PathIcon Width="15" Height="15" Data="M3 6C3 4.9 3.9 4 5 4H10L12 6H19C20.1 6 21 6.9 21 8V18C21 19.1 20.1 20 19 20H5C3.9 20 3 19.1 3 18V6ZM11 10V12H9V14H11V16H13V14H15V12H13V10H11Z"/>
                             </Button>
-                            <Button x:Name="DeleteProfileButton" Classes="icon destructive" ToolTip.Tip="Delete profile">
-                                <PathIcon Width="14" Height="14" Foreground="#FFD7D7" Data="M9 3H15L16 5H21V7H19L18.25 20C18.19 21.1 17.29 22 16.18 22H7.82C6.71 22 5.81 21.1 5.75 20L5 7H3V5H8L9 3ZM8 8L8.7 20H15.3L16 8H8Z"/>
-                            </Button>
-                            <Button x:Name="DeleteFolderButton" Classes="compact destructive" Width="52" MinWidth="52" ToolTip.Tip="Delete folder">
-                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                    <PathIcon Width="14" Height="14" Foreground="#FFD7D7" Data="M9 3H15L16 5H21V7H19L18.25 20C18.19 21.1 17.29 22 16.18 22H7.82C6.71 22 5.81 21.1 5.75 20L5 7H3V5H8L9 3ZM8 8L8.7 20H15.3L16 8H8Z"/>
-                                    <PathIcon Width="14" Height="14" Foreground="#FFD7D7" Data="M3 6C3 4.895 3.895 4 5 4H10L12 6H19C20.105 6 21 6.895 21 8V18C21 19.105 20.105 20 19 20H5C3.895 20 3 19.105 3 18V6Z"/>
-                                </StackPanel>
+                            <Button x:Name="DeleteProfileButton" Classes="icon destructive" ToolTip.Tip="Delete the selected profile or folder">
+                                <PathIcon Width="13" Height="13" Data="M9 3H15L16 5H21V7H19L18.25 20C18.19 21.1 17.29 22 16.18 22H7.82C6.71 22 5.81 21.1 5.75 20L5 7H3V5H8L9 3ZM8 8L8.7 20H15.3L16 8H8Z"/>
                             </Button>
                         </StackPanel>
-                    </StackPanel>
-                    <ListBox x:Name="ProfileList" Classes="profileList" Margin="0,14,0,0">
+                    </Grid>
+                    <ListBox Grid.Row="1" x:Name="ProfileList" Classes="profileList">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="appModels:ProfileListItem">
-                                <Border Padding="6,3"
-                                        CornerRadius="5"
-                                        Background="{Binding RowBackground}"
-                                        BorderBrush="{Binding RowBorderBrush}"
-                                        BorderThickness="1">
-                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="{Binding RowMargin}" ColumnSpacing="7">
-                                        <PathIcon Grid.Column="0"
-                                                  Width="11"
-                                                  Height="11"
-                                                  Data="{Binding ExpandIconData}"
-                                                  Foreground="#9AB7CE"
-                                                  IsVisible="{Binding IsFolder}"
-                                                  VerticalAlignment="Center"
-                                                  PointerPressed="OnProfileFolderTogglePointerPressed"/>
-                                        <PathIcon Grid.Column="1"
-                                                  Width="14"
-                                                  Height="14"
-                                                  Data="{Binding FolderIconData}"
-                                                  Foreground="#D5A94A"
-                                                  IsVisible="{Binding IsFolder}"
-                                                  VerticalAlignment="Center"/>
-                                        <TextBlock Grid.Column="2"
-                                                   Text="{Binding DisplayName}"
-                                                   FontWeight="{Binding RowFontWeight}"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock Grid.Column="3"
-                                                   Text="{Binding StatusText}"
-                                                   Foreground="#8FB6D8"
-                                                   FontSize="11"
-                                                   VerticalAlignment="Center"/>
-                                    </Grid>
-                                </Border>
+                                <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="{Binding RowMargin}" ColumnSpacing="7" Background="Transparent">
+                                    <PathIcon Grid.Column="0"
+                                              Width="10"
+                                              Height="10"
+                                              Margin="6,0,0,0"
+                                              Data="{Binding ExpandIconData}"
+                                              Foreground="{DynamicResource TermrigSecondaryTextBrush}"
+                                              IsVisible="{Binding IsFolder}"
+                                              VerticalAlignment="Center"
+                                              PointerPressed="OnProfileFolderTogglePointerPressed"/>
+                                    <PathIcon Grid.Column="1"
+                                              Width="14"
+                                              Height="14"
+                                              Data="{Binding IconData}"
+                                              Foreground="{Binding IconBrush}"
+                                              Margin="{Binding IconMargin}"
+                                              VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding DisplayName}"
+                                               FontWeight="{Binding RowFontWeight}"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center"/>
+                                    <Border Grid.Column="3"
+                                            IsVisible="{Binding HasStatus}"
+                                            Background="{DynamicResource TermrigAccentSoftBrush}"
+                                            CornerRadius="9"
+                                            Padding="7,1"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding StatusText}"
+                                                   FontSize="10"
+                                                   Foreground="{DynamicResource TermrigAccentSoftTextBrush}"/>
+                                    </Border>
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                </DockPanel>
+                    <TextBlock Grid.Row="2" Classes="help" Margin="4,0,0,0"
+                               Text="Double-click to open. Drag to reorder or move into a folder. Right-click for more."/>
+                </Grid>
             </Border>
 
-            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*" Margin="18">
-                <Grid Grid.Row="0" ColumnDefinitions="420,320,140,*" ColumnSpacing="16">
-                    <StackPanel Grid.Column="0" Spacing="6">
-                        <TextBlock Text="Profile name" FontWeight="SemiBold"/>
-                        <TextBox x:Name="ProfileNameBox"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Spacing="6">
-                        <TextBlock Text="Global color scheme" FontWeight="SemiBold"/>
-                        <ComboBox x:Name="GlobalSchemeCombo"/>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Button x:Name="AddSchemeButton" Classes="compact">
-                                <TextBlock Text="+ Add" VerticalAlignment="Center" LineHeight="14"/>
-                            </Button>
-                            <Button x:Name="EditSchemeButton" Classes="compact">
-                                <TextBlock Text="&#x2699; Edit" VerticalAlignment="Center" LineHeight="14"/>
-                            </Button>
-                            <Button x:Name="DeleteSchemeButton" Classes="compact">
-                                <TextBlock Text="&#x1F5D1; Delete" VerticalAlignment="Center" LineHeight="14"/>
-                            </Button>
-                            <Button x:Name="ResetSchemesButton" Content="Reset Defaults" Classes="compact"/>
+            <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="14">
+
+                <!-- The selected profile (or folder): what it is, and the main actions. -->
+                <Border Grid.Row="0" Classes="card" Padding="20,18">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <Border Grid.Column="0"
+                                x:Name="SchemePreview"
+                                Width="52"
+                                Height="52"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource TermrigInputBorderBrush}"
+                                VerticalAlignment="Center">
+                            <TextBlock x:Name="SchemePreviewText"
+                                       Text="&gt;_"
+                                       FontSize="18"
+                                       FontWeight="Bold"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <Border Grid.Column="0"
+                                x:Name="FolderPreview"
+                                Width="52"
+                                Height="52"
+                                CornerRadius="8"
+                                Background="{DynamicResource TermrigHoverBrush}"
+                                IsVisible="False"
+                                VerticalAlignment="Center">
+                            <PathIcon Width="24" Height="24" Foreground="{DynamicResource TermrigFolderBrush}"
+                                      Data="M3 6C3 4.895 3.895 4 5 4H10L12 6H19C20.105 6 21 6.895 21 8V18C21 19.105 20.105 20 19 20H5C3.895 20 3 19.105 3 18V6Z"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock x:Name="SelectionNameText" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="SelectionSummaryText" Classes="dim" TextWrapping="Wrap"/>
                         </StackPanel>
-                        <TextBox x:Name="SchemeNameBox" PlaceholderText="Scheme name"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="2" Spacing="6">
-                        <TextBlock Text="Background" FontWeight="SemiBold"/>
-                        <ColorPicker x:Name="SchemeBackgroundPicker" Width="120" HorizontalAlignment="Left"/>
-                        <TextBlock Text="Profile font size" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBox x:Name="ProfileFontSizeBox" PlaceholderText="14"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="3" Spacing="6">
-                        <TextBlock Text="Foreground" FontWeight="SemiBold"/>
-                        <ColorPicker x:Name="SchemeForegroundPicker" Width="120" HorizontalAlignment="Left"/>
-                        <TextBlock Text="Profile font" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <ComboBox x:Name="ProfileFontFamilyCombo" PlaceholderText="Default terminal font"/>
-                    </StackPanel>
-                </Grid>
-
-                <Grid Grid.Row="1" ColumnDefinitions="420,320,*" ColumnSpacing="16" Margin="0,14,0,0">
-                    <StackPanel Grid.Column="0" Spacing="6">
-                        <TextBlock Text="Profile folder" FontWeight="SemiBold"/>
-                        <ComboBox x:Name="ProfileFolderCombo"/>
-                    </StackPanel>
-                    <CheckBox x:Name="AutoOpenProfileBox"
-                              Grid.Column="1"
-                              Content="Auto-open on Termrig start"
-                              VerticalAlignment="Bottom"/>
-                </Grid>
-
-                <Grid Grid.Row="2" RowDefinitions="Auto,*" Margin="0,22,0,0">
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-                        <TextBlock Grid.Column="0" Text="Tabs" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center">
-                            <Button x:Name="AddTabButton" Classes="compact">
-                                <TextBlock Text="+ New" VerticalAlignment="Center" LineHeight="14"/>
-                            </Button>
-                            <Button x:Name="EditTabButton" Classes="compact">
-                                <TextBlock Text="&#x2699; Edit" VerticalAlignment="Center" LineHeight="14"/>
-                            </Button>
-                            <Button x:Name="DeleteTabButton" Classes="compact">
-                                <TextBlock Text="&#x1F5D1; Delete" VerticalAlignment="Center" LineHeight="14"/>
-                            </Button>
-                            <Button x:Name="MoveTabUpButton" Classes="compact">
-                                <TextBlock Text="&#x2191; Move Up" VerticalAlignment="Center" LineHeight="14"/>
-                            </Button>
-                            <Button x:Name="MoveTabDownButton" Classes="compact">
-                                <TextBlock Text="&#x2193; Move Down" VerticalAlignment="Center" LineHeight="14"/>
-                            </Button>
+                        <StackPanel Grid.Column="2" x:Name="ProfileActions" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button x:Name="ProfileSettingsButton" Content="Settings" MinHeight="36" ToolTip.Tip="Name, folder, startup, colors and font"/>
+                            <Button x:Name="OpenProfileButton" Classes="accent" Content="Open" MinWidth="112" MinHeight="36" FontSize="14"
+                                    ToolTip.Tip="Open this profile's tabs in a workspace window"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" x:Name="FolderActions" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="False">
+                            <Button x:Name="RenameFolderButton" Content="Rename" MinHeight="36"/>
+                            <Button x:Name="DeleteFolderButton" Classes="destructive" Content="Remove Folder" MinHeight="36"
+                                    ToolTip.Tip="Remove the folder; its profiles move to the top level"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" x:Name="EmptyActions" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="False">
+                            <Button x:Name="EmptyNewProfileButton" Classes="accent" Content="New Profile" MinHeight="36"/>
                         </StackPanel>
                     </Grid>
-                    <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,12,0,0">
-                        <Border Grid.Row="0" Background="#151B22" BorderBrush="#283540" BorderThickness="0,0,0,1" Padding="10,7">
-                            <Grid ColumnDefinitions="260,120,*,150" ColumnSpacing="12">
-                                <TextBlock Grid.Column="0" Text="Name" FontWeight="SemiBold" Foreground="#D7DEE8" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="Shell" FontWeight="SemiBold" Foreground="#D7DEE8" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="2" Text="Starting Directory" FontWeight="SemiBold" Foreground="#D7DEE8" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="3" Text="Color" FontWeight="SemiBold" Foreground="#D7DEE8" VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- The tabs a workspace opens with. -->
+                <Border Grid.Row="1" x:Name="TabsCard" Classes="card">
+                    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Classes="title" Text="Tabs" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" x:Name="TabsCountText" Classes="dim" FontSize="12" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                <Button x:Name="AddTabButton" Classes="compact" Content="Add Tab" ToolTip.Tip="Add a tab to this profile"/>
+                                <Button x:Name="EditTabButton" Classes="compact" Content="Edit" ToolTip.Tip="Edit the selected tab"/>
+                                <Button x:Name="DeleteTabButton" Classes="compact destructive" Content="Delete" ToolTip.Tip="Delete the selected tab"/>
+                                <Button x:Name="MoveTabUpButton" Classes="icon" ToolTip.Tip="Move up">
+                                    <PathIcon Width="12" Height="12" Data="M12 4L20 13H14V20H10V13H4L12 4Z"/>
+                                </Button>
+                                <Button x:Name="MoveTabDownButton" Classes="icon" ToolTip.Tip="Move down">
+                                    <PathIcon Width="12" Height="12" Data="M12 20L4 11H10V4H14V11H20L12 20Z"/>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                        <Border Grid.Row="1" BorderBrush="{DynamicResource TermrigBorderBrush}" BorderThickness="0,0,0,1" Padding="10,4,10,8">
+                            <Grid ColumnDefinitions="2*,110,3*,130" ColumnSpacing="12">
+                                <TextBlock Grid.Column="0" Classes="dim" FontSize="11" FontWeight="SemiBold" Text="NAME"/>
+                                <TextBlock Grid.Column="1" Classes="dim" FontSize="11" FontWeight="SemiBold" Text="SHELL"/>
+                                <TextBlock Grid.Column="2" Classes="dim" FontSize="11" FontWeight="SemiBold" Text="STARTING DIRECTORY"/>
+                                <TextBlock Grid.Column="3" Classes="dim" FontSize="11" FontWeight="SemiBold" Text="COLORS"/>
                             </Grid>
                         </Border>
-                        <ListBox x:Name="TabsList" Grid.Row="1" Classes="tabsTable" BorderThickness="0" Padding="0">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="models:TerminalTabProfile">
-                                    <Border Background="Transparent" BorderBrush="#1F2A34" BorderThickness="0,0,0,1" Padding="10,7">
-                                        <Grid ColumnDefinitions="260,120,*,150" ColumnSpacing="12">
-                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" Foreground="#E6EDF3" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding ShellDisplayName}" Foreground="#D7DEE8" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="2" Text="{Binding StartingDirectory}" Foreground="#AAB6C2" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="3" Text="Profile / Override" Foreground="#AAB6C2" VerticalAlignment="Center"/>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <Panel Grid.Row="2">
+                            <ListBox x:Name="TabsList" Classes="tabsTable">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:TerminalTabProfile">
+                                        <Border Background="Transparent" BorderBrush="{DynamicResource TermrigBorderBrush}" BorderThickness="0,0,0,1" Padding="10,8">
+                                            <Grid ColumnDefinitions="2*,110,3*,130" ColumnSpacing="12">
+                                                <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding ShellDisplayName}" VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Column="2" Classes="dim" Text="{Binding StartingDirectory}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Column="3" Classes="dim" Text="{Binding ColorSchemeOverride.Name, FallbackValue=Profile, TargetNullValue=Profile}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <StackPanel x:Name="TabsEmptyState" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="False">
+                                <TextBlock Classes="dim" Text="This profile has no tabs yet." HorizontalAlignment="Center"/>
+                                <TextBlock Classes="help" Text="Add a tab to choose a shell, starting directory and startup script." HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Panel>
                     </Grid>
-                </Grid>
+                </Border>
+
+                <!-- A folder is selected: what is in it. -->
+                <Border Grid.Row="1" x:Name="FolderCard" Classes="card" IsVisible="False">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="title" Text="In this folder"/>
+                        <TextBlock x:Name="FolderContentsText" Classes="dim" TextWrapping="Wrap"/>
+                        <TextBlock Classes="help" Text="Drag profiles onto the folder to move them in. New profiles are created in the selected folder."/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Grid>
     </Grid>

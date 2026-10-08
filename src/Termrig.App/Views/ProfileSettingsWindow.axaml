@@ -1,0 +1,109 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Termrig.App.Views.ProfileSettingsWindow"
+        Icon="/Assets/termrig-logo.ico"
+        Title="Profile Settings"
+        Width="640"
+        Height="820"
+        MinWidth="560"
+        MinHeight="520"
+        WindowStartupLocation="CenterOwner">
+    <Grid RowDefinitions="*,Auto">
+        <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="14" Margin="20,16,20,12">
+                <TextBlock x:Name="IntroText" Classes="dim" FontSize="12" TextWrapping="Wrap"/>
+
+                <!-- Identity and startup. -->
+                <Border Classes="card">
+                    <StackPanel Spacing="10">
+                        <TextBlock Classes="title" Text="Profile"/>
+                        <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="12">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Name"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="NameBox"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Folder"/>
+                            <ComboBox Grid.Row="1" Grid.Column="1" x:Name="FolderCombo" MinWidth="220"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Startup" VerticalAlignment="Top" Margin="0,6,0,0"/>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Spacing="2">
+                                <CheckBox x:Name="AutoOpenBox" Content="Open this profile when Termrig starts"/>
+                                <TextBlock Classes="help" Text="Auto-open profiles are marked in the Profiles list."/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Colors. -->
+                <Border Classes="card">
+                    <StackPanel Spacing="10">
+                        <TextBlock Classes="title" Text="Colors"/>
+                        <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="12">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Color scheme" VerticalAlignment="Top" Margin="0,6,0,0"/>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Spacing="8">
+                                <ComboBox x:Name="SchemeCombo" MinWidth="220"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button x:Name="AddSchemeButton" Classes="compact" Content="New…" ToolTip.Tip="Create a color scheme"/>
+                                    <Button x:Name="EditSchemeButton" Classes="compact" Content="Edit…" ToolTip.Tip="Edit the selected color scheme"/>
+                                    <Button x:Name="DeleteSchemeButton" Classes="compact destructive" Content="Delete" ToolTip.Tip="Delete the selected color scheme"/>
+                                    <Button x:Name="ResetSchemesButton" Classes="compact" Content="Reset Defaults" ToolTip.Tip="Restore the built-in color schemes"/>
+                                </StackPanel>
+                                <TextBlock Classes="help" Text="Color schemes are shared by every profile. Changes to the list are saved right away."/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Adjust" VerticalAlignment="Top" Margin="0,6,0,0"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="16">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Classes="dim" FontSize="12" Text="Background"/>
+                                        <ColorPicker x:Name="BackgroundPicker" Width="120" HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Classes="dim" FontSize="12" Text="Foreground"/>
+                                        <ColorPicker x:Name="ForegroundPicker" Width="120" HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <TextBlock Classes="help" Text="Start from the scheme's colors. Adjustments here apply to this profile only."/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Preview" VerticalAlignment="Top" Margin="0,6,0,0"/>
+                            <Border Grid.Row="2" Grid.Column="1" x:Name="PreviewBorder" CornerRadius="6" Padding="12,10"
+                                    BorderThickness="1" BorderBrush="{DynamicResource TermrigInputBorderBrush}">
+                                <StackPanel Spacing="2">
+                                    <TextBlock x:Name="PreviewLine1" Text="user@host:~$ ls -la"/>
+                                    <TextBlock x:Name="PreviewLine2" Text="drwxr-xr-x  projects  notes.txt  build.sh"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Font. -->
+                <Border Classes="card">
+                    <StackPanel Spacing="10">
+                        <TextBlock Classes="title" Text="Font"/>
+                        <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto" RowSpacing="12">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Font"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" x:Name="FontFamilyCombo" MinWidth="220"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Size" VerticalAlignment="Top" Margin="0,6,0,0"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="2">
+                                <TextBox x:Name="FontSizeBox" PlaceholderText="14" Width="100" HorizontalAlignment="Left"/>
+                                <TextBlock Classes="help" Text="Leave empty for the default. Tabs can override the font and size, and the zoom shortcuts in a workspace change it too."/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="1" BorderBrush="{DynamicResource TermrigBorderBrush}" BorderThickness="0,1,0,0" Padding="20,12">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" x:Name="MessageText" Classes="error" VerticalAlignment="Center" IsVisible="False"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="CancelButton" Content="Cancel" MinWidth="92"/>
+                    <Button x:Name="SaveButton" Classes="accent" Content="Save" MinWidth="92" IsDefault="True"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
