@@ -1476,6 +1476,15 @@ namespace Iciclecreek.Terminal
                     return;
                 }
 
+                // On macOS, Command is reserved for application shortcuts (menu key equivalents).
+                // Never forward the Command key itself or Command+<key> to the shell; otherwise the
+                // fallback key mapping turns them into stray characters.
+                if (OperatingSystem.IsMacOS() && IsMacCommandKey(e))
+                {
+                    base.OnKeyDown(e);
+                    return;
+                }
+
                 var modifiers = ConvertAvaloniaModifiers(e.KeyModifiers);
                 var hasAlt = (modifiers & XT.Input.KeyModifiers.Alt) != 0;
 
@@ -2290,6 +2299,14 @@ namespace Iciclecreek.Terminal
                 Key.LWin or Key.RWin => true,
                 _ => false
             };
+        }
+
+        private static bool IsMacCommandKey(KeyEventArgs e)
+        {
+            return
+                (e.KeyModifiers & KeyModifiers.Meta) == KeyModifiers.Meta ||
+                e.PhysicalKey == PhysicalKey.MetaLeft ||
+                e.PhysicalKey == PhysicalKey.MetaRight;
         }
 
         private bool TryGetPrintableChar(KeyEventArgs e, out char character)

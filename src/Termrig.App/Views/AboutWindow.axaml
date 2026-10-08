@@ -1,0 +1,21 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Termrig.App.Views.AboutWindow"
+        Icon="/Assets/termrig-logo.ico"
+        Title="About Termrig"
+        Width="360"
+        Height="300"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="24" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Image Source="/Assets/termrig-logo.png" Width="72" Height="72" HorizontalAlignment="Center"/>
+        <TextBlock Text="Termrig" FontSize="20" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
+        <TextBlock x:Name="VersionText" Foreground="#AAB6C2" HorizontalAlignment="Center"/>
+        <TextBlock Text="Desktop terminal profile manager" Foreground="#C9D1D9" HorizontalAlignment="Center"/>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,12,0,0">
+            <Button x:Name="GitHubButton" Content="GitHub" Classes="compact" MinWidth="84"/>
+            <Button x:Name="DiscordButton" Content="Discord" Classes="compact" MinWidth="84"/>
+            <Button x:Name="CloseButton" Content="Close" Classes="compact" MinWidth="84"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

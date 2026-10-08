@@ -106,6 +106,7 @@ namespace Termrig.App.Views
             InitializeComponent();
             _SaveProfileButtonContent = SaveProfileButton.Content;
             WireEvents();
+            BuildMacOSMenu();
             InitializeLists();
             Dispatcher.UIThread.Post(LoadProfilesAsync, DispatcherPriority.Background);
         }
@@ -158,6 +159,24 @@ namespace Termrig.App.Views
             DragDrop.AddDragOverHandler(TabsList, OnTabsListDragOver);
             DragDrop.AddDropHandler(TabsList, OnTabsListDrop);
             DragDrop.AddDragLeaveHandler(TabsList, OnListDragLeave);
+        }
+
+        private void BuildMacOSMenu()
+        {
+            NativeMenuItem fileMenu = MacOSMenu.CreateSubmenu("File",
+                MacOSMenu.CreateItem("New Profile", delegate { OnNewProfileClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.N)),
+                MacOSMenu.CreateItem("New Folder…", delegate { OnNewFolderClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.N, KeyModifiers.Shift)),
+                new NativeMenuItemSeparator(),
+                MacOSMenu.CreateItem("Open Profile", delegate { OnOpenProfileClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.O)),
+                MacOSMenu.CreateItem("Save Profile", delegate { OnSaveProfileClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.S)),
+                new NativeMenuItemSeparator(),
+                MacOSMenu.CreateItem("New Tab…", delegate { OnAddTabClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.T)),
+                MacOSMenu.CreateItem("Edit Tab…", delegate { OnEditTabClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.E)),
+                new NativeMenuItemSeparator(),
+                MacOSMenu.CreateItem("Delete Profile…", delegate { OnDeleteProfileClicked(this, new RoutedEventArgs()); }),
+                MacOSMenu.CreateItem("Delete Folder…", delegate { OnDeleteFolderClicked(this, new RoutedEventArgs()); }));
+
+            MacOSMenu.ApplyWindowMenu(this, fileMenu, MacOSMenu.CreateTextEditMenu(this), null);
         }
 
         private void OnMainWindowClosed(object? sender, EventArgs e)

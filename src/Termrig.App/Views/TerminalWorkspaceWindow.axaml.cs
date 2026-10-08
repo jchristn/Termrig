@@ -137,6 +137,7 @@ namespace Termrig.App.Views
             Title = profile.Name + " | Termrig Workspace";
             TitleText.Text = profile.Name;
             WireEvents();
+            BuildMacOSMenu();
             LaunchProfile();
         }
 
@@ -160,6 +161,99 @@ namespace Termrig.App.Views
             DragDrop.AddDragOverHandler(TerminalTabHeaders, OnTabHeadersDragOver);
             DragDrop.AddDropHandler(TerminalTabHeaders, OnTabHeadersDrop);
             DragDrop.AddDragLeaveHandler(TerminalTabHeaders, OnTabHeadersDragLeave);
+        }
+
+        private void BuildMacOSMenu()
+        {
+            NativeMenuItem fileMenu = MacOSMenu.CreateSubmenu("File",
+                MacOSMenu.CreateItem("New Tab…", delegate { OnAddTabClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.T)),
+                MacOSMenu.CreateAsyncItem("Duplicate Tab", DuplicateSelectedTabAsync),
+                MacOSMenu.CreateItem("Tab Settings…", delegate { OnEditTabClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.OemComma)),
+                new NativeMenuItemSeparator(),
+                MacOSMenu.CreateItem("Save Profile", delegate { OnSaveProfileClicked(this, new RoutedEventArgs()); }, MacOSMenu.Cmd(Key.S)),
+                new NativeMenuItemSeparator(),
+                MacOSMenu.CreateAsyncItem("Close Tab", ConfirmAndCloseSelectedTabAsync, MacOSMenu.Cmd(Key.W)),
+                MacOSMenu.CreateItem("Close Workspace", Close, MacOSMenu.Cmd(Key.W, KeyModifiers.Shift)));
+
+            NativeMenuItem editMenu = MacOSMenu.CreateSubmenu("Edit",
+                MacOSMenu.CreateAsyncItem("Copy", CopySelectedTerminalTextAsync, MacOSMenu.Cmd(Key.C)),
+                MacOSMenu.CreateAsyncItem("Paste", PasteIntoSelectedTerminalAsync, MacOSMenu.Cmd(Key.V)),
+                new NativeMenuItemSeparator(),
+                MacOSMenu.CreateItem("Clear Scrollback", ClearSelectedTerminalScrollback, MacOSMenu.Cmd(Key.K)));
+
+            NativeMenuItem viewMenu = MacOSMenu.CreateSubmenu("View",
+                MacOSMenu.CreateItem("Bigger", delegate { AdjustSelectedTerminalFontSize(TerminalFontZoomStep); }, MacOSMenu.Cmd(Key.OemPlus)),
+                MacOSMenu.CreateItem("Smaller", delegate { AdjustSelectedTerminalFontSize(-TerminalFontZoomStep); }, MacOSMenu.Cmd(Key.OemMinus)),
+                MacOSMenu.CreateItem("Default Font Size", ResetSelectedTerminalFontSize, MacOSMenu.Cmd(Key.D0)),
+                new NativeMenuItemSeparator(),
+                MacOSMenu.CreateItem("Show Next Tab", delegate { SelectAdjacentSession(1); }, MacOSMenu.Cmd(Key.OemCloseBrackets, KeyModifiers.Shift)),
+                MacOSMenu.CreateItem("Show Previous Tab", delegate { SelectAdjacentSession(-1); }, MacOSMenu.Cmd(Key.OemOpenBrackets, KeyModifiers.Shift)));
+
+            MacOSMenu.ApplyWindowMenu(this, fileMenu, editMenu, viewMenu);
+        }
+
+        private async Task DuplicateSelectedTabAsync()
+        {
+            TerminalSession? session = GetSelectedSession();
+            if (session == null) return;
+            await DuplicateSessionTabAsync(session).ConfigureAwait(true);
+        }
+
+        private async Task CopySelectedTerminalTextAsync()
+        {
+            TerminalSession? session = GetSelectedSession();
+            if (session == null || !session.Terminal.HasSelection) return;
+
+            string selectedText = session.Terminal.GetSelectedText();
+            if (String.IsNullOrEmpty(selectedText)) return;
+
+            if (Clipboard != null)
+            {
+                DataTransfer data = new DataTransfer();
+                data.Add(DataTransferItem.CreateText(selectedText));
+                await Clipboard.SetDataAsync(data).ConfigureAwait(true);
+            }
+
+            session.Terminal.ClearSelection();
+        }
+
+        private async Task PasteIntoSelectedTerminalAsync()
+        {
+            TerminalSession? session = GetSelectedSession();
+            if (session == null) return;
+            await PasteIntoTerminalAsync(session.Terminal).ConfigureAwait(true);
+        }
+
+        private void ClearSelectedTerminalScrollback()
+        {
+            TerminalSession? session = GetSelectedSession();
+            if (session == null) return;
+            session.Terminal.ClearScrollback();
+            session.Terminal.RequestRenderInvalidate();
+        }
+
+        private void AdjustSelectedTerminalFontSize(double delta)
+        {
+            TerminalSession? session = GetSelectedSession();
+            if (session == null) return;
+            AdjustTerminalFontSize(session, delta);
+        }
+
+        private void ResetSelectedTerminalFontSize()
+        {
+            TerminalSession? session = GetSelectedSession();
+            if (session == null) return;
+            SetTerminalFontSize(session, session.RuntimeDefaultFontSize);
+        }
+
+        private void SelectAdjacentSession(int offset)
+        {
+            TerminalSession? session = GetSelectedSession();
+            if (session == null || _Sessions.Count < 2) return;
+
+            int index = _Sessions.IndexOf(session);
+            int next = ((index + offset) % _Sessions.Count + _Sessions.Count) % _Sessions.Count;
+            SelectSession(_Sessions[next]);
         }
 
         private void LaunchProfile()
@@ -447,6 +541,7 @@ namespace Termrig.App.Views
 
         private async void OnWindowKeyDown(object? sender, KeyEventArgs e)
         {
+            if (OperatingSystem.IsMacOS()) return;
             if (e.Key != Key.W) return;
             if (e.KeyModifiers != KeyModifiers.Control) return;
 

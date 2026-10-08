@@ -33,6 +33,7 @@ namespace Termrig.App
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
+            MacOSMenu.ApplyApplicationMenu(this);
             RegisterCrashHandlers();
         }
 
@@ -110,7 +111,10 @@ namespace Termrig.App
             TrayIcon.SetIcons(this, new TrayIcons { trayIcon });
         }
 
-        private void ShowMainWindow()
+        /// <summary>
+        /// Show and activate the Profiles window.
+        /// </summary>
+        internal void ShowMainWindow()
         {
             if (_MainWindow == null) return;
             if (_MainWindow.WindowState == WindowState.Minimized) _MainWindow.WindowState = WindowState.Normal;
