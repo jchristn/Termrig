@@ -14,59 +14,16 @@ Why did I build it and what problem am I trying to solve? I wanted a simple way 
 
 ## Install
 
-Native packages are the intended installation path for normal users. Packaging
-artifacts are built under `artifacts/packages/`:
+Termrig is not distributed as a signed download. Build and install it from
+source with one script, then pin it to your Dock or taskbar. Follow the guide
+for your platform:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File packaging/build-packages.ps1 -Target package-all
-```
+- [Installing on macOS](INSTALLING_ON_MAC.md)
+- [Installing on Windows](INSTALLING_ON_WINDOWS.md)
+- [Installing on Linux](INSTALLING_ON_LINUX.md)
 
-First-pass package outputs:
-
-- Windows: portable `.zip`, and an Inno Setup installer when `ISCC.exe` is on `PATH`.
-- macOS: `.app` bundle zip on non-macOS hosts, and `.dmg` on macOS.
-- Ubuntu: `.deb` staging on non-Linux hosts, and `.deb` plus portable archive on Linux.
-
-Native desktop packages install only the Termrig desktop app. They do not install
-the legacy `trig` command.
-
-### Windows
-
-Install the generated setup executable when available, or unzip the portable
-archive and run `Termrig.exe`.
-
-Uninstall from Windows Apps & Features when installed through the setup
-executable. For portable installs, delete the extracted folder.
-
-### macOS
-
-Open the generated DMG, drag `Termrig.app` to Applications, and launch Termrig
-from Finder, Spotlight, or the Dock. Unsigned development builds may require
-Gatekeeper approval.
-
-Uninstall by deleting `/Applications/Termrig.app`.
-
-To build and install `Termrig.app` from source, see
-[INSTALL_ON_MAC.md](INSTALL_ON_MAC.md).
-
-### Ubuntu
-
-Install the generated Debian package:
-
-```sh
-sudo apt install ./artifacts/packages/termrig_0.1.1_amd64.deb
-```
-
-Uninstall the package:
-
-```sh
-sudo apt remove termrig
-```
-
-User data remains under `~/.termrig/` after uninstall on all platforms.
-
-If dock or taskbar pinning groups incorrectly, remove the pinned icon, launch the
-installed app from the platform launcher, then pin the running app again.
+Your profiles and settings are stored in `~/.termrig/` (`%USERPROFILE%\.termrig\`
+on Windows) and are kept when you uninstall.
 
 ## Quickstart
 
@@ -89,7 +46,7 @@ chmod +x go.sh && ./go.sh
 ## Legacy Developer Command
 
 Termrig can still be installed from the repository as a developer-only .NET
-global tool named `trig`. This is not used by native desktop packages.
+global tool named `trig`.
 
 Install on Windows:
 
@@ -107,8 +64,8 @@ cd Termrig
 chmod +x install-tool.sh && ./install-tool.sh
 ```
 
-On macOS, `install-tool.sh` also builds `~/Applications/Termrig.app`; see
-[INSTALL_ON_MAC.md](INSTALL_ON_MAC.md).
+These scripts also build and install the desktop app, as described in the
+install guides above.
 
 After installation, run Termrig from any terminal:
 

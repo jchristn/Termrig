@@ -71,4 +71,9 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 echo Installed Termrig as global command: trig
+echo.
+
+echo Building and installing the Termrig app...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0packaging\windows\build-app.ps1"
+if %errorlevel% neq 0 exit /b %errorlevel%
 exit /b 0

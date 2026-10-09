@@ -4,6 +4,13 @@ This document is the end-to-end plan for turning Termrig from a source-built
 Avalonia/.NET app into native desktop install artifacts for Windows, macOS, and
 Ubuntu.
 
+> **Current state:** Termrig is not signed or distributed as binaries (signing
+> and notarization cost money). Users build and install from source with one
+> script per platform: `packaging/macos/build-app.sh`,
+> `packaging/windows/build-app.ps1`, and `packaging/linux/build-app.sh`. See
+> INSTALLING_ON_MAC.md, INSTALLING_ON_WINDOWS.md, and INSTALLING_ON_LINUX.md.
+> The rest of this document is the plan for native packages if that changes.
+
 Use the checkboxes as the working tracker. Add notes, owners, dates, links to
 commits, and release artifact URLs directly under each item as work progresses.
 

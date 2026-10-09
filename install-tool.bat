@@ -29,3 +29,6 @@ dotnet tool install --global Termrig --version 0.1.1 --source "%PACKAGE_DIR%" --
 if errorlevel 1 exit /b %errorlevel%
 
 echo Installed Termrig as global command: trig
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%packaging\windows\build-app.ps1"
+if errorlevel 1 exit /b %errorlevel%

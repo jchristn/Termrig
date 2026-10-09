@@ -40,9 +40,9 @@ fi
 echo "Installed Termrig as global command: trig"
 echo
 
-echo "[6/6] Building Termrig.app..."
-if [ "$(uname -s)" = "Darwin" ]; then
-    "$SCRIPT_DIR/packaging/macos/build-app.sh"
-else
-    echo "Not macOS; skipping."
-fi
+echo "[6/6] Building and installing the Termrig app..."
+case "$(uname -s)" in
+    Darwin) "$SCRIPT_DIR/packaging/macos/build-app.sh" ;;
+    Linux) "$SCRIPT_DIR/packaging/linux/build-app.sh" ;;
+    *) echo "Unsupported OS; skipping." ;;
+esac

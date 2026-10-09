@@ -3,7 +3,16 @@
 This directory contains the first-pass native desktop packaging assets for
 Termrig.
 
-## Entry Point
+## Installing from source
+
+To build and install the desktop app on the current machine, use the per-platform
+script described in the install guides at the repository root:
+
+- macOS: `packaging/macos/build-app.sh` (INSTALLING_ON_MAC.md)
+- Windows: `packaging/windows/build-app.ps1` (INSTALLING_ON_WINDOWS.md)
+- Linux: `packaging/linux/build-app.sh` (INSTALLING_ON_LINUX.md)
+
+## Package Entry Point
 
 Run packaging tasks from the repository root:
 
