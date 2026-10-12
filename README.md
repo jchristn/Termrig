@@ -15,17 +15,26 @@ Why did I build it and what problem am I trying to solve? I wanted a simple way 
 ## Install
 
 Termrig is not distributed as a signed download. Build and install it from
-source with one script, then pin it to your Dock or taskbar. Follow the guide
-for your platform:
+source with the script for your platform in the [`packaging`](packaging/README.md)
+directory, then pin the installed app to your Dock or taskbar:
 
-- [Installing on macOS](INSTALLING_ON_MAC.md)
-- [Installing on Windows](INSTALLING_ON_WINDOWS.md)
-- [Installing on Linux](INSTALLING_ON_LINUX.md)
+| Platform | Install script | Guide |
+|----------|----------------|-------|
+| macOS | `./packaging/macos/build-app.sh` | [Installing on macOS](INSTALLING_ON_MAC.md) |
+| Windows | `powershell -ExecutionPolicy Bypass -File packaging\windows\build-app.ps1` | [Installing on Windows](INSTALLING_ON_WINDOWS.md) |
+| Linux | `./packaging/linux/build-app.sh` | [Installing on Linux](INSTALLING_ON_LINUX.md) |
+
+The guides cover prerequisites, where the app is installed, pinning, updating
+and uninstalling.
 
 Your profiles and settings are stored in `~/.termrig/` (`%USERPROFILE%\.termrig\`
 on Windows) and are kept when you uninstall.
 
-## Quickstart
+## Run from Source (Development)
+
+`go.sh` and `go.bat` build and run Termrig straight from the repository. They
+do not install the app, so don't pin the window they open to your Dock or
+taskbar; use the [install scripts](#install) for that.
 
 Windows:
 
