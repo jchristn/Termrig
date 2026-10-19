@@ -563,6 +563,32 @@ namespace Termrig.App.Views
             TerminalSession? session = GetSelectedSession();
             if (session == null) return;
 
+            Key macShortcut = GetMacTerminalShortcut(e, OperatingSystem.IsMacOS());
+            if (macShortcut != Key.None)
+            {
+                // Keep Command presses from clearing the terminal selection before
+                // the native menu or a Command shortcut can use it.
+                if (macShortcut == Key.LWin || macShortcut == Key.RWin)
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                if (macShortcut == Key.C)
+                {
+                    e.Handled = true;
+                    await CopySelectedTerminalTextAsync().ConfigureAwait(true);
+                    return;
+                }
+
+                if (macShortcut == Key.V)
+                {
+                    e.Handled = true;
+                    await PasteIntoTerminalAsync(session.Terminal).ConfigureAwait(true);
+                    return;
+                }
+            }
+
             if (TryHandleTerminalControlShortcut(session, e))
             {
                 return;
@@ -602,36 +628,40 @@ namespace Termrig.App.Views
             session.Terminal.ClearSelection();
         }
 
+        private static Key GetMacTerminalShortcut(KeyEventArgs e, bool isMacOS)
+        {
+            if (!isMacOS || (e.KeyModifiers & KeyModifiers.Meta) == 0) return Key.None;
+            if (e.Key == Key.LWin || e.Key == Key.RWin) return e.Key;
+            if (e.KeyModifiers == KeyModifiers.Meta && (e.Key == Key.C || e.Key == Key.V)) return e.Key;
+            return Key.None;
+        }
+
+        private static int? GetTerminalFontSizeChange(KeyEventArgs e, bool isMacOS)
+        {
+            KeyModifiers shortcutModifier = isMacOS ? KeyModifiers.Meta : KeyModifiers.Control;
+            if ((e.KeyModifiers & shortcutModifier) == 0 || (e.KeyModifiers & KeyModifiers.Alt) != 0) return null;
+            if (IsIncreaseFontKey(e)) return 1;
+            if (IsDecreaseFontKey(e)) return -1;
+            if (IsResetFontKey(e)) return 0;
+            return null;
+        }
+
         private bool TryHandleTerminalControlShortcut(TerminalSession session, KeyEventArgs e)
         {
-            if ((e.KeyModifiers & KeyModifiers.Control) != KeyModifiers.Control) return false;
-            if ((e.KeyModifiers & KeyModifiers.Alt) == KeyModifiers.Alt) return false;
+            int? change = GetTerminalFontSizeChange(e, OperatingSystem.IsMacOS());
+            if (!change.HasValue) return false;
 
-            if (IsIncreaseFontKey(e))
+            e.Handled = true;
+            _SuppressNextShortcutTextInput = true;
+            if (change.Value == 0)
             {
-                e.Handled = true;
-                _SuppressNextShortcutTextInput = true;
-                AdjustTerminalFontSize(session, TerminalFontZoomStep);
-                return true;
-            }
-
-            if (IsDecreaseFontKey(e))
-            {
-                e.Handled = true;
-                _SuppressNextShortcutTextInput = true;
-                AdjustTerminalFontSize(session, -TerminalFontZoomStep);
-                return true;
-            }
-
-            if (IsResetFontKey(e))
-            {
-                e.Handled = true;
-                _SuppressNextShortcutTextInput = true;
                 SetTerminalFontSize(session, session.RuntimeDefaultFontSize);
-                return true;
             }
-
-            return false;
+            else
+            {
+                AdjustTerminalFontSize(session, change.Value * TerminalFontZoomStep);
+            }
+            return true;
         }
 
         private static bool IsIncreaseFontKey(KeyEventArgs e)
