@@ -11,6 +11,22 @@ namespace Test.Terminal
 
     public class TerminalControlTests
     {
+        [Theory]
+        [InlineData(true, true, true)]
+        [InlineData(true, false, false)]
+        [InlineData(false, true, false)]
+        [InlineData(false, false, false)]
+        public void InactiveWindowsUseBackgroundPriorityEvenWithRetainedKeyboardFocus(
+            bool windowActive, bool inputFocused, bool expectedForeground)
+        {
+            var view = new TerminalView { IsRenderForeground = windowActive };
+            typeof(TerminalView).GetField("_focusedForRendering", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(view, inputFocused ? 1 : 0);
+            bool actual = (bool)typeof(TerminalView).GetProperty("HasForegroundRenderPriority",
+                BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(view)!;
+            Assert.Equal(expectedForeground, actual);
+        }
+
         [Fact]
         public void LaunchPropertySyncCopiesPtyRecordingSettingsToTerminalView()
         {
@@ -30,7 +46,8 @@ namespace Test.Terminal
                 Options = options,
                 RecordPtyOutput = true,
                 PtyRecordingDirectory = @"C:\Recordings",
-                IsRenderPaused = true
+                IsRenderPaused = true,
+                IsRenderForeground = false
             };
             var view = new TerminalView();
 
@@ -49,6 +66,7 @@ namespace Test.Terminal
             Assert.True(view.RecordPtyOutput);
             Assert.Equal(@"C:\Recordings", view.PtyRecordingDirectory);
             Assert.True(view.IsRenderPaused);
+            Assert.False(view.IsRenderForeground);
         }
 
         [Fact]
@@ -67,6 +85,7 @@ namespace Test.Terminal
             control.RecordPtyOutput = true;
             control.PtyRecordingDirectory = @"C:\Source\recordings";
             control.IsRenderPaused = true;
+            control.IsRenderForeground = false;
 
             Assert.Equal("pwsh.exe", view.Process);
             Assert.Equal(new[] { "-NoLogo" }, view.Args);
@@ -74,6 +93,7 @@ namespace Test.Terminal
             Assert.True(view.RecordPtyOutput);
             Assert.Equal(@"C:\Source\recordings", view.PtyRecordingDirectory);
             Assert.True(view.IsRenderPaused);
+            Assert.False(view.IsRenderForeground);
         }
 
         [Fact]

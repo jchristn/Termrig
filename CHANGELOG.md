@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added the application-wide “Update unfocused windows” preference in the Profiles window, enabled by default. Visible background terminals render at a reduced rate; minimized windows and hidden tabs remain paused.
+
 ## 0.1.1
 
 - Updated NuGet dependencies:

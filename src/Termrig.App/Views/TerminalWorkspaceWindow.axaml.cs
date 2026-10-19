@@ -38,6 +38,7 @@ namespace Termrig.App.Views
         // O(1) instead of scanning every tab on each PTY output event.
         private readonly Dictionary<TerminalControl, TerminalSession> _SessionsByTerminal = new Dictionary<TerminalControl, TerminalSession>();
         private TerminalSession? _SelectedSession = null;
+        private bool _UpdateUnfocusedWindows = true;
         private TerminalSession? _DraggedSession = null;
         private Control? _DropTargetHeader = null;
         private bool _IsClosingWorkspace = false;
@@ -84,6 +85,17 @@ namespace Termrig.App.Views
         /// Runtime workspace instance identifier.
         /// </summary>
         public string WorkspaceId { get; }
+
+        /// <summary>Whether this workspace may paint while unfocused.</summary>
+        public bool UpdateUnfocusedWindows
+        {
+            get => _UpdateUnfocusedWindows;
+            set
+            {
+                _UpdateUnfocusedWindows = value;
+                UpdateRenderActivation();
+            }
+        }
 
         #endregion
 
@@ -156,6 +168,11 @@ namespace Termrig.App.Views
             Opened += OnWorkspaceOpened;
             Activated += OnWorkspaceActivated;
             Deactivated += OnWorkspaceDeactivated;
+            PropertyChanged += (_, e) =>
+            {
+                if (e.Property == WindowStateProperty || e.Property == IsActiveProperty)
+                    UpdateRenderActivation();
+            };
             Closing += OnWindowClosing;
             DragDrop.SetAllowDrop(TerminalTabHeaders, true);
             DragDrop.AddDragOverHandler(TerminalTabHeaders, OnTabHeadersDragOver);
@@ -1136,6 +1153,7 @@ namespace Termrig.App.Views
             foreach (TerminalSession item in _Sessions)
             {
                 bool selected = item == session;
+                item.Terminal.IsRenderForeground = IsActive;
                 item.Terminal.IsRenderPaused = ShouldPauseRendering(renderActive, selected);
                 item.Terminal.Opacity = selected ? 1 : 0;
                 item.Terminal.IsHitTestVisible = selected;
@@ -1148,15 +1166,12 @@ namespace Termrig.App.Views
 
         private void OnWorkspaceDeactivated(object? sender, EventArgs e)
         {
-            // The window lost activation (another window focused, or this one minimized). Pause all
-            // of its terminals so background/minimized workspaces stop competing for the shared UI
-            // thread. Only rendering is deferred; the PTY keeps parsing so no output is lost.
+            // Reevaluate the application preference when focus moves to another window.
             UpdateRenderActivation();
         }
 
         /// <summary>
-        /// Whether this workspace's terminals should render right now. A window that is inactive or
-        /// minimized cannot be seen, so its terminals may pause painting until it is shown again.
+        /// Whether this workspace may render, accounting for minimization and the global preference.
         /// </summary>
         /// <param name="assumeActive">
         /// Treat the window as active regardless of <see cref="Window.IsActive"/>. Required when called
@@ -1165,7 +1180,8 @@ namespace Termrig.App.Views
         /// </param>
         private bool IsWorkspaceRenderActive(bool assumeActive = false)
         {
-            return (assumeActive || IsActive) && WindowState != WindowState.Minimized;
+            return CanRenderWorkspace(assumeActive || IsActive, WindowState == WindowState.Minimized,
+                UpdateUnfocusedWindows);
         }
 
         /// <summary>
@@ -1178,15 +1194,21 @@ namespace Termrig.App.Views
             TerminalSession? selected = _SelectedSession;
             foreach (TerminalSession item in _Sessions)
             {
+                item.Terminal.IsRenderForeground = assumeActive || IsActive;
                 item.Terminal.IsRenderPaused = ShouldPauseRendering(renderActive, item == selected);
             }
         }
 
+        internal static bool CanRenderWorkspace(bool isActive, bool isMinimized, bool updateUnfocusedWindows)
+        {
+            return !isMinimized && (isActive || updateUnfocusedWindows);
+        }
+
         /// <summary>
         /// Decides whether a terminal should defer painting: a terminal renders only when its window
-        /// is visible/active <em>and</em> it is the selected tab; otherwise it pauses.
+        /// is eligible to render and it is the selected tab; otherwise it pauses.
         /// </summary>
-        /// <param name="windowRenderActive">Whether the owning window is active and not minimized.</param>
+        /// <param name="windowRenderActive">Whether the owning window is eligible to render.</param>
         /// <param name="isSelectedTab">Whether the terminal is the selected tab in its window.</param>
         /// <returns>True to pause rendering; false to render.</returns>
         internal static bool ShouldPauseRendering(bool windowRenderActive, bool isSelectedTab)

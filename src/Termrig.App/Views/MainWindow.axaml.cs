@@ -70,6 +70,8 @@ namespace Termrig.App.Views
         private readonly List<TerminalWorkspaceWindow> _WorkspaceWindows = new List<TerminalWorkspaceWindow>();
         private readonly TaskCompletionSource<bool> _ProfilesLoaded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private bool _RecoveryRunStarted = false;
+        private readonly ApplicationSettingsStore _ApplicationSettingsStore = new ApplicationSettingsStore();
+        private ApplicationSettings _ApplicationSettings = new ApplicationSettings();
         private FileSystemWatcher? _ConfigAssetWatcher;
         private CancellationTokenSource? _ConfigAssetReloadCts;
         private readonly object _ConfigAssetReloadGate = new object();
@@ -97,6 +99,7 @@ namespace Termrig.App.Views
         private void WireEvents()
         {
             Closed += OnMainWindowClosed;
+            UpdateUnfocusedWindowsCheckBox.Click += OnUpdateUnfocusedWindowsClicked;
             NewProfileButton.Click += OnNewProfileClicked;
             EmptyNewProfileButton.Click += OnNewProfileClicked;
             DeleteProfileButton.Click += OnDeleteSelectedClicked;
@@ -159,6 +162,17 @@ namespace Termrig.App.Views
         {
             try
             {
+                try
+                {
+                    _ApplicationSettings = await _ApplicationSettingsStore.LoadAsync().ConfigureAwait(true);
+                }
+                catch (Exception exception)
+                {
+                    ApplicationSettingsErrorText.Text = "Unable to load application settings; using defaults: " + exception.Message;
+                    ApplicationSettingsErrorText.IsVisible = true;
+                }
+                UpdateUnfocusedWindowsCheckBox.IsChecked = _ApplicationSettings.UpdateUnfocusedWindows;
+                UpdateUnfocusedWindowsCheckBox.IsEnabled = true;
                 WorkspaceRecoveryState? pendingCrashState = await GetPendingCrashStateAsync().ConfigureAwait(true);
 
                 _ColorSchemes = await _ColorSchemeStore.LoadAsync(CancellationToken.None).ConfigureAwait(true);
@@ -197,6 +211,34 @@ namespace Termrig.App.Views
             {
                 _ProfilesLoaded.TrySetException(exception);
                 throw;
+            }
+        }
+
+        private async void OnUpdateUnfocusedWindowsClicked(object? sender, RoutedEventArgs e)
+        {
+            UpdateUnfocusedWindowsCheckBox.IsEnabled = false;
+            bool previous = _ApplicationSettings.UpdateUnfocusedWindows;
+            try
+            {
+                var settings = new ApplicationSettings
+                {
+                    UpdateUnfocusedWindows = UpdateUnfocusedWindowsCheckBox.IsChecked == true
+                };
+                await _ApplicationSettingsStore.SaveAsync(settings).ConfigureAwait(true);
+                _ApplicationSettings = settings;
+                foreach (var window in _WorkspaceWindows)
+                    window.UpdateUnfocusedWindows = settings.UpdateUnfocusedWindows;
+                ApplicationSettingsErrorText.IsVisible = false;
+            }
+            catch (Exception exception)
+            {
+                UpdateUnfocusedWindowsCheckBox.IsChecked = previous;
+                ApplicationSettingsErrorText.Text = "Unable to save application settings: " + exception.Message;
+                ApplicationSettingsErrorText.IsVisible = true;
+            }
+            finally
+            {
+                UpdateUnfocusedWindowsCheckBox.IsEnabled = true;
             }
         }
 
@@ -740,6 +782,7 @@ namespace Termrig.App.Views
         {
             string workspaceId = Guid.NewGuid().ToString("N");
             TerminalWorkspaceWindow window = new TerminalWorkspaceWindow(profile, _ProfileStore, _ShellCatalog, _ColorSchemes, workspaceId);
+            window.UpdateUnfocusedWindows = _ApplicationSettings.UpdateUnfocusedWindows;
             _WorkspaceWindows.Add(window);
             RefreshEditor();
             window.Closed += async delegate

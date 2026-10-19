@@ -9,7 +9,7 @@
         Height="700"
         MinWidth="820"
         MinHeight="520">
-    <Grid RowDefinitions="Auto,*" RowSpacing="14" Margin="20,14,20,20">
+    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="14" Margin="20,14,20,20">
 
         <!-- Who this is, and the secondary places to go. -->
         <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
@@ -202,5 +202,11 @@
                 </Border>
             </Grid>
         </Grid>
+        <StackPanel Grid.Row="2" Spacing="4">
+            <TextBlock Text="Application settings" FontWeight="SemiBold"/>
+            <CheckBox x:Name="UpdateUnfocusedWindowsCheckBox" Content="Update unfocused windows" IsEnabled="False"
+                      ToolTip.Tip="Keep visible, unfocused windows updating at a reduced frame rate. Minimized windows and hidden tabs stay paused."/>
+            <TextBlock x:Name="ApplicationSettingsErrorText" Classes="dim" IsVisible="False" TextWrapping="Wrap"/>
+        </StackPanel>
     </Grid>
 </Window>

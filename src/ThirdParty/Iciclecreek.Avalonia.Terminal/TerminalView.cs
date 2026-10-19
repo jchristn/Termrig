@@ -41,6 +41,7 @@ namespace Iciclecreek.Terminal
         private bool _renderInvalidatePending;
         private int _outputReceivedScheduled;
         private int _focusedForRendering;
+        private bool _isRenderForeground = true;
         private int _backgroundRenderInvalidateScheduled;
         private int _terminalStateNotificationScheduled;
         private int _imeCursorNotificationScheduled;
@@ -665,6 +666,18 @@ namespace Iciclecreek.Terminal
         }
 
         /// <summary>
+        /// Whether the owning window is active, independently of retained keyboard focus.
+        /// </summary>
+        public bool IsRenderForeground
+        {
+            get => Volatile.Read(ref _isRenderForeground);
+            set => Volatile.Write(ref _isRenderForeground, value);
+        }
+
+        private bool HasForegroundRenderPriority =>
+            Volatile.Read(ref _isRenderForeground) && Volatile.Read(ref _focusedForRendering) != 0;
+
+        /// <summary>
         /// Gets or sets whether visual invalidations should be deferred while terminal state continues updating.
         /// </summary>
         public bool IsRenderPaused
@@ -675,7 +688,7 @@ namespace Iciclecreek.Terminal
                 if (SetAndRaise(IsRenderPausedProperty, ref _isRenderPaused, value) && !value && _renderInvalidatePending)
                 {
                     _renderInvalidatePending = false;
-                    TerminalRenderThrottle.RequestInvalidate(this, Volatile.Read(ref _focusedForRendering) != 0);
+                    TerminalRenderThrottle.RequestInvalidate(this, HasForegroundRenderPriority);
                 }
             }
         }
@@ -974,7 +987,7 @@ namespace Iciclecreek.Terminal
                 return;
             }
 
-            if (Volatile.Read(ref _focusedForRendering) == 0)
+            if (!HasForegroundRenderPriority)
             {
                 ScheduleBackgroundRenderInvalidate();
                 return;
@@ -2608,7 +2621,7 @@ namespace Iciclecreek.Terminal
                     }
 
                     // Notify IME only for focused terminals; hidden or background terminals do not need cursor geometry updates.
-                    if (!Volatile.Read(ref _isRenderPaused) && Volatile.Read(ref _focusedForRendering) != 0)
+                    if (!Volatile.Read(ref _isRenderPaused) && HasForegroundRenderPriority)
                     {
                         ScheduleImeCursorNotification();
                     }
@@ -2764,7 +2777,7 @@ namespace Iciclecreek.Terminal
             Dispatcher.UIThread.Post(() =>
             {
                 Interlocked.Exchange(ref _imeCursorNotificationScheduled, 0);
-                if (!Volatile.Read(ref _isRenderPaused) && Volatile.Read(ref _focusedForRendering) != 0)
+                if (!Volatile.Read(ref _isRenderPaused) && HasForegroundRenderPriority)
                 {
                     _inputMethodClient?.NotifyCursorRectangleChanged();
                 }

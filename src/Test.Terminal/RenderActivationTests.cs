@@ -5,11 +5,6 @@ namespace Test.Terminal
     using Termrig.App.Views;
     using Xunit;
 
-    /// <summary>
-    /// Covers the render-activation predicate that decides whether a workspace terminal should defer
-    /// painting. A background or minimized window must pause even its selected tab so it stops
-    /// competing for the shared UI thread; parsing continues regardless, so no output is lost.
-    /// </summary>
     public class RenderActivationTests
     {
         private static bool ShouldPauseRendering(bool windowRenderActive, bool isSelectedTab)
@@ -20,6 +15,25 @@ namespace Test.Terminal
                 ?? throw new InvalidOperationException("ShouldPauseRendering not found.");
 
             return (bool)method.Invoke(null, new object[] { windowRenderActive, isSelectedTab })!;
+        }
+
+        [Theory]
+        [InlineData(true, false, true, false)]
+        [InlineData(true, false, false, false)]
+        [InlineData(false, false, true, false)]
+        [InlineData(false, false, false, true)]
+        [InlineData(true, true, true, true)]
+        [InlineData(true, true, false, true)]
+        [InlineData(false, true, true, true)]
+        [InlineData(false, true, false, true)]
+        public void WorkspacePolicyHonorsFocusMinimizationAndPreference(
+            bool active, bool minimized, bool updateUnfocused, bool expectedPaused)
+        {
+            MethodInfo method = typeof(TerminalWorkspaceWindow).GetMethod(
+                "CanRenderWorkspace", BindingFlags.Static | BindingFlags.NonPublic)!;
+            bool canRender = (bool)method.Invoke(null, new object[] { active, minimized, updateUnfocused })!;
+            Assert.Equal(expectedPaused, ShouldPauseRendering(canRender, isSelectedTab: true));
+            Assert.True(ShouldPauseRendering(canRender, isSelectedTab: false));
         }
 
         [Fact]
@@ -38,8 +52,6 @@ namespace Test.Terminal
         [Fact]
         public void InactiveWindowSelectedTabPauses()
         {
-            // The regression this fixes: a background/minimized window's selected tab used to keep
-            // rendering. It must now pause.
             Assert.True(ShouldPauseRendering(windowRenderActive: false, isSelectedTab: true));
         }
 

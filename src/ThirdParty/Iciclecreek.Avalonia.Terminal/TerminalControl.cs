@@ -76,6 +76,16 @@ namespace Iciclecreek.Terminal
                 nameof(IsRenderPaused),
                 defaultValue: false);
 
+        public static readonly StyledProperty<bool> IsRenderForegroundProperty =
+            AvaloniaProperty.Register<TerminalControl, bool>(nameof(IsRenderForeground), defaultValue: true);
+
+        /// <summary>Whether the owning window is active, independently of retained keyboard focus.</summary>
+        public bool IsRenderForeground
+        {
+            get => GetValue(IsRenderForegroundProperty);
+            set => SetValue(IsRenderForegroundProperty, value);
+        }
+
         public event EventHandler<ProcessExitedEventArgs>? ProcessExited;
 
         public event EventHandler? OutputReceived;
@@ -396,7 +406,8 @@ namespace Iciclecreek.Terminal
                 change.Property == OptionsProperty ||
                 change.Property == RecordPtyOutputProperty ||
                 change.Property == PtyRecordingDirectoryProperty ||
-                change.Property == IsRenderPausedProperty)
+                change.Property == IsRenderPausedProperty ||
+                change.Property == IsRenderForegroundProperty)
             {
                 ApplyPropertiesToTerminalView();
             }
@@ -453,6 +464,7 @@ namespace Iciclecreek.Terminal
             _terminalView.Options = Options ?? new XTerm.Options.TerminalOptions();
             _terminalView.RecordPtyOutput = RecordPtyOutput;
             _terminalView.PtyRecordingDirectory = PtyRecordingDirectory;
+            _terminalView.IsRenderForeground = IsRenderForeground;
             _terminalView.IsRenderPaused = IsRenderPaused;
         }
 
