@@ -13,7 +13,8 @@
 
         <!-- Who this is, and the secondary places to go. -->
         <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
-            <Image Grid.Column="0" Source="/Assets/termrig-logo.png" Width="30" Height="30" VerticalAlignment="Center"/>
+            <Image Grid.Column="0" Source="/Assets/termrig-logo.png" Width="30" Height="30" VerticalAlignment="Center"
+                   RenderOptions.BitmapInterpolationMode="HighQuality"/>
             <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
                 <TextBlock Text="Termrig" FontSize="15" FontWeight="SemiBold"/>
                 <TextBlock Classes="dim" FontSize="12" Text="Terminal profiles and workspaces"/>
