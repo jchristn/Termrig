@@ -133,6 +133,8 @@ Termrig stores user data under `~/.termrig/`.
 - `color-schemes.json` stores editable global color schemes.
 - `settings.json` stores application-wide preferences.
 
+In **Profile Settings → Tab layout**, choose **Scroll** (the default) or **Multiple rows**. Multiple rows wrap tabs to the workspace width without a horizontal scrollbar. The profile JSON property is `WrapTabs` (default `false`). Changes apply to open workspaces.
+
 In the Profiles window, **Application settings → Update unfocused windows** controls whether visible background windows keep updating at a reduced frame rate. It is enabled by default and applies immediately to open workspaces. Turn it off to pause updates until a window is focused. Minimized windows and hidden tabs remain paused either way. The JSON property is `UpdateUnfocusedWindows`.
 
 You can manually edit these JSON files while Termrig is closed. If Termrig is open, save operations from the app may overwrite manual edits.

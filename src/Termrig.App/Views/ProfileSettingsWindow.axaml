@@ -17,7 +17,7 @@
                 <Border Classes="card">
                     <StackPanel Spacing="10">
                         <TextBlock Classes="title" Text="Profile"/>
-                        <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="12">
+                        <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12">
                             <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Name"/>
                             <TextBox Grid.Row="0" Grid.Column="1" x:Name="NameBox"/>
 
@@ -29,6 +29,12 @@
                                 <CheckBox x:Name="AutoOpenBox" Content="Open this profile when Termrig starts"/>
                                 <TextBlock Classes="help" Text="Auto-open profiles are marked in the Profiles list."/>
                             </StackPanel>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Tab layout"/>
+                            <ComboBox Grid.Row="3" Grid.Column="1" x:Name="TabLayoutCombo" MinWidth="220">
+                                <ComboBoxItem Content="Scroll"/>
+                                <ComboBoxItem Content="Multiple rows"/>
+                            </ComboBox>
                         </Grid>
                     </StackPanel>
                 </Border>

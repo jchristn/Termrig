@@ -127,6 +127,7 @@ namespace Termrig.App.Views
                 FolderCombo.SelectedItem = folder?.Name ?? NoFolderLabel;
 
                 AutoOpenBox.IsChecked = _Profile.AutoOpen;
+                TabLayoutCombo.SelectedIndex = _Profile.WrapTabs ? 1 : 0;
 
                 RefreshSchemeList(_Profile.GlobalColorScheme.Name);
                 BackgroundPicker.Color = ParseColor(_Profile.GlobalColorScheme.Background);
@@ -287,6 +288,7 @@ namespace Termrig.App.Views
                 Name = name,
                 FolderId = folderId,
                 AutoOpen = AutoOpenBox.IsChecked == true,
+                WrapTabs = TabLayoutCombo.SelectedIndex == 1,
                 ColorScheme = scheme,
                 FontFamily = FontFamilyCombo.SelectedItem is string family && family != DefaultFontLabel ? family : null,
                 FontSize = fontSize
@@ -346,6 +348,9 @@ namespace Termrig.App.Views
         /// Open the profile when Termrig starts.
         /// </summary>
         public bool AutoOpen { get; set; } = false;
+
+        /// <summary>True to display workspace tabs in multiple rows.</summary>
+        public bool WrapTabs { get; set; } = false;
 
         /// <summary>
         /// The profile's color scheme, with its background and foreground.

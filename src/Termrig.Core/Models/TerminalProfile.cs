@@ -53,6 +53,11 @@ namespace Termrig.Core.Models
         public bool AutoOpen { get; set; } = false;
 
         /// <summary>
+        /// True to wrap workspace tabs into multiple rows instead of scrolling horizontally.
+        /// </summary>
+        public bool WrapTabs { get; set; } = false;
+
+        /// <summary>
         /// Optional profile folder identifier. Empty value means the profile is not in a folder.
         /// </summary>
         public string FolderId { get; set; } = String.Empty;

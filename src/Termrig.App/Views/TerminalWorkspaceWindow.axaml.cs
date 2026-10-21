@@ -146,6 +146,7 @@ namespace Termrig.App.Views
             WorkspaceId = workspaceId;
 
             InitializeComponent();
+            ApplyTabLayout();
             Title = profile.Name + " | Termrig Workspace";
             TitleText.Text = profile.Name;
             WireEvents();
@@ -156,6 +157,16 @@ namespace Termrig.App.Views
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Applies the profile's tab layout without restarting any terminal sessions.
+        /// </summary>
+        public void ApplyTabLayout()
+        {
+            TabHeaderScroller.HorizontalScrollBarVisibility = _Profile.WrapTabs
+                ? Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+                : Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
+        }
 
         private void WireEvents()
         {
@@ -789,7 +800,9 @@ namespace Termrig.App.Views
                     Content = "*",
                     Classes = { "icon" },
                     Width = 20,
-                    Height = 20,
+                    Height = 18,
+                    MinHeight = 18,
+                    MinWidth = 18,
                     FontSize = 9,
                     Tag = session
                 };
@@ -803,7 +816,9 @@ namespace Termrig.App.Views
                 Content = "X",
                 Classes = { "icon" },
                 Width = 20,
-                Height = 20,
+                Height = 18,
+                MinHeight = 18,
+                MinWidth = 18,
                 FontSize = 9,
                 Tag = session
             };

@@ -416,6 +416,9 @@ namespace Termrig.App.Views
             profile.Name = result.Name;
             profile.FolderId = result.FolderId;
             profile.AutoOpen = result.AutoOpen;
+            profile.WrapTabs = result.WrapTabs;
+            foreach (TerminalWorkspaceWindow window in _WorkspaceWindows.Where(item => item.ProfileId == profile.Id))
+                window.ApplyTabLayout();
             profile.GlobalColorScheme = result.ColorScheme;
             profile.FontFamily = result.FontFamily;
             profile.FontSize = result.FontSize;

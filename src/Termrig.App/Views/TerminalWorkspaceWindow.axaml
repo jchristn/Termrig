@@ -25,8 +25,8 @@
             </Grid>
         </Border>
         <Border DockPanel.Dock="Top" Background="#0D1117" BorderBrush="#30363D" BorderThickness="0,0,0,1">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                <StackPanel x:Name="TerminalTabHeaders" Orientation="Horizontal" Spacing="2" Margin="8,4,8,0"/>
+            <ScrollViewer x:Name="TabHeaderScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <WrapPanel x:Name="TerminalTabHeaders" Orientation="Horizontal" ItemSpacing="2" LineSpacing="2" Margin="8,2,8,0"/>
             </ScrollViewer>
         </Border>
         <Grid x:Name="TerminalSurface" Background="#0D1117"/>
