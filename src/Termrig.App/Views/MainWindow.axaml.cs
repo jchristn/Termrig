@@ -99,6 +99,8 @@ namespace Termrig.App.Views
         private void WireEvents()
         {
             Closed += OnMainWindowClosed;
+            ApplicationSettingsButton.Click += delegate { ShowApplicationSettings(true); };
+            BackToProfilesButton.Click += delegate { ShowApplicationSettings(false); };
             UpdateUnfocusedWindowsCheckBox.Click += OnUpdateUnfocusedWindowsClicked;
             NewProfileButton.Click += OnNewProfileClicked;
             EmptyNewProfileButton.Click += OnNewProfileClicked;
@@ -134,6 +136,16 @@ namespace Termrig.App.Views
             DragDrop.AddDragOverHandler(TabsList, OnTabsListDragOver);
             DragDrop.AddDropHandler(TabsList, OnTabsListDrop);
             DragDrop.AddDragLeaveHandler(TabsList, OnListDragLeave);
+        }
+
+        private void ShowApplicationSettings(bool showSettings)
+        {
+            ProfilesView.IsVisible = !showSettings;
+            ApplicationSettingsView.IsVisible = showSettings;
+            Title = showSettings ? "Termrig | Settings" : "Termrig | Profiles";
+            ViewSubtitleText.Text = showSettings ? "Application settings" : "Terminal profiles and workspaces";
+            if (showSettings) BackToProfilesButton.Focus();
+            else ApplicationSettingsButton.Focus();
         }
 
         private void BuildMacOSMenu()

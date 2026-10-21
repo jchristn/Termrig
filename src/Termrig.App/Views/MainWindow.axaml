@@ -9,7 +9,7 @@
         Height="700"
         MinWidth="820"
         MinHeight="520">
-    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="14" Margin="20,14,20,20">
+    <Grid RowDefinitions="Auto,*" RowSpacing="14" Margin="20,14,20,20">
 
         <!-- Who this is, and the secondary places to go. -->
         <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
@@ -17,9 +17,13 @@
                    RenderOptions.BitmapInterpolationMode="HighQuality"/>
             <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
                 <TextBlock Text="Termrig" FontSize="15" FontWeight="SemiBold"/>
-                <TextBlock Classes="dim" FontSize="12" Text="Terminal profiles and workspaces"/>
+                <TextBlock x:Name="ViewSubtitleText" Classes="dim" FontSize="12" Text="Terminal profiles and workspaces"/>
             </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                <Button x:Name="ApplicationSettingsButton" Classes="subtle icon" Width="32" Height="32"
+                        ToolTip.Tip="Application settings" AutomationProperties.Name="Application settings">
+                    <PathIcon Width="16" Height="16" Data="M19.14 12.94A7.9 7.9 0 0 0 19.2 12a7.9 7.9 0 0 0-.06-.94l2.03-1.58-1.92-3.32-2.39.96a7.3 7.3 0 0 0-1.63-.95L14.87 3h-3.84l-.36 3.17a7.3 7.3 0 0 0-1.63.95l-2.39-.96-1.92 3.32 2.03 1.58a7.9 7.9 0 0 0-.06.94c0 .32.02.63.06.94l-2.03 1.58 1.92 3.32 2.39-.96c.5.39 1.05.71 1.63.95l.36 3.17h3.84l.36-3.17a7.3 7.3 0 0 0 1.63-.95l2.39.96 1.92-3.32-2.03-1.58ZM12.95 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/>
+                </Button>
                 <Button x:Name="GitHubButton" Classes="subtle icon" Width="32" Height="32" ToolTip.Tip="Open the Termrig repository on GitHub">
                     <PathIcon Width="16" Height="16" Data="M8 0C3.58 0 0 3.67 0 8.2c0 3.63 2.29 6.7 5.47 7.78.4.08.55-.18.55-.4 0-.2-.01-.85-.01-1.54-2.01.38-2.53-.5-2.69-.96-.09-.24-.48-.96-.82-1.15-.28-.15-.68-.52-.01-.53.63-.01 1.08.59 1.23.84.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.09-1.78-.21-3.64-.91-3.64-4.04 0-.89.31-1.62.82-2.19-.08-.21-.36-1.04.08-2.16 0 0 .67-.22 2.2.84.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.95.08 2.16.51.57.82 1.3.82 2.19 0 3.14-1.87 3.83-3.65 4.04.29.26.54.75.54 1.52 0 1.09-.01 1.97-.01 2.24 0 .22.15.48.55.4A8.12 8.12 0 0 0 16 8.2C16 3.67 12.42 0 8 0Z"/>
                 </Button>
@@ -29,7 +33,7 @@
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="1" ColumnDefinitions="260,*" ColumnSpacing="14">
+        <Grid x:Name="ProfilesView" Grid.Row="1" ColumnDefinitions="260,*" ColumnSpacing="14">
 
             <!-- Profiles and folders. -->
             <Border Grid.Column="0" Classes="card" Padding="12,12">
@@ -203,11 +207,19 @@
                 </Border>
             </Grid>
         </Grid>
-        <StackPanel Grid.Row="2" Spacing="4">
-            <TextBlock Text="Application settings" FontWeight="SemiBold"/>
-            <CheckBox x:Name="UpdateUnfocusedWindowsCheckBox" Content="Update unfocused windows" IsEnabled="False"
-                      ToolTip.Tip="Keep visible, unfocused windows updating at a reduced frame rate. Minimized windows and hidden tabs stay paused."/>
-            <TextBlock x:Name="ApplicationSettingsErrorText" Classes="dim" IsVisible="False" TextWrapping="Wrap"/>
-        </StackPanel>
+        <Grid x:Name="ApplicationSettingsView" Grid.Row="1" IsVisible="False" RowDefinitions="Auto,*" RowSpacing="14">
+            <StackPanel Spacing="12">
+                <Button x:Name="BackToProfilesButton" Content="← Back to Profiles" Classes="subtle" HorizontalAlignment="Left"/>
+                <TextBlock Classes="title" Text="Application settings"/>
+            </StackPanel>
+            <Border Grid.Row="1" Classes="card" VerticalAlignment="Top">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Window updates" FontWeight="SemiBold"/>
+                    <CheckBox x:Name="UpdateUnfocusedWindowsCheckBox" Content="Update unfocused windows" IsEnabled="False"/>
+                    <TextBlock Classes="help" Text="Keep visible, unfocused windows updating at a reduced frame rate. Minimized windows and hidden tabs stay paused." TextWrapping="Wrap"/>
+                    <TextBlock x:Name="ApplicationSettingsErrorText" Classes="dim" IsVisible="False" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
