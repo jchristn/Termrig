@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- macOS source runs now refresh and launch `~/Applications/Termrig.app`.
+- Added macOS install, reinstall, and run entry points under `scripts/macos/`.
+- Preserve the existing Finder app if ad-hoc signing fails.
 - Added the application-wide “Update unfocused windows” preference in the Profiles window, enabled by default. Visible background terminals render at a reduced rate; minimized windows and hidden tabs remain paused.
 
 ## 0.1.1

@@ -56,7 +56,7 @@ cp "$SCRIPT_DIR/Info.plist" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP/Contents/Info.plist"
 chmod +x "$APP/Contents/MacOS/Termrig"
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || echo "Warning: ad-hoc code signing failed; Gatekeeper may block the app." >&2
+codesign --force --deep --sign - "$APP"
 
 echo "Installing to $INSTALL_DIR/Termrig.app..."
 mkdir -p "$INSTALL_DIR"

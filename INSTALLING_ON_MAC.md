@@ -89,3 +89,11 @@ you want to remove them.
 - **Command-line launcher (optional):** `./install-tool.sh` installs a `trig`
   command that starts Termrig from any terminal, and also rebuilds
   `Termrig.app`. Remove both with `./remove-tool.sh`.
+
+### Source scripts
+
+`./go.sh` and `./scripts/macos/run.sh` rebuild the self-contained app, install it
+in `~/Applications/Termrig.app`, register it with Finder, and launch the installed
+copy. `./scripts/macos/install-tool.sh` and `reinstall-tool.sh` delegate to the root
+tool scripts, which install both the `trig` command and the same Finder app.
+Signing must succeed before the existing installed app is replaced.
