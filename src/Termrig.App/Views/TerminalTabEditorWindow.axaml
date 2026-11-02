@@ -2,13 +2,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Termrig.App.Views.TerminalTabEditorWindow"
         Title="Tab settings"
-        Width="560"
+        Width="700"
         Height="880"
-        MinWidth="520"
+        MinWidth="650"
         MinHeight="700">
     <Grid RowDefinitions="*,Auto" Margin="18">
         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="12">
+            <StackPanel Spacing="12" Margin="0,0,20,0">
                 <StackPanel Spacing="6">
                     <TextBlock Text="Tab name" FontWeight="SemiBold"/>
                     <TextBox x:Name="NameBox"/>
