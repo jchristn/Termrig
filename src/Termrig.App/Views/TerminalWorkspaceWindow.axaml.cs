@@ -460,7 +460,8 @@ namespace Termrig.App.Views
             TerminalTabProfile? tab = await editor.ShowDialog<TerminalTabProfile?>(this).ConfigureAwait(true);
             if (tab == null) return;
             TerminalProfileDefaults.ApplyShellFontDefaults(_Profile, tab.Shell);
-            AddTerminalTab(tab, false);
+            TerminalSession session = AddTerminalTab(tab, false);
+            await LaunchTerminalAsync(session, session.LaunchPlan).ConfigureAwait(true);
         }
 
         private async void OnEditTabClicked(object? sender, RoutedEventArgs e)
