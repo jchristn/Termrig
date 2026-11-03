@@ -122,7 +122,7 @@ namespace Test.Terminal
         }
 
         [Fact]
-        public void PaddingSpaceAfterFullWidthLineIsDiscardedBeforeLineEnding()
+        public void SpaceAfterFullWidthLineWrapsBeforeLineEnding()
         {
             TerminalSnapshot snapshot = TerminalReplay.Replay(
                 5,
@@ -130,8 +130,8 @@ namespace Test.Terminal
                 new[] { Encoding.UTF8.GetBytes("abcde \r\nnext") });
 
             Assert.Equal("abcde", snapshot.VisibleRows[0].Text);
-            Assert.Equal("next", snapshot.VisibleRows[1].Text);
-            Assert.Equal(string.Empty, snapshot.VisibleRows[2].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[1].Text);
+            Assert.Equal("next", snapshot.VisibleRows[2].Text);
         }
 
         [Fact]
@@ -213,11 +213,10 @@ namespace Test.Terminal
             Assert.Equal("  Z", snapshot.VisibleRows[2].Text);
         }
 
-        // The mirror case: overflow padding immediately before a hard line break is
-        // insignificant and must still be discarded (ConPTY/Docker full-width rows),
-        // even when many spaces accumulate past the margin.
+        // Spaces beyond the right margin occupy real rows, even when followed by
+        // a hard line break. Dropping them breaks shells that use padding to wrap.
         [Fact]
-        public void OverflowPaddingSpacesBeforeLineEndingAreDiscarded()
+        public void OverflowSpacesBeforeLineEndingPreserveRows()
         {
             TerminalSnapshot snapshot = TerminalReplay.Replay(
                 4,
@@ -225,8 +224,9 @@ namespace Test.Terminal
                 new[] { Encoding.UTF8.GetBytes("ABCD      \r\nZ") });
 
             Assert.Equal("ABCD", snapshot.VisibleRows[0].Text);
-            Assert.Equal("Z", snapshot.VisibleRows[1].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[1].Text);
             Assert.Equal(string.Empty, snapshot.VisibleRows[2].Text);
+            Assert.Equal("Z", snapshot.VisibleRows[3].Text);
         }
 
         // A full-screen TUI (mux) clears a region by writing one run of spaces that
@@ -256,20 +256,27 @@ namespace Test.Terminal
             Assert.Equal("Z", snapshot.VisibleRows[4].Text);
         }
 
-        [Fact]
-        public void DockerCursorPaddingDoesNotCreateExtraEntries()
+        // Verified against @xterm/headless 6.0.0: at 180 columns the final space
+        // overflows and occupies a row; at 181 it fits and CRLF cancels pending wrap.
+        [Theory]
+        [InlineData(180, 3)]
+        [InlineData(181, 2)]
+        public void DockerCursorPaddingWrapsOnlyWhenItExceedsTheMargin(int columns, int secondRow)
         {
             string output =
                 "[+] up 2/2\r\n" +
                 " \u001b[32m\u2714 \u001b[mContainer docker-documentatom-ui-1  \u001b[32mCreated\u001b[130X\u001b[34m\u001b[130C0.3s \u001b[m\r\n" +
                 " \u001b[32m\u2714 \u001b[mContainer docker-documentatom-mcp-1 \u001b[32mCreated\u001b[130X\u001b[34m\u001b[130C0.3s \u001b[m\r\n";
 
-            TerminalSnapshot snapshot = TerminalReplay.Replay(180, 8, new[] { Encoding.UTF8.GetBytes(output) });
+            TerminalSnapshot snapshot = TerminalReplay.Replay(columns, 8, new[] { Encoding.UTF8.GetBytes(output) });
 
             Assert.Contains("docker-documentatom-ui-1", snapshot.VisibleRows[1].Text);
-            Assert.Contains("docker-documentatom-mcp-1", snapshot.VisibleRows[2].Text);
-            Assert.DoesNotContain("docker-documentatom-ui-1", snapshot.VisibleRows[2].Text);
-            Assert.DoesNotContain("docker-documentatom-mcp-1", snapshot.VisibleRows[3].Text);
+            Assert.EndsWith("0.3s", snapshot.VisibleRows[1].Text);
+            Assert.Contains("docker-documentatom-mcp-1", snapshot.VisibleRows[secondRow].Text);
+            Assert.EndsWith("0.3s", snapshot.VisibleRows[secondRow].Text);
+            if (secondRow == 3)
+                Assert.Equal(string.Empty, snapshot.VisibleRows[2].Text);
+            Assert.Equal(string.Empty, snapshot.VisibleRows[secondRow + 1].Text);
         }
 
         [Fact]

@@ -706,7 +706,7 @@ public class Terminal
                 break;
 
             case 0x0D: // CR - Carriage Return
-                _inputHandler.DiscardPendingWrapState();
+                _inputHandler.ClearPendingWrapState();
                 _buffer.SetCursor(0, _buffer.Y);
                 break;
 
@@ -725,7 +725,7 @@ public class Terminal
     /// </summary>
     private void LineFeed()
     {
-        _inputHandler.DiscardPendingWrapState();
+        _inputHandler.ClearPendingWrapState();
 
         if (_buffer.Y == _buffer.ScrollBottom)
         {

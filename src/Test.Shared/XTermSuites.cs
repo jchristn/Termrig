@@ -409,9 +409,7 @@ namespace Test.Shared
         {
             token.ThrowIfCancellationRequested();
             Terminal terminal = new Terminal(new TerminalOptions { Rows = 2, Cols = 5, Scrollback = 20 });
-            SetLineText(terminal.Buffer, 0, "abc  ");
-            SetLineText(terminal.Buffer, 1, "def");
-            terminal.Buffer.Lines[0]!.IsWrapped = true;
+            terminal.Write("abc  def");
 
             terminal.Selection.StartSelection(0, 0);
             terminal.Selection.UpdateSelection(2, 1);

@@ -19,8 +19,6 @@ public class InputHandler
     private AttributeData _curAttr;
     private readonly Dictionary<CharsetMode, Dictionary<char, string>?> _charsets;
     private CharsetMode _currentCharset;
-    private readonly List<AttributeData> _pendingWrapSpaceAttributes = new();
-    private bool _flushingPendingWrapSpaces;
 
     // Variation selector and combining character constants
     private const int VariationSelectorEmojiSymbol = 0xFE0F;  // Emoji presentation selector
@@ -130,13 +128,9 @@ public class InputHandler
         // Get character width
         var width = GetStringCellWidth(translatedData);
 
-        if (!_flushingPendingWrapSpaces && _buffer.IsPendingWrap && width == 1 && translatedData == " ")
-        {
-            _pendingWrapSpaceAttributes.Add(_curAttr);
-            return;
-        }
-
-        FlushPendingWrapSpaces();
+        // Spaces are printable cells too: they must commit autowrap immediately.
+        // Deferring them until a later non-space loses cursor movement when CR/LF
+        // follows, allowing a shell prompt to overwrite unterminated output.
         CommitPendingWrap();
 
         if (width == 2 && _buffer.X == _terminal.Cols - 1)
@@ -205,59 +199,18 @@ public class InputHandler
         if (!_buffer.IsPendingWrap)
             return;
 
-        // Any deferred trailing spaces have already been flushed by the caller
-        // (Print) before CommitPendingWrap runs, so this is a plain clear.
-        DiscardPendingWrapState();
+        ClearPendingWrapState();
         if (_terminal.Options.Wraparound)
         {
             WrapToNextLine();
         }
     }
 
-    // In-line operations (erase, insert/delete, scroll-region edits, mode
-    // changes) resolve pending wrap by MATERIALIZING any deferred trailing
-    // spaces through the normal autowrap path. Full-screen TUIs (for example
-    // mux) position content by padding with spaces instead of emitting explicit
-    // cursor motion, so those spaces carry real cursor position and must not be
-    // dropped when an erase/edit sequence arrives before the next printable.
+    // Cursor motion cancels only a pending wrap after the last printed cell.
+    // Already printed spaces and the wraps they caused remain significant.
     internal void ClearPendingWrapState()
     {
-        FlushPendingWrapSpaces();
         _buffer.ClearPendingWrap();
-    }
-
-    // Line-ending motions (CR, LF/VT/FF, IND, RI, NEL) and buffer resets resolve
-    // pending wrap by DISCARDING deferred trailing spaces. Padding written before
-    // a hard line break is not significant and must not create an extra row,
-    // matching ConPTY/Docker full-width row output.
-    internal void DiscardPendingWrapState()
-    {
-        _pendingWrapSpaceAttributes.Clear();
-        _buffer.ClearPendingWrap();
-    }
-
-    private void FlushPendingWrapSpaces()
-    {
-        if (_pendingWrapSpaceAttributes.Count == 0)
-            return;
-
-        AttributeData savedAttr = _curAttr;
-        AttributeData[] spaceAttributes = _pendingWrapSpaceAttributes.ToArray();
-        _pendingWrapSpaceAttributes.Clear();
-        _flushingPendingWrapSpaces = true;
-        try
-        {
-            foreach (AttributeData attr in spaceAttributes)
-            {
-                _curAttr = attr;
-                Print(" ");
-            }
-        }
-        finally
-        {
-            _curAttr = savedAttr;
-            _flushingPendingWrapSpaces = false;
-        }
     }
 
     private void WrapToNextLine()
@@ -908,11 +861,6 @@ public class InputHandler
 
     // CSI Handler Implementations
 
-    // Cursor-movement sequences resolve any pending wrap by MATERIALIZING deferred
-    // trailing spaces (via ClearPendingWrapState) before repositioning. Full-screen
-    // TUIs clear regions by writing runs of spaces that overflow the right margin and
-    // then reposition with an absolute CUP; those overflow spaces must wrap to fill the
-    // rows, not be orphaned. (A hard line break still discards them - see CR/LF.)
     private void CursorUp(Params parameters)
     {
         ClearPendingWrapState();
@@ -2206,7 +2154,7 @@ public class InputHandler
 
     private void IndexDown()
     {
-        DiscardPendingWrapState();
+        ClearPendingWrapState();
         if (_buffer.Y == _buffer.ScrollBottom)
         {
             _buffer.ScrollUp(1);
@@ -2225,7 +2173,7 @@ public class InputHandler
 
     private void ReverseIndex()
     {
-        DiscardPendingWrapState();
+        ClearPendingWrapState();
         if (_buffer.Y == _buffer.ScrollTop)
         {
             _buffer.ScrollDown(1);
@@ -2381,6 +2329,6 @@ public class InputHandler
     public void SetBuffer(Buffer.TerminalBuffer buffer)
     {
         _buffer = buffer;
-        DiscardPendingWrapState();
+        ClearPendingWrapState();
     }
 }

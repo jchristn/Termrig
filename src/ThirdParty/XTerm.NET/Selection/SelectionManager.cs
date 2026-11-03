@@ -151,7 +151,10 @@ public class SelectionManager
 
             int startX = Math.Clamp((y == start.y) ? start.x : 0, 0, lastColumn);
             int endX = Math.Clamp((y == end.y) ? end.x : lastColumn, 0, lastColumn);
-            bool appendLineBreak = y < end.y && !line.IsWrapped;
+            // IsWrapped means this row continues the PREVIOUS row. The next
+            // row determines whether this boundary is a soft wrap or a newline.
+            bool nextLineIsWrapped = y + 1 < buffer.Lines.Length && buffer.Lines[y + 1]?.IsWrapped == true;
+            bool appendLineBreak = y < end.y && !nextLineIsWrapped;
             bool endsLogicalLine = y == end.y || appendLineBreak;
 
             if (_terminal.Options.TrimSelectionTrailingWhitespace && endsLogicalLine)
@@ -172,7 +175,7 @@ public class SelectionManager
             var lineText = line.TranslateToString(false, startX, endX + 1);
             text.Append(lineText);
 
-            // Add line break if not last line and line doesn't wrap
+            // Preserve hard line breaks, but join soft-wrapped rows.
             if (appendLineBreak)
             {
                 text.Append('\n');
