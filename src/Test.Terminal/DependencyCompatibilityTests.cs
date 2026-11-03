@@ -63,7 +63,7 @@ namespace Test.Terminal
         {
             bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
             string app = isWindows ? Path.Combine(Environment.SystemDirectory, "cmd.exe") : "/bin/sh";
-            string[] args = isWindows ? new[] { "/c", "echo termrig-pty-ok" } : new[] { "-c", "echo termrig-pty-ok" };
+            string[] args = isWindows ? new[] { "/d", "/c", "echo termrig-pty-ok" } : new[] { "-c", "echo termrig-pty-ok" };
 
             var options = new PtyOptions
             {
@@ -73,6 +73,9 @@ namespace Test.Terminal
                 Cwd = Environment.CurrentDirectory,
                 App = app,
                 CommandLine = args,
+                // cmd parses the command following /c itself. Porta.Pty's default
+                // per-argument quoting turns it into a quoted executable name.
+                VerbatimCommandLine = isWindows,
                 Environment = new Dictionary<string, string>()
             };
 
