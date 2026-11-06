@@ -30,24 +30,23 @@ open from Finder, Spotlight, or the Dock.
    ./packaging/macos/build-app.sh
    ```
 
-   This puts `Termrig.app` in the **Applications folder inside your home
-   folder** (`~/Applications`). This is not the main Applications folder
-   that Finder shows in its sidebar.
+   This puts `Termrig.app` in `/Applications` (or `~/Applications` if
+   `/Applications` isn't writable) and removes any copy left in the other
+   location, so Spotlight (Cmd-Space → "termrig") always opens this build.
 
-   To install into the main Applications folder instead, run:
+   To install somewhere else, pass the folder:
 
    ```sh
-   ./packaging/macos/build-app.sh /Applications
+   ./packaging/macos/build-app.sh ~/Applications
    ```
 
 4. Open Termrig:
 
    ```sh
-   open ~/Applications/Termrig.app
+   open /Applications/Termrig.app
    ```
 
-   To find the app in Finder, run `open -R ~/Applications/Termrig.app`, or
-   choose **Go → Home** and open the **Applications** folder.
+   Or press Cmd-Space and type `termrig`.
 
 ## Keep Termrig in the Dock
 
@@ -70,12 +69,14 @@ and uncheck **Keep in Dock**.
    ./packaging/macos/build-app.sh
    ```
 
-Your pinned Dock icon keeps working.
+Your pinned Dock icon keeps working. If Termrig was still running, Spotlight
+switches to the old process instead of launching the new build, so quit first.
 
 ## Uninstall
 
 1. Quit Termrig.
-2. Delete `Termrig.app` from `~/Applications` (or `/Applications`).
+2. Delete `Termrig.app` from `/Applications` (or `~/Applications`), or run
+   `./remove-tool.sh`.
 
 Your profiles and settings stay in `~/.termrig/`. Delete that folder too if
 you want to remove them.
@@ -93,7 +94,8 @@ you want to remove them.
 ### Source scripts
 
 `./go.sh` and `./scripts/macos/run.sh` rebuild the self-contained app, install it
-in `~/Applications/Termrig.app`, register it with Finder, and launch the installed
+in `/Applications/Termrig.app` (falling back to `~/Applications`), remove any stale
+copy from the other location, register it with Finder, and launch the installed
 copy. `./scripts/macos/install-tool.sh` and `reinstall-tool.sh` delegate to the root
 tool scripts, which install both the `trig` command and the same Finder app.
 Signing must succeed before the existing installed app is replaced.

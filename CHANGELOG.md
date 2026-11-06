@@ -7,7 +7,7 @@
 - Fixed copying wrapped terminal output inserting newlines inside long values and joining separate lines.
 - Fixed shell prompts overwriting output without a trailing newline by preserving spaces that wrap past the terminal margin.
 
-- macOS source runs now refresh and launch `~/Applications/Termrig.app`.
+- macOS source runs now refresh and launch `/Applications/Termrig.app` (falling back to `~/Applications`), removing stale copies so Spotlight opens the current build.
 - Added macOS install, reinstall, and run entry points under `scripts/macos/`.
 - Preserve the existing Finder app if ad-hoc signing fails.
 - Added the application-wide “Update unfocused windows” preference in the Profiles window, enabled by default. Visible background terminals render at a reduced rate; minimized windows and hidden tabs remain paused.

@@ -2,7 +2,11 @@
 # Build Termrig.app for the host architecture and install it.
 #
 # Usage: packaging/macos/build-app.sh [install-dir]
-#   install-dir  Where to place Termrig.app (default: $HOME/Applications).
+#   install-dir  Where to place Termrig.app. Default: /Applications when it is
+#                writable, otherwise $HOME/Applications.
+#
+# Any Termrig.app left in the other standard location is removed so Spotlight
+# and Finder only ever see the copy just installed.
 #
 # The bundle is self-contained, so it runs without the .NET runtime installed.
 set -eu
@@ -16,7 +20,16 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 PROJECT="$REPO_ROOT/src/Termrig.App/Termrig.App.csproj"
 ICON_SOURCE="$REPO_ROOT/packaging/icons/termrig-macos.png"
-INSTALL_DIR="${1:-$HOME/Applications}"
+SYSTEM_APPS="${TERMRIG_SYSTEM_APPLICATIONS:-/Applications}"
+USER_APPS="$HOME/Applications"
+if [ "$#" -gt 0 ]; then
+    INSTALL_DIR="$1"
+elif [ -w "$SYSTEM_APPS" ]; then
+    INSTALL_DIR="$SYSTEM_APPS"
+else
+    INSTALL_DIR="$USER_APPS"
+fi
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 case "$(uname -m)" in
     arm64) RID="osx-arm64" ;;
@@ -62,6 +75,22 @@ echo "Installing to $INSTALL_DIR/Termrig.app..."
 mkdir -p "$INSTALL_DIR"
 rm -rf "$INSTALL_DIR/Termrig.app"
 cp -R "$APP" "$INSTALL_DIR/Termrig.app"
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$INSTALL_DIR/Termrig.app" >/dev/null 2>&1 || true
+"$LSREGISTER" -f "$INSTALL_DIR/Termrig.app" >/dev/null 2>&1 || true
 
 echo "Installed $INSTALL_DIR/Termrig.app"
+
+INSTALLED="$(CDPATH= cd -- "$INSTALL_DIR/Termrig.app" && pwd -P)"
+for OTHER in "$SYSTEM_APPS/Termrig.app" "$USER_APPS/Termrig.app"; do
+    [ -d "$OTHER" ] || continue
+    [ "$(CDPATH= cd -- "$OTHER" && pwd -P)" != "$INSTALLED" ] || continue
+    if rm -rf "$OTHER" 2>/dev/null; then
+        "$LSREGISTER" -u "$OTHER" >/dev/null 2>&1 || true
+        echo "Removed stale copy $OTHER"
+    else
+        echo "Warning: could not remove stale copy $OTHER; Spotlight may open it instead." >&2
+    fi
+done
+
+if pgrep -f 'Termrig.app/Contents/MacOS/Termrig' >/dev/null 2>&1; then
+    echo "Note: Termrig is running. Quit it (Cmd-Q) so Spotlight launches the new build." >&2
+fi

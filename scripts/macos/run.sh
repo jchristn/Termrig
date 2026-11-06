@@ -4,5 +4,7 @@ set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 [ "$(uname -s)" = Darwin ] || { echo "This script requires macOS." >&2; exit 1; }
 [ "$#" -eq 0 ] || { echo "Usage: $0" >&2; exit 1; }
-"$SCRIPT_DIR/../../packaging/macos/build-app.sh"
-open -a "$HOME/Applications/Termrig.app"
+SYSTEM_APPS="${TERMRIG_SYSTEM_APPLICATIONS:-/Applications}"
+if [ -w "$SYSTEM_APPS" ]; then APP_DIR="$SYSTEM_APPS"; else APP_DIR="$HOME/Applications"; fi
+"$SCRIPT_DIR/../../packaging/macos/build-app.sh" "$APP_DIR"
+open -a "$APP_DIR/Termrig.app"

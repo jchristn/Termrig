@@ -7,9 +7,13 @@ else
     echo "Termrig global tool is not installed."
 fi
 
-if [ "$(uname -s)" = "Darwin" ] && [ -d "$HOME/Applications/Termrig.app" ]; then
-    rm -rf "$HOME/Applications/Termrig.app"
-    echo "Removed $HOME/Applications/Termrig.app."
+if [ "$(uname -s)" = "Darwin" ]; then
+    for APP in "${TERMRIG_SYSTEM_APPLICATIONS:-/Applications}/Termrig.app" "$HOME/Applications/Termrig.app"; do
+        if [ -d "$APP" ]; then
+            rm -rf "$APP"
+            echo "Removed $APP."
+        fi
+    done
 fi
 
 if [ "$(uname -s)" = "Linux" ]; then

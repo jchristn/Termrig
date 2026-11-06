@@ -39,7 +39,12 @@ if name == 'codesign' and os.environ.get('FAIL_SIGN'): sys.exit(8)
         path = bin_dir / name
         path.write_text(fake)
         path.chmod(0o755)
-    env = dict(os.environ, HOME=str(temp / 'home'), PATH=f'{bin_dir}:{os.environ["PATH"]}', CALL_LOG=str(log))
+    system_apps = temp / 'Applications'
+    system_apps.mkdir()
+    env = dict(os.environ, HOME=str(temp / 'home'), PATH=f'{bin_dir}:{os.environ["PATH"]}', CALL_LOG=str(log),
+               TERMRIG_SYSTEM_APPLICATIONS=str(system_apps))
+    stale = temp / 'home/Applications/Termrig.app'
+    stale.mkdir(parents=True)
     for script in ['go.sh', 'scripts/macos/run.sh', 'scripts/macos/install-tool.sh', 'scripts/macos/reinstall-tool.sh']:
         for arch in ['arm64', 'x86_64']:
             log.unlink(missing_ok=True)
@@ -48,7 +53,8 @@ if name == 'codesign' and os.environ.get('FAIL_SIGN'): sys.exit(8)
             calls = [json.loads(line) for line in log.read_text().splitlines()]
             publish, = [c for c in calls if c[:2] == ['dotnet', 'publish']]
             assert publish[publish.index('--runtime') + 1] == ('osx-arm64' if arch == 'arm64' else 'osx-x64')
-            app = temp / 'home/Applications/Termrig.app'
+            app = system_apps / 'Termrig.app'
+            assert not stale.exists(), 'stale ~/Applications copy should be removed'
             with (app / 'Contents/Info.plist').open('rb') as f:
                 assert plistlib.load(f)['CFBundleExecutable'] == 'Termrig'
             assert (app / 'Contents/MacOS/Termrig').is_file()
@@ -60,4 +66,14 @@ if name == 'codesign' and os.environ.get('FAIL_SIGN'): sys.exit(8)
     marker.touch()
     p = subprocess.run(['sh', str(repo / 'scripts/macos/run.sh')], env=dict(env, FAIL_SIGN='1'), capture_output=True)
     assert p.returncode != 0 and marker.exists()
-    print('Termrig macOS install/reinstall/run, both architectures, and signing failure preservation passed.')
+    system_apps.chmod(0o555)
+    try:
+        log.unlink(missing_ok=True)
+        p = subprocess.run(['sh', str(repo / 'scripts/macos/run.sh')], env=env, capture_output=True, text=True)
+        assert p.returncode == 0, p.stderr
+        assert (stale / 'Contents/MacOS/Termrig').is_file(), 'falls back to ~/Applications'
+        opens = [json.loads(line) for line in log.read_text().splitlines() if json.loads(line)[0] == 'open']
+        assert opens == [['open', '-a', str(stale)]]
+    finally:
+        system_apps.chmod(0o755)
+    print('Termrig macOS install/reinstall/run, both architectures, stale-copy cleanup, fallback, and signing failure preservation passed.')
