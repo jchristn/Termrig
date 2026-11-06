@@ -37,7 +37,7 @@
 
             <!-- Profiles and folders. -->
             <Border Grid.Column="0" Classes="card" Padding="12,12">
-                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+                <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
                     <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="4,0,0,0">
                         <TextBlock Grid.Column="0" Classes="title" Text="Profiles" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
@@ -52,7 +52,16 @@
                             </Button>
                         </StackPanel>
                     </Grid>
-                    <ListBox Grid.Row="1" x:Name="ProfileList" Classes="profileList">
+                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <TextBox x:Name="ProfileFilterTextBox" PlaceholderText="Filter profiles…"
+                                 AutomationProperties.Name="Filter profiles"
+                                 ToolTip.Tip="Filter by profile name. Press Escape to clear."/>
+                        <Button Grid.Column="1" x:Name="ClearProfileFilterButton" Classes="subtle icon"
+                                IsVisible="False" ToolTip.Tip="Clear filter" AutomationProperties.Name="Clear profile filter">
+                            <PathIcon Width="12" Height="12" Data="M6 4L12 10L18 4L20 6L14 12L20 18L18 20L12 14L6 20L4 18L10 12L4 6Z"/>
+                        </Button>
+                    </Grid>
+                    <ListBox Grid.Row="2" x:Name="ProfileList" Classes="profileList">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="appModels:ProfileListItem">
                                 <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="{Binding RowMargin}" ColumnSpacing="7" Background="Transparent">
@@ -63,6 +72,7 @@
                                               Data="{Binding ExpandIconData}"
                                               Foreground="{DynamicResource TermrigSecondaryTextBrush}"
                                               IsVisible="{Binding IsFolder}"
+                                              IsEnabled="{Binding CanToggleExpansion}"
                                               VerticalAlignment="Center"
                                               PointerPressed="OnProfileFolderTogglePointerPressed"/>
                                     <PathIcon Grid.Column="1"
@@ -92,7 +102,10 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <TextBlock Grid.Row="2" Classes="help" Margin="4,0,0,0"
+                    <TextBlock Grid.Row="2" x:Name="NoMatchingProfilesText" Classes="dim" Margin="4,8"
+                               Text="No matching profiles" IsVisible="False" IsHitTestVisible="False"
+                               VerticalAlignment="Top" TextWrapping="Wrap"/>
+                    <TextBlock Grid.Row="3" x:Name="ProfileListHelpText" Classes="help" Margin="4,0,0,0"
                                Text="Double-click to open. Drag to reorder or move into a folder. Right-click for more."/>
                 </Grid>
             </Border>

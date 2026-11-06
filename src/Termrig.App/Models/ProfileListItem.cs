@@ -46,6 +46,13 @@ namespace Termrig.App.Models
         public TerminalProfile? Profile { get; set; }
 
         /// <summary>
+        /// Shows matching children without changing the folder's saved expansion state.
+        /// </summary>
+        public bool IsFilterExpanded { get; set; }
+
+        public bool CanToggleExpansion => IsFolder && !IsFilterExpanded;
+
+        /// <summary>
         /// True when this row represents a folder.
         /// </summary>
         public bool IsFolder
@@ -75,7 +82,7 @@ namespace Termrig.App.Models
         {
             get
             {
-                return Folder?.IsExpanded == true ? ChevronDownIcon : ChevronRightIcon;
+                return IsFilterExpanded || Folder?.IsExpanded == true ? ChevronDownIcon : ChevronRightIcon;
             }
         }
 

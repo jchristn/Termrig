@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added live profile-name filtering, including matches in collapsed folders, with Escape and a clear button to reset the filter.
+
 - Fixed copying wrapped terminal output inserting newlines inside long values and joining separate lines.
 - Fixed shell prompts overwriting output without a trailing newline by preserving spaces that wrap past the terminal margin.
 

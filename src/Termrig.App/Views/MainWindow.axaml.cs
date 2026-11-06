@@ -122,6 +122,13 @@ namespace Termrig.App.Views
             ProfileList.ContextRequested += OnProfileListContextRequested;
             TabsList.ContextRequested += OnTabsListContextRequested;
             ProfileList.SelectionChanged += OnProfileSelectionChanged;
+            ProfileFilterTextBox.TextChanged += OnProfileFilterTextChanged;
+            ProfileFilterTextBox.KeyDown += OnProfileFilterKeyDown;
+            ClearProfileFilterButton.Click += delegate
+            {
+                ProfileFilterTextBox.Text = String.Empty;
+                ProfileFilterTextBox.Focus();
+            };
             ProfileList.AddHandler(PointerPressedEvent, OnProfileListPointerPressed, RoutingStrategies.Bubble, true);
             TabsList.AddHandler(PointerPressedEvent, OnTabsListPointerPressed, RoutingStrategies.Bubble, true);
             ProfileList.AddHandler(PointerMovedEvent, OnProfileListPointerMoved, RoutingStrategies.Bubble, true);
@@ -276,33 +283,49 @@ namespace Termrig.App.Views
             return profile;
         }
 
-        private void RefreshProfiles(string? selectedProfileId = null, string? selectedFolderId = null)
+        private bool IsProfileFilterActive => !String.IsNullOrWhiteSpace(ProfileFilterTextBox.Text);
+
+        private void OnProfileFilterTextChanged(object? sender, TextChangedEventArgs e)
         {
-            if (!String.IsNullOrWhiteSpace(selectedProfileId))
+            ClearPendingDrag();
+            ClearLastDropTargets();
+            RefreshProfiles(_SelectedProfile?.Id, _SelectedFolder?.Id, revealSelection: false);
+            RefreshEditor();
+        }
+
+        private void OnProfileFilterKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape) return;
+            ProfileFilterTextBox.Text = String.Empty;
+            e.Handled = true;
+        }
+
+        private void RefreshProfiles(string? selectedProfileId = null, string? selectedFolderId = null, bool revealSelection = true)
+        {
+            if (revealSelection && !IsProfileFilterActive && !String.IsNullOrWhiteSpace(selectedProfileId))
             {
                 EnsureProfileFolderExpanded(selectedProfileId);
             }
 
-            _ProfileItems = BuildProfileListItems();
+            _ProfileItems = ProfileListFilter.BuildItems(_Profiles, _ProfileFolders, ProfileFilterTextBox.Text);
 
             _SuppressProfileSelectionChanged = true;
             try
             {
                 ProfileList.ItemsSource = null;
                 ProfileList.ItemsSource = _ProfileItems;
-                if (!String.IsNullOrWhiteSpace(selectedProfileId))
-                {
-                    SelectProfileRowByProfileId(selectedProfileId);
-                }
-                else if (!String.IsNullOrWhiteSpace(selectedFolderId))
-                {
-                    SelectFolderRowByFolderId(selectedFolderId);
-                }
+                ApplyProfileListSelection(ProfileListFilter.FindSelection(_ProfileItems, selectedProfileId, selectedFolderId));
             }
             finally
             {
                 _SuppressProfileSelectionChanged = false;
             }
+
+            NoMatchingProfilesText.IsVisible = IsProfileFilterActive && _ProfileItems.Count == 0;
+            ClearProfileFilterButton.IsVisible = !String.IsNullOrEmpty(ProfileFilterTextBox.Text);
+            ProfileListHelpText.Text = IsProfileFilterActive
+                ? "Double-click to open. Clear the filter to reorder profiles."
+                : "Double-click to open. Drag to reorder or move into a folder. Right-click for more.";
         }
 
         private void RefreshEditor()
@@ -390,6 +413,7 @@ namespace Termrig.App.Views
             profile.Name = "Profile " + (_Profiles.Count + 1);
             profile.FolderId = GetNewProfileFolderId();
             _Profiles.Add(profile);
+            ProfileFilterTextBox.Text = String.Empty;
             RefreshProfiles(profile.Id);
             RestoreSelectedProfile(profile.Id);
             _ = SaveProfilesAsync();
@@ -454,8 +478,8 @@ namespace Termrig.App.Views
             };
             _ProfileFolders.Add(folder);
             await _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None).ConfigureAwait(true);
+            ProfileFilterTextBox.Text = String.Empty;
             RefreshProfiles(null, folder.Id);
-            _SelectedFolder = folder;
             RefreshEditor();
         }
 
@@ -1325,6 +1349,7 @@ namespace Termrig.App.Views
 
         private void OnProfileListPointerPressed(object? sender, PointerPressedEventArgs e)
         {
+            if (IsProfileFilterActive) return;
             if (!e.GetCurrentPoint(ProfileList).Properties.IsLeftButtonPressed) return;
             if (!(e.Source is Control source)) return;
             if (source is Button || source.FindAncestorOfType<Button>() != null) return;
@@ -1357,6 +1382,7 @@ namespace Termrig.App.Views
 
         private async void OnProfileListPointerMoved(object? sender, PointerEventArgs e)
         {
+            if (IsProfileFilterActive) return;
             if (_PendingDraggedProfile == null || _PendingDragItem == null) return;
             if (!ShouldStartDrag(e, ProfileList)) return;
 
@@ -1444,6 +1470,15 @@ namespace Termrig.App.Views
 
         private void OnProfileListDragOver(object? sender, DragEventArgs e)
         {
+            if (IsProfileFilterActive && _DraggedProfile != null)
+            {
+                e.DragEffects = DragDropEffects.None;
+                ClearLastDropTargets();
+                ClearDropTarget();
+                e.Handled = true;
+                return;
+            }
+
             e.DragEffects = _DraggedProfile != null || _DraggedTab != null ? DragDropEffects.Move : DragDropEffects.None;
             if (_DraggedProfile != null)
             {
@@ -1551,7 +1586,7 @@ namespace Termrig.App.Views
 
         private async Task MoveDraggedProfileAsync(int targetIndex, string targetFolderId)
         {
-            if (_DraggedProfile == null) return;
+            if (IsProfileFilterActive || _DraggedProfile == null) return;
 
             string selectedProfileId = _DraggedProfile.Id;
             Int32 sourceIndex = _Profiles.IndexOf(_DraggedProfile);
@@ -1746,29 +1781,6 @@ namespace Termrig.App.Views
             _ = SaveProfilesAsync();
         }
 
-        private List<ProfileListItem> BuildProfileListItems()
-        {
-            List<ProfileListItem> items = new List<ProfileListItem>();
-
-            foreach (TerminalProfile profile in _Profiles.Where(item => String.IsNullOrWhiteSpace(item.FolderId)))
-            {
-                items.Add(new ProfileListItem { Profile = profile });
-            }
-
-            foreach (ProfileFolder folder in _ProfileFolders)
-            {
-                items.Add(new ProfileListItem { Folder = folder });
-                if (!folder.IsExpanded) continue;
-
-                foreach (TerminalProfile profile in _Profiles.Where(item => item.FolderId == folder.Id))
-                {
-                    items.Add(new ProfileListItem { Profile = profile });
-                }
-            }
-
-            return items;
-        }
-
         private void SelectFirstProfileRow()
         {
             TerminalProfile? firstProfile = _Profiles.FirstOrDefault();
@@ -1787,24 +1799,19 @@ namespace Termrig.App.Views
 
         private void SelectProfileRowByProfileId(string profileId)
         {
-            Int32 index = _ProfileItems.FindIndex(item => item.Profile?.Id == profileId);
-            ProfileList.SelectedIndex = index;
-            if (index >= 0)
-            {
-                _SelectedProfile = _ProfileItems[index].Profile;
-                _SelectedFolder = null;
-            }
+            ApplyProfileListSelection(ProfileListFilter.FindSelection(_ProfileItems, profileId, null));
         }
 
         private void SelectFolderRowByFolderId(string folderId)
         {
-            Int32 index = _ProfileItems.FindIndex(item => item.Folder?.Id == folderId);
-            ProfileList.SelectedIndex = index;
-            if (index >= 0)
-            {
-                _SelectedProfile = null;
-                _SelectedFolder = _ProfileItems[index].Folder;
-            }
+            ApplyProfileListSelection(ProfileListFilter.FindSelection(_ProfileItems, null, folderId));
+        }
+
+        private void ApplyProfileListSelection(ProfileListItem? item)
+        {
+            ProfileList.SelectedItem = item;
+            _SelectedProfile = item?.Profile;
+            _SelectedFolder = item?.Folder;
         }
 
         private ProfileListItem? GetSelectedProfileListItem()
@@ -1831,6 +1838,7 @@ namespace Termrig.App.Views
 
         private async Task ToggleFolderExpansionAsync(ProfileFolder folder)
         {
+            if (IsProfileFilterActive) return;
             folder.IsExpanded = !folder.IsExpanded;
             await _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None).ConfigureAwait(true);
             RefreshProfiles(null, folder.Id);
@@ -2006,7 +2014,7 @@ namespace Termrig.App.Views
             }
 
             ProfileFolder? folder = FindFolderById(profile.FolderId);
-            if (folder != null && !folder.IsExpanded)
+            if (!IsProfileFilterActive && folder != null && !folder.IsExpanded)
             {
                 folder.IsExpanded = true;
                 _ = _ProfileFolderStore.SaveAsync(_ProfileFolders, CancellationToken.None);
