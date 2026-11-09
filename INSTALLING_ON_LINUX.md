@@ -84,3 +84,26 @@ you want to remove them.
 - **Command-line launcher (optional):** `./install-tool.sh` installs a `trig`
   command that starts Termrig from any terminal, and also installs the app as
   in step 3. `./remove-tool.sh` removes both.
+
+### Source scripts
+
+`./scripts/linux/install-tool.sh`, `reinstall-tool.sh` and `remove-tool.sh`
+delegate to the root tool scripts. `./scripts/linux/run.sh` rebuilds the app in
+`~/.local/share/termrig/` and launches that copy.
+
+## WSL
+
+Use `scripts/wsl2/` on WSL 2 and `scripts/wsl/` on WSL 1, not `scripts/linux/`.
+They take the same names (`install-tool.sh`, `reinstall-tool.sh`,
+`remove-tool.sh`, `run.sh`) and fix the usual WSL problems first: Windows
+`dotnet` on the PATH, `~/.dotnet/tools` missing from the PATH, CRLF line
+endings, and missing executable bits on `/mnt/c` checkouts.
+
+- **WSL 2:** the Termrig window needs WSLg (Windows 11, or Windows 10 with the
+  Store version of WSL). If `run.sh` says no display was found, run
+  `wsl --update` and `wsl --shutdown` from Windows, then reopen the distro.
+- **WSL 1:** there is no GUI support, so install and run fail with a clear
+  message. Run `scripts\windows\install-tool.bat` from Windows instead.
+  `scripts/wsl/remove-tool.sh` still works.
+- Clone into the Linux file system (for example `~/src`), not `/mnt/c`. Builds
+  there are much faster.

@@ -42,7 +42,7 @@ echo
 
 echo "[6/6] Building and installing the Termrig app..."
 case "$(uname -s)" in
-    Darwin) "$SCRIPT_DIR/packaging/macos/build-app.sh" ;;
-    Linux) "$SCRIPT_DIR/packaging/linux/build-app.sh" ;;
+    Darwin) sh "$SCRIPT_DIR/packaging/macos/build-app.sh" ;;
+    Linux) sh "$SCRIPT_DIR/packaging/linux/build-app.sh" ;;
     *) echo "Unsupported OS; skipping." ;;
 esac

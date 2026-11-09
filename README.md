@@ -96,6 +96,14 @@ Remove on Mac/Linux:
 chmod +x remove-tool.sh && ./remove-tool.sh
 ```
 
+### Per-OS scripts
+
+`scripts/<os>/` holds `install-tool`, `reinstall-tool`, `remove-tool` and `run`
+entry points for `macos`, `linux`, `windows` (`.bat`), `wsl` (WSL 1) and `wsl2`
+(WSL 2). `run` rebuilds the installed app and opens it. Termrig is a desktop
+app, so under WSL 2 it needs WSLg for its window; WSL 1 has no GUI support, so
+use the Windows scripts there. See [Installing on Linux](INSTALLING_ON_LINUX.md#wsl).
+
 ## Features
 
 - Multi-tab terminal profiles for saving and reopening complete workspaces.

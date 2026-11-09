@@ -98,4 +98,5 @@ in `/Applications/Termrig.app` (falling back to `~/Applications`), remove any st
 copy from the other location, register it with Finder, and launch the installed
 copy. `./scripts/macos/install-tool.sh` and `reinstall-tool.sh` delegate to the root
 tool scripts, which install both the `trig` command and the same Finder app.
+`./scripts/macos/remove-tool.sh` removes both.
 Signing must succeed before the existing installed app is replaced.

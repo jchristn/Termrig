@@ -24,6 +24,6 @@ dotnet tool install --global Termrig --version 0.1.1 --source "$PACKAGE_DIR" --n
 echo "Installed Termrig as global command: trig"
 
 case "$(uname -s)" in
-    Darwin) "$SCRIPT_DIR/packaging/macos/build-app.sh" ;;
-    Linux) "$SCRIPT_DIR/packaging/linux/build-app.sh" ;;
+    Darwin) sh "$SCRIPT_DIR/packaging/macos/build-app.sh" ;;
+    Linux) sh "$SCRIPT_DIR/packaging/linux/build-app.sh" ;;
 esac

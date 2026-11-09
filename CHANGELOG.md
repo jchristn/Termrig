@@ -9,6 +9,8 @@
 
 - macOS source runs now refresh and launch `/Applications/Termrig.app` (falling back to `~/Applications`), removing stale copies so Spotlight opens the current build.
 - Added macOS install, reinstall, and run entry points under `scripts/macos/`.
+- Added install, reinstall, remove, and run entry points under `scripts/linux/`, `scripts/windows/`, `scripts/wsl/` and `scripts/wsl2/`, plus `scripts/macos/remove-tool.sh`. The WSL scripts drop Windows PATH entries, check for CRLF checkouts, need WSLg on WSL 2 and stop with a clear message on WSL 1.
+- Fixed `install-tool.bat` exiting with success when uninstalling the old tool failed, and `go.bat` failing when run from outside the repository root.
 - Preserve the existing Finder app if ad-hoc signing fails.
 - Added the application-wide “Update unfocused windows” preference in the Profiles window, enabled by default. Visible background terminals render at a reduced rate; minimized windows and hidden tabs remain paused.
 

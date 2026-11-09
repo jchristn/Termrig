@@ -21,7 +21,7 @@ if not errorlevel 1 (
     dotnet tool uninstall --global Termrig
     if errorlevel 1 (
         echo Failed to uninstall existing Termrig tool. Close any running Termrig/trig processes and rerun this script.
-        exit /b %errorlevel%
+        exit /b 1
     )
 )
 
