@@ -151,16 +151,26 @@ wsl_ensure_gui_libs() {
         echo "  ${_gl_sudo:+$_gl_sudo }apt-get install -y$_gl_deb"
         [ -z "$_gl_sudo" ] || echo "(sudo may ask for your password.)"
         # A fresh distro often has no package lists yet; a failed update still lets install try.
-        $_gl_sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq || true
+        # Ask for the sudo password up front. sudo resets the environment, so the non-interactive settings
+        # go through env; stdin is /dev/null so nothing can wait for an answer; the lock timeout waits out
+        # unattended-upgrades; the visible output and the update timeout (with an IPv4 retry for broken
+        # IPv6 inside WSL or a VPN) keep a slow mirror from looking like a hang.
+        [ -z "$_gl_sudo" ] || $_gl_sudo -v || true
+        _gl_to=""
+        if command -v timeout >/dev/null 2>&1 && timeout --foreground 5 true >/dev/null 2>&1; then _gl_to="timeout --foreground 300"; fi
+        echo "Updating the package lists (apt-get update)..."
+        $_gl_to $_gl_sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1 apt-get -o DPkg::Lock::Timeout=300 update </dev/null \
+            || $_gl_to $_gl_sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1 apt-get -o DPkg::Lock::Timeout=300 -o Acquire::ForceIPv4=true update </dev/null \
+            || true
         # shellcheck disable=SC2086 # the package list is split on purpose
-        $_gl_sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y $_gl_deb || true
+        $_gl_sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1 apt-get -o DPkg::Lock::Timeout=300 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y $_gl_deb </dev/null || true
     elif [ "$_gl_can" = 1 ] && command -v dnf >/dev/null 2>&1; then
         _gl_tried=1
         echo "Installing missing desktop libraries ($_gl_missing):"
         echo "  ${_gl_sudo:+$_gl_sudo }dnf install -y$_gl_rpm"
         [ -z "$_gl_sudo" ] || echo "(sudo may ask for your password.)"
         # shellcheck disable=SC2086 # the package list is split on purpose
-        $_gl_sudo dnf install -y $_gl_rpm || true
+        $_gl_sudo dnf install -y $_gl_rpm </dev/null || true
     fi
     if [ "$_gl_tried" = 1 ]; then
         _gl_missing="$(wsl_missing_gui_libs | tr '\n' ' ')"

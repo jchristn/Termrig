@@ -427,14 +427,16 @@ with tempfile.TemporaryDirectory(prefix='termrig scripts ') as temp:
     # sudo apt-get (or dnf) before building, after the running check, then carry on.
     def pkg_calls(calls):
         return [c for c in calls if c[0] in ('sudo', 'apt-get', 'dnf')]
-    apt = ['sudo', 'env', 'DEBIAN_FRONTEND=noninteractive', 'apt-get']
+    apt_env = ['sudo', 'env', 'DEBIAN_FRONTEND=noninteractive', 'NEEDRESTART_MODE=a', 'NEEDRESTART_SUSPEND=1', 'apt-get',
+               '-o', 'DPkg::Lock::Timeout=300']
+    apt = apt_env + ['-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold']
     system_pm = shutil.which('apt-get', path='/usr/bin:/bin') or shutil.which('dnf', path='/usr/bin:/bin')
     for platform in ['linux', 'wsl', 'wsl2']:
         reset()
         p, calls = run(platform, 'run', MOCK_MISSING_LIBS='libICE.so.6 libSM.so.6')
         check(p.returncode == 0 and 'Installed the desktop libraries.' in p.stdout and calls[-1][0] == 'Termrig-app',
               platform, p.stdout, p.stderr)
-        check([c for c in calls if c[0] == 'sudo'] == [apt + ['update', '-qq'], apt + ['install', '-y', 'libice6', 'libsm6']],
+        check([c for c in calls if c[0] == 'sudo'] == [['sudo', '-v'], apt_env + ['update'], apt + ['install', '-y', 'libice6', 'libsm6']],
               platform, calls)
         check(calls.index(apt + ['install', '-y', 'libice6', 'libsm6']) < calls.index(dotnet(calls, 'publish')[0]), calls)
         for script, pkg, so in [('install-tool', 'libfontconfig1', 'libfontconfig.so.1'),
