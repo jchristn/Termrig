@@ -130,6 +130,7 @@ if termrig_running; then
     fi
     die "Termrig is running. Quit every Termrig window and trig session (or run scripts/wsl/kill-termrig.sh) and try again."
 fi
+wsl_ensure_gui_libs warning
 echo "[2/7] Building the Termrig tool package..."
 rm -rf "$PACKAGE_SOURCE" "$NUGET_CACHE"
 mkdir -p "$PACKAGE_SOURCE"
@@ -173,5 +174,4 @@ fi
 if [ -z "${DISPLAY:-}" ]; then
     echo "Note: DISPLAY is not set. WSL 1 has no WSLg, so opening Termrig needs an X server on Windows and DISPLAY set (for example: export DISPLAY=:0)." >&2
 fi
-wsl_check_gui_libs warning
 echo "Done. Start Termrig with 'trig' or with scripts/wsl/run.sh."

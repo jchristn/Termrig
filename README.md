@@ -117,14 +117,9 @@ running they refuse, and `kill-termrig` would close the tab it runs in.
 Termrig is a desktop app, so under WSL 2 it needs WSLg for its window, and under
 WSL 1 it needs an X server with `DISPLAY` set. On Linux and WSL it also needs the
 X11 and fontconfig libraries, which WSL distros and minimal images don't include.
-Without them `trig` fails with `Unable to load shared library 'libICE.so.6'`.
-On Debian, Ubuntu and WSL, install them with:
-
-```sh
-sudo apt install libx11-6 libice6 libsm6 libxext6 libxrandr2 libxi6 libxcursor1 libxfixes3 libfontconfig1
-```
-
-The install scripts warn when these libraries are missing. See
+The install and run scripts install them for you with `sudo apt-get` (or
+`dnf`), which may ask for your password. Without them `trig` fails with
+`Unable to load shared library 'libICE.so.6'`. See
 [Installing on Linux](INSTALLING_ON_LINUX.md#desktop-libraries) and
 [WSL](INSTALLING_ON_LINUX.md#wsl).
 

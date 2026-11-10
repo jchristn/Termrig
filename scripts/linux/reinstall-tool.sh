@@ -72,9 +72,13 @@ missing_gui_libs() {
     done
 }
 
-# Reports missing GUI_LIBS with the command that installs them. "error" exits; "warning" returns.
-# Usage: check_gui_libs error|warning
-check_gui_libs() {
+# Installs any missing GUI_LIBS with apt-get or dnf (through sudo, which may ask for a password, unless
+# this is root), then checks again. When some are still missing (no supported package manager, no
+# sudo, or the install failed) it prints the command to run by hand: "error" then exits, "warning"
+# returns. TERMRIG_NO_DEPS=1 skips the install and only reports.
+# Usage: ensure_gui_libs error|warning
+ensure_gui_libs() {
+    echo "Checking the desktop libraries Termrig needs..."
     _gl_missing="$(missing_gui_libs | tr '\n' ' ')"
     _gl_missing="${_gl_missing% }"
     [ -n "$_gl_missing" ] || return 0
@@ -86,10 +90,42 @@ check_gui_libs() {
             esac
         done
     done
+    _gl_sudo=""
+    _gl_can=1
+    if [ "$(id -u)" != 0 ]; then
+        if command -v sudo >/dev/null 2>&1; then _gl_sudo=sudo; else _gl_can=0; fi
+    fi
+    [ "${TERMRIG_NO_DEPS:-0}" != 1 ] || _gl_can=0
+    _gl_tried=0
+    if [ "$_gl_can" = 1 ] && command -v apt-get >/dev/null 2>&1; then
+        _gl_tried=1
+        echo "Installing missing desktop libraries ($_gl_missing):"
+        echo "  ${_gl_sudo:+$_gl_sudo }apt-get install -y$_gl_deb"
+        [ -z "$_gl_sudo" ] || echo "(sudo may ask for your password.)"
+        # A fresh distro often has no package lists yet; a failed update still lets install try.
+        $_gl_sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq || true
+        # shellcheck disable=SC2086 # the package list is split on purpose
+        $_gl_sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y $_gl_deb || true
+    elif [ "$_gl_can" = 1 ] && command -v dnf >/dev/null 2>&1; then
+        _gl_tried=1
+        echo "Installing missing desktop libraries ($_gl_missing):"
+        echo "  ${_gl_sudo:+$_gl_sudo }dnf install -y$_gl_rpm"
+        [ -z "$_gl_sudo" ] || echo "(sudo may ask for your password.)"
+        # shellcheck disable=SC2086 # the package list is split on purpose
+        $_gl_sudo dnf install -y $_gl_rpm || true
+    fi
+    if [ "$_gl_tried" = 1 ]; then
+        _gl_missing="$(missing_gui_libs | tr '\n' ' ')"
+        _gl_missing="${_gl_missing% }"
+        if [ -z "$_gl_missing" ]; then
+            echo "Installed the desktop libraries."
+            return 0
+        fi
+    fi
     if [ "$1" = error ]; then
         echo "Error: Termrig cannot open its window without these shared libraries: $_gl_missing" >&2
     else
-        echo "Warning: Termrig is installed, but it cannot open until these shared libraries are installed: $_gl_missing" >&2
+        echo "Warning: Termrig will be installed, but it cannot open until these shared libraries are installed: $_gl_missing" >&2
     fi
     echo "Without them, starting Termrig fails with \"Unable to load shared library '...'\"." >&2
     echo "Install them with:" >&2
@@ -196,6 +232,7 @@ if termrig_running; then
     fi
     die "Termrig is running. Quit every Termrig window and trig session (or run scripts/linux/kill-termrig.sh) and try again."
 fi
+ensure_gui_libs warning
 echo "[2/7] Building the Termrig tool package..."
 rm -rf "$PACKAGE_SOURCE" "$NUGET_CACHE"
 mkdir -p "$PACKAGE_SOURCE"
@@ -239,5 +276,4 @@ fi
 if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
     echo "Note: no graphical session found (DISPLAY and WAYLAND_DISPLAY are unset). Termrig opens from a desktop session." >&2
 fi
-check_gui_libs warning
 echo "Done. Start Termrig with 'trig' or from the application menu."

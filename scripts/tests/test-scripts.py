@@ -38,9 +38,16 @@ if name == 'uname':
     elif args == ['-m']: print(env.get('MOCK_ARCH', 'x86_64'))
     elif args == ['-r']: print('6.8.0-generic')
     sys.exit(0)
+PKGS = {'libX11.so.6': ('libx11-6', 'libX11'), 'libICE.so.6': ('libice6', 'libICE'), 'libSM.so.6': ('libsm6', 'libSM'),
+        'libXext.so.6': ('libxext6', 'libXext'), 'libXrandr.so.2': ('libxrandr2', 'libXrandr'),
+        'libXi.so.6': ('libxi6', 'libXi'), 'libXcursor.so.1': ('libxcursor1', 'libXcursor'),
+        'libXfixes.so.3': ('libxfixes3', 'libXfixes'), 'libfontconfig.so.1': ('libfontconfig1', 'fontconfig')}
+installed_pkgs = pathlib.Path(env['HOME']) / '.fake-installed-packages'
 if name == 'ldconfig':
-    # The desktop libraries, minus MOCK_MISSING_LIBS, as ldconfig -p lists them.
-    missing = env.get('MOCK_MISSING_LIBS', '').split()
+    # The desktop libraries, minus MOCK_MISSING_LIBS that no fake apt-get/dnf has installed, as
+    # ldconfig -p lists them.
+    have = installed_pkgs.read_text().split() if installed_pkgs.exists() else []
+    missing = [so for so in env.get('MOCK_MISSING_LIBS', '').split() if not set(PKGS.get(so, ())) & set(have)]
     arch = env.get('MOCK_LIB_ARCH', 'x86-64')
     libs = ['libX11.so.6', 'libICE.so.6', 'libSM.so.6', 'libXext.so.6', 'libXrandr.so.2', 'libXi.so.6',
             'libXcursor.so.1', 'libXfixes.so.3', 'libfontconfig.so.1', 'libc.so.6']
@@ -53,6 +60,13 @@ if name == 'pgrep':
     running = env.get('MOCK_RUNNING') or (env.get('MOCK_RUNNING_FILE') and os.path.exists(env['MOCK_RUNNING_FILE']))
     sys.exit(0 if running else 1)
 log()
+if name == 'sudo':
+    os.execvp(args[0], args)
+if name in ('apt-get', 'dnf'):
+    if 'install' in args:
+        if env.get('MOCK_PKG_FAIL'): sys.exit(100)
+        with installed_pkgs.open('a') as f: f.write(' '.join(a for a in args if not a.startswith('-') and a != 'install') + '\n')
+    sys.exit(0)
 if name == 'pkill':
     if env.get('MOCK_RUNNING_FILE') and '-TERM' in args:
         pathlib.Path(env['MOCK_RUNNING_FILE']).unlink(missing_ok=True)
@@ -219,6 +233,17 @@ with tempfile.TemporaryDirectory(prefix='termrig scripts ') as temp:
     no_dotnet = temp / 'bin-no-dotnet'
     shutil.copytree(bin_dir, no_dotnet)
     (no_dotnet / 'dotnet').unlink()
+    # Package managers: bin has apt-get; bin-dnf has dnf instead; bin-no-pkg has neither.
+    bin_dnf = temp / 'bin-dnf'
+    shutil.copytree(bin_dir, bin_dnf)
+    (bin_dnf / 'dnf').write_text(FAKE)
+    (bin_dnf / 'dnf').chmod(0o755)
+    bin_no_pkg = temp / 'bin-no-pkg'
+    shutil.copytree(bin_dir, bin_no_pkg)
+    for n in ['apt-get', 'sudo']:
+        (bin_dir / n).write_text(FAKE)
+        (bin_dir / n).chmod(0o755)
+    shutil.copy(bin_dir / 'sudo', bin_dnf / 'sudo')
     log = temp / 'calls.jsonl'
     home = temp / 'home'
     system_apps = temp / 'Applications'
@@ -398,29 +423,63 @@ with tempfile.TemporaryDirectory(prefix='termrig scripts ') as temp:
         reset()
         p, calls = run(platform, 'install-tool', unset=['DISPLAY'])
         check(p.returncode == 0 and 'Note:' in p.stderr and ('WSLg' in p.stderr if platform == 'wsl2' else True), platform, p.stderr)
-    # Missing desktop libraries (libICE.so.6 and friends): run fails before building and names the
-    # packages; install still installs, with a warning; nothing is reported when they are present.
+    # Missing desktop libraries (libICE.so.6 and friends): install, reinstall and run install them with
+    # sudo apt-get (or dnf) before building, after the running check, then carry on.
+    def pkg_calls(calls):
+        return [c for c in calls if c[0] in ('sudo', 'apt-get', 'dnf')]
+    apt = ['sudo', 'env', 'DEBIAN_FRONTEND=noninteractive', 'apt-get']
+    system_pm = shutil.which('apt-get', path='/usr/bin:/bin') or shutil.which('dnf', path='/usr/bin:/bin')
     for platform in ['linux', 'wsl', 'wsl2']:
         reset()
         p, calls = run(platform, 'run', MOCK_MISSING_LIBS='libICE.so.6 libSM.so.6')
-        check(p.returncode != 0 and 'libICE.so.6 libSM.so.6' in p.stderr and 'install libice6 libsm6' in p.stderr
-              and 'install libICE libSM' in p.stderr and 'INSTALLING_ON_LINUX.md' in p.stderr and not dotnet(calls),
-              platform, p.stderr)
-        p, calls = run(platform, 'install-tool', MOCK_MISSING_LIBS='libfontconfig.so.1')
-        check(p.returncode == 0 and 'Warning: Termrig is installed, but it cannot open' in p.stderr
-              and 'install libfontconfig1' in p.stderr and linux_paths()[0].exists(), platform, p.stderr)
-        p, calls = run(platform, 'reinstall-tool', MOCK_MISSING_LIBS='libXi.so.6')
-        check(p.returncode == 0 and 'install libxi6' in p.stderr, platform, p.stderr)
+        check(p.returncode == 0 and 'Installed the desktop libraries.' in p.stdout and calls[-1][0] == 'Termrig-app',
+              platform, p.stdout, p.stderr)
+        check([c for c in calls if c[0] == 'sudo'] == [apt + ['update', '-qq'], apt + ['install', '-y', 'libice6', 'libsm6']],
+              platform, calls)
+        check(calls.index(apt + ['install', '-y', 'libice6', 'libsm6']) < calls.index(dotnet(calls, 'publish')[0]), calls)
+        for script, pkg, so in [('install-tool', 'libfontconfig1', 'libfontconfig.so.1'),
+                                ('reinstall-tool', 'libxi6', 'libXi.so.6')]:
+            reset()
+            p, calls = run(platform, script, MOCK_MISSING_LIBS=so)
+            check(p.returncode == 0 and apt + ['install', '-y', pkg] in calls and 'Warning:' not in p.stderr
+                  and calls.index(apt + ['install', '-y', pkg]) < calls.index(dotnet(calls, 'pack')[0]),
+                  platform, script, p.stderr)
+        # Nothing missing: no package manager, no sudo.
         p, calls = run(platform, 'reinstall-tool')
-        check(p.returncode == 0 and 'shared libraries' not in p.stderr, platform, p.stderr)
-        # Only libraries for this architecture count.
+        check(p.returncode == 0 and not pkg_calls(calls) and 'shared libraries' not in p.stderr, platform, p.stderr)
+        # Running: refuses before installing anything.
+        p, calls = run(platform, 'install-tool', MOCK_RUNNING='1', MOCK_MISSING_LIBS='libICE.so.6')
+        check(p.returncode != 0 and not pkg_calls(calls), platform, calls)
+        # The install fails: run stops before building, install warns and carries on, both with the command.
+        reset()
+        p, calls = run(platform, 'run', MOCK_MISSING_LIBS='libICE.so.6 libSM.so.6', MOCK_PKG_FAIL='1')
+        check(p.returncode != 0 and 'libICE.so.6 libSM.so.6' in p.stderr and 'sudo apt install libice6 libsm6' in p.stderr
+              and 'INSTALLING_ON_LINUX.md' in p.stderr and not dotnet(calls), platform, p.stderr)
+        p, calls = run(platform, 'install-tool', MOCK_MISSING_LIBS='libICE.so.6', MOCK_PKG_FAIL='1')
+        check(p.returncode == 0 and 'Warning: Termrig will be installed' in p.stderr and linux_paths()[0].exists(),
+              platform, p.stderr)
+        # TERMRIG_NO_DEPS=1: report only.
+        reset()
+        p, calls = run(platform, 'run', MOCK_MISSING_LIBS='libICE.so.6', TERMRIG_NO_DEPS='1')
+        check(p.returncode != 0 and not pkg_calls(calls) and 'sudo apt install libice6' in p.stderr, platform, p.stderr)
+        if not system_pm:
+            # dnf when there is no apt-get.
+            p, calls = run(platform, 'run', MOCK_MISSING_LIBS='libICE.so.6', PATH=f'{bin_dnf}:/usr/bin:/bin')
+            check(p.returncode == 0 and ['sudo', 'dnf', 'install', '-y', 'libICE'] in calls, platform, calls, p.stderr)
+            # No package manager (and no sudo): both commands, for the user to run.
+            reset()
+            p, calls = run(platform, 'run', MOCK_MISSING_LIBS='libICE.so.6', PATH=f'{bin_no_pkg}:/usr/bin:/bin')
+            check(p.returncode != 0 and 'sudo apt install libice6' in p.stderr and 'sudo dnf install libICE' in p.stderr
+                  and not dotnet(calls), platform, p.stderr)
+        # Only libraries for this architecture count, so x86-64 copies don't satisfy an ARM64 machine.
+        reset()
         p, calls = run(platform, 'run', MOCK_ARCH='arm64')
         check(p.returncode != 0 and 'libX11.so.6' in p.stderr, platform, p.stderr)
         p, calls = run(platform, 'run', MOCK_ARCH='arm64', MOCK_LIB_ARCH='AArch64')
-        check(p.returncode == 0, platform, p.stderr)
+        check(p.returncode == 0 and not pkg_calls(calls), platform, p.stderr)
         # No ldconfig at all: the check is skipped rather than guessed.
-        p, calls = run(platform, 'run', TERMRIG_LDCONFIG=str(temp / 'no-such-ldconfig'))
-        check(p.returncode == 0 and 'shared libraries' not in p.stderr, platform, p.stderr)
+        p, calls = run(platform, 'run', TERMRIG_LDCONFIG=str(temp / 'no-such-ldconfig'), MOCK_MISSING_LIBS='libICE.so.6')
+        check(p.returncode == 0 and not pkg_calls(calls), platform, p.stderr)
     # The launcher's Exec line follows the Desktop Entry quoting rules for unusual paths.
     for platform in ['linux', 'wsl', 'wsl2']:
         reset()
@@ -484,5 +543,5 @@ with tempfile.TemporaryDirectory(prefix='termrig scripts ') as temp:
         check(p.returncode != 0 and ['pkill', '-KILL', '-u', uid, '-x', 'Termrig'] in calls, platform, p.stderr)
 
 print(f'{checks} checks passed: same script set on all five platforms, self-containment, OS guards, '
-      'arguments, install/reinstall/remove, app files, run, display and desktop-library checks, kill-termrig, '
+      'arguments, install/reinstall/remove, app files, run, display checks, desktop-library install, kill-termrig, '
       'Windows batch structure and shell syntax.')

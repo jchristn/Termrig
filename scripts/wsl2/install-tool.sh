@@ -137,6 +137,7 @@ fi
 if app_installed; then
     die "The Termrig app is already installed. Run scripts/wsl2/reinstall-tool.sh to replace it."
 fi
+wsl_ensure_gui_libs warning
 echo "[3/7] Building the Termrig tool package..."
 rm -rf "$PACKAGE_SOURCE" "$NUGET_CACHE"
 mkdir -p "$PACKAGE_SOURCE"
@@ -174,5 +175,4 @@ fi
 if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
     echo "Note: no display found. Opening Termrig in WSL 2 needs WSLg: from Windows run 'wsl --update' and 'wsl --shutdown', then reopen this distro." >&2
 fi
-wsl_check_gui_libs warning
 echo "Done. Start Termrig with 'trig' or with scripts/wsl2/run.sh."

@@ -15,24 +15,37 @@ most desktop Linux distributions.
   sudo apt install git
   ```
 
-- The desktop libraries Termrig's window uses (see
-  [Desktop libraries](#desktop-libraries)). Desktop installs already have
-  them. WSL distros and minimal or server images usually don't.
+- The desktop libraries Termrig's window uses. The install scripts install
+  them for you (see [Desktop libraries](#desktop-libraries)).
 
 ## Desktop libraries
 
 Termrig draws its window with Avalonia, which loads the X11 client libraries
-and fontconfig when Termrig starts. Building Termrig doesn't need them, so the
-install succeeds without them, but Termrig then stops as soon as you start it
-with an error like this:
+and fontconfig when Termrig starts. Desktop installs already have them. WSL
+distros and minimal or server images usually don't.
+
+**The scripts install them for you.** `install-tool.sh`, `reinstall-tool.sh`
+and `run.sh` (in `scripts/linux/`, `scripts/wsl/` and `scripts/wsl2/`), and
+`packaging/linux/build-app.sh` (which the repository-root `install-tool.sh`
+and `reinstall-tool.sh` use), check for each library before building. If any
+are missing, they install them with `apt-get` (or `dnf` on Fedora) through
+`sudo`, which may ask for your password. Set `TERMRIG_NO_DEPS=1` to skip that
+and only list what's missing.
+
+If the scripts can't install them (no `apt-get` or `dnf`, no `sudo`, or the
+install fails), `install-tool.sh` and `reinstall-tool.sh` still install
+Termrig and print the command to run yourself. `run.sh` stops before building.
+
+Without these libraries, Termrig stops as soon as you start it, with an error
+like this:
 
 ```text
 Unhandled exception. System.DllNotFoundException: Unable to load shared library 'libICE.so.6' or one of its dependencies.
 ```
 
 The library named can also be `libSM.so.6`, `libX11.so.6`, `libSkiaSharp` /
-`libfontconfig.so.1`, or another one from the list below. Install them all at
-once.
+`libfontconfig.so.1`, or another one from the list below. Run any of the
+install scripts, or install them all at once yourself.
 
 Debian and Ubuntu, including WSL:
 
@@ -46,13 +59,9 @@ Fedora:
 sudo dnf install libX11 libICE libSM libXext libXrandr libXi libXcursor libXfixes fontconfig
 ```
 
-You don't need to rebuild or reinstall afterwards. Start Termrig again.
-
-The install scripts check for these libraries. `install-tool.sh` and
-`reinstall-tool.sh` (in the repository root, `scripts/linux/`, `scripts/wsl/`
-and `scripts/wsl2/`) finish the install and print a warning with the command
-for the missing ones. `run.sh` stops before building. If Termrig itself hits a
-missing library, it prints the same command instead of a stack trace.
+If you install them by hand, you don't need to rebuild or reinstall
+afterwards. Start Termrig again. If Termrig itself hits a missing library, it
+prints the same command instead of a stack trace.
 
 `libgl1` (Debian/Ubuntu) or `mesa-libGL` (Fedora) is optional. Without it
 Termrig draws in software, which still works.
@@ -120,7 +129,9 @@ you want to remove them.
 ## Notes
 
 - **`Unable to load shared library 'libICE.so.6'` (or another `lib*.so`):**
-  install the [desktop libraries](#desktop-libraries).
+  run `./scripts/linux/reinstall-tool.sh` (or `scripts/wsl2/` on WSL 2),
+  which installs the [desktop libraries](#desktop-libraries), or install them
+  yourself.
 - **Termrig doesn't appear in the menu yet:** log out and back in. Some
   desktops only rescan launchers at login.
 - **Two Termrig icons in the dock:** unpin both, open Termrig from the
@@ -153,16 +164,11 @@ CRLF checkouts. Each refuses to run under the other WSL version. They only
 install into the distro; use `scripts\windows\` for the Windows install.
 
 - **Desktop libraries:** WSL distros (Ubuntu from the Microsoft Store, for
-  example) don't include the X11 libraries Termrig needs, even under WSLg,
-  which provides only the display server. Install them inside the distro
-  before you start Termrig:
-
-  ```sh
-  sudo apt install libx11-6 libice6 libsm6 libxext6 libxrandr2 libxi6 libxcursor1 libxfixes3 libfontconfig1
-  ```
-
-  Without them, `trig` fails with `Unable to load shared library
-  'libICE.so.6'`. See [Desktop libraries](#desktop-libraries).
+  example) don't include the X11 libraries Termrig needs. WSLg provides only
+  the display server. The WSL scripts install the libraries inside the distro
+  with `sudo apt-get`, which asks for your Linux password. Without them,
+  `trig` fails with `Unable to load shared library 'libICE.so.6'`. See
+  [Desktop libraries](#desktop-libraries).
 - **WSL 2:** the Termrig window needs WSLg (Windows 11, or Windows 10 with the
   Store version of WSL). If `run.sh` says no display was found, run
   `wsl --update` and `wsl --shutdown` from Windows, then reopen the distro.
