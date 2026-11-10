@@ -38,6 +38,16 @@ if name == 'uname':
     elif args == ['-m']: print(env.get('MOCK_ARCH', 'x86_64'))
     elif args == ['-r']: print('6.8.0-generic')
     sys.exit(0)
+if name == 'ldconfig':
+    # The desktop libraries, minus MOCK_MISSING_LIBS, as ldconfig -p lists them.
+    missing = env.get('MOCK_MISSING_LIBS', '').split()
+    arch = env.get('MOCK_LIB_ARCH', 'x86-64')
+    libs = ['libX11.so.6', 'libICE.so.6', 'libSM.so.6', 'libXext.so.6', 'libXrandr.so.2', 'libXi.so.6',
+            'libXcursor.so.1', 'libXfixes.so.3', 'libfontconfig.so.1', 'libc.so.6']
+    print(f'{len(libs)} libs found in cache `/etc/ld.so.cache\'')
+    for so in libs:
+        if so not in missing: print(f'\t{so} (libc6,{arch}) => /usr/lib/{so}')
+    sys.exit(0)
 if name == 'pgrep':
     log()
     running = env.get('MOCK_RUNNING') or (env.get('MOCK_RUNNING_FILE') and os.path.exists(env['MOCK_RUNNING_FILE']))
@@ -203,7 +213,7 @@ with tempfile.TemporaryDirectory(prefix='termrig scripts ') as temp:
     shutil.copy(root / 'src/Termrig.App/Termrig.App.csproj', project)
     bin_dir = temp / 'bin'
     bin_dir.mkdir()
-    for n in ['dotnet', 'uname', 'pgrep', 'pkill', 'sips', 'iconutil', 'plutil', 'codesign', 'open', 'lsregister']:
+    for n in ['dotnet', 'uname', 'pgrep', 'pkill', 'ldconfig', 'sips', 'iconutil', 'plutil', 'codesign', 'open', 'lsregister']:
         (bin_dir / n).write_text(FAKE)
         (bin_dir / n).chmod(0o755)
     no_dotnet = temp / 'bin-no-dotnet'
@@ -213,7 +223,7 @@ with tempfile.TemporaryDirectory(prefix='termrig scripts ') as temp:
     home = temp / 'home'
     system_apps = temp / 'Applications'
     base_env = {k: v for k, v in os.environ.items()
-                if k not in ('DISPLAY', 'WAYLAND_DISPLAY', 'DOTNET_ROOT', 'XDG_DATA_HOME', 'NUGET_PACKAGES')}
+                if k not in ('DISPLAY', 'WAYLAND_DISPLAY', 'DOTNET_ROOT', 'XDG_DATA_HOME', 'NUGET_PACKAGES', 'TERM_PROGRAM')}
     base_env.update(PATH=f'{bin_dir}:/usr/bin:/bin', CALL_LOG=str(log), HOME=str(home), WSL_SKIP_CHECK='1',
                     DISPLAY=':0', WSL_DISTRO_NAME='Test', TERMRIG_SYSTEM_APPLICATIONS=str(system_apps),
                     TERMRIG_LSREGISTER=str(bin_dir / 'lsregister'))
@@ -388,6 +398,29 @@ with tempfile.TemporaryDirectory(prefix='termrig scripts ') as temp:
         reset()
         p, calls = run(platform, 'install-tool', unset=['DISPLAY'])
         check(p.returncode == 0 and 'Note:' in p.stderr and ('WSLg' in p.stderr if platform == 'wsl2' else True), platform, p.stderr)
+    # Missing desktop libraries (libICE.so.6 and friends): run fails before building and names the
+    # packages; install still installs, with a warning; nothing is reported when they are present.
+    for platform in ['linux', 'wsl', 'wsl2']:
+        reset()
+        p, calls = run(platform, 'run', MOCK_MISSING_LIBS='libICE.so.6 libSM.so.6')
+        check(p.returncode != 0 and 'libICE.so.6 libSM.so.6' in p.stderr and 'install libice6 libsm6' in p.stderr
+              and 'install libICE libSM' in p.stderr and 'INSTALLING_ON_LINUX.md' in p.stderr and not dotnet(calls),
+              platform, p.stderr)
+        p, calls = run(platform, 'install-tool', MOCK_MISSING_LIBS='libfontconfig.so.1')
+        check(p.returncode == 0 and 'Warning: Termrig is installed, but it cannot open' in p.stderr
+              and 'install libfontconfig1' in p.stderr and linux_paths()[0].exists(), platform, p.stderr)
+        p, calls = run(platform, 'reinstall-tool', MOCK_MISSING_LIBS='libXi.so.6')
+        check(p.returncode == 0 and 'install libxi6' in p.stderr, platform, p.stderr)
+        p, calls = run(platform, 'reinstall-tool')
+        check(p.returncode == 0 and 'shared libraries' not in p.stderr, platform, p.stderr)
+        # Only libraries for this architecture count.
+        p, calls = run(platform, 'run', MOCK_ARCH='arm64')
+        check(p.returncode != 0 and 'libX11.so.6' in p.stderr, platform, p.stderr)
+        p, calls = run(platform, 'run', MOCK_ARCH='arm64', MOCK_LIB_ARCH='AArch64')
+        check(p.returncode == 0, platform, p.stderr)
+        # No ldconfig at all: the check is skipped rather than guessed.
+        p, calls = run(platform, 'run', TERMRIG_LDCONFIG=str(temp / 'no-such-ldconfig'))
+        check(p.returncode == 0 and 'shared libraries' not in p.stderr, platform, p.stderr)
     # The launcher's Exec line follows the Desktop Entry quoting rules for unusual paths.
     for platform in ['linux', 'wsl', 'wsl2']:
         reset()
@@ -451,5 +484,5 @@ with tempfile.TemporaryDirectory(prefix='termrig scripts ') as temp:
         check(p.returncode != 0 and ['pkill', '-KILL', '-u', uid, '-x', 'Termrig'] in calls, platform, p.stderr)
 
 print(f'{checks} checks passed: same script set on all five platforms, self-containment, OS guards, '
-      'arguments, install/reinstall/remove, app files, run and display checks, kill-termrig, '
+      'arguments, install/reinstall/remove, app files, run, display and desktop-library checks, kill-termrig, '
       'Windows batch structure and shell syntax.')

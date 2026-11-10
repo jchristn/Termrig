@@ -26,6 +26,73 @@ DESKTOP_DIR="$DATA_HOME/applications"
 DESKTOP_FILE="$DESKTOP_DIR/com.jchristn.Termrig.desktop"
 ICON_DIR="$DATA_HOME/icons/hicolor/scalable/apps"
 
+# Shared libraries Termrig loads when it opens its window: Avalonia's X11 backend (libX11, libICE,
+# libSM, libXext, libXrandr, libXi, libXcursor, libXfixes) and SkiaSharp's fontconfig. Building does
+# not need them, but without them Termrig stops at startup with "Unable to load shared library
+# 'libICE.so.6'" (or another name below). Desktop installs have them; WSL distros and minimal or
+# server images often don't. Each entry is soname:Debian/Ubuntu package:Fedora package.
+GUI_LIBS="libX11.so.6:libx11-6:libX11 libICE.so.6:libice6:libICE libSM.so.6:libsm6:libSM libXext.so.6:libxext6:libXext libXrandr.so.2:libxrandr2:libXrandr libXi.so.6:libxi6:libXi libXcursor.so.1:libxcursor1:libXcursor libXfixes.so.3:libxfixes3:libXfixes libfontconfig.so.1:libfontconfig1:fontconfig"
+
+# Prints the GUI_LIBS sonames the dynamic linker cannot find for this architecture, one per
+# line. Prints nothing when all are present, or when there is no ldconfig to ask. TERMRIG_LDCONFIG
+# overrides the ldconfig command.
+missing_gui_libs() {
+    _gl_ldc="${TERMRIG_LDCONFIG:-}"
+    if [ -z "$_gl_ldc" ]; then
+        for _gl_c in ldconfig /sbin/ldconfig /usr/sbin/ldconfig; do
+            if command -v "$_gl_c" >/dev/null 2>&1; then _gl_ldc="$_gl_c"; break; fi
+        done
+    fi
+    [ -n "$_gl_ldc" ] || return 0
+    _gl_cache="$("$_gl_ldc" -p 2>/dev/null || true)"
+    [ -n "$_gl_cache" ] || return 0
+    case "$(uname -m)" in
+        x86_64|amd64) _gl_arch=x86-64 ;;
+        aarch64|arm64) _gl_arch=AArch64 ;;
+        *) _gl_arch="" ;;
+    esac
+    for _gl_e in $GUI_LIBS; do
+        _gl_so="${_gl_e%%:*}"
+        printf '%s\n' "$_gl_cache" | awk -v so="$_gl_so" -v arch="$_gl_arch" \
+            '$1 == so && (arch == "" || index($0, arch)) { found = 1 } END { exit !found }' \
+            || printf '%s\n' "$_gl_so"
+    done
+}
+
+# Reports missing GUI_LIBS with the command that installs them. "error" exits; "warning" returns.
+# Usage: check_gui_libs error|warning
+check_gui_libs() {
+    _gl_missing="$(missing_gui_libs | tr '\n' ' ')"
+    _gl_missing="${_gl_missing% }"
+    [ -n "$_gl_missing" ] || return 0
+    _gl_deb=""; _gl_rpm=""
+    for _gl_so in $_gl_missing; do
+        for _gl_e in $GUI_LIBS; do
+            case "$_gl_e" in
+                "$_gl_so":*) _gl_r="${_gl_e#*:}"; _gl_deb="$_gl_deb ${_gl_r%%:*}"; _gl_rpm="$_gl_rpm ${_gl_r#*:}" ;;
+            esac
+        done
+    done
+    if [ "$1" = error ]; then
+        echo "Error: Termrig cannot open its window without these shared libraries: $_gl_missing" >&2
+    else
+        echo "Warning: Termrig is installed, but it cannot open until these shared libraries are installed: $_gl_missing" >&2
+    fi
+    echo "Without them, starting Termrig fails with \"Unable to load shared library '...'\"." >&2
+    echo "Install them with:" >&2
+    if command -v apt-get >/dev/null 2>&1; then
+        echo "  sudo apt install$_gl_deb" >&2
+    elif command -v dnf >/dev/null 2>&1; then
+        echo "  sudo dnf install$_gl_rpm" >&2
+    else
+        echo "  Debian/Ubuntu: sudo apt install$_gl_deb" >&2
+        echo "  Fedora:        sudo dnf install$_gl_rpm" >&2
+    fi
+    echo "See \"Desktop libraries\" in INSTALLING_ON_LINUX.md." >&2
+    if [ "$1" = error ]; then exit 1; fi
+    return 0
+}
+
 case "$(uname -m)" in
     aarch64|arm64) RID="linux-arm64" ;;
     *) RID="linux-x64" ;;
@@ -74,3 +141,4 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 
 echo "Installed Termrig $VERSION. Open it from your application menu (search for \"Termrig\")."
+check_gui_libs warning

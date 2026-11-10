@@ -89,5 +89,8 @@ folder too if you want to remove them.
   - `run.bat` rebuilds the app and starts it.
   - `kill-termrig.bat` stops every Termrig and `trig` process you are running.
 - **WSL:** to install Termrig inside a WSL 2 distro instead, see
-  [Installing on Linux](INSTALLING_ON_LINUX.md#wsl). WSL 1 can't show the
-  Termrig window, so use the Windows install there.
+  [Installing on Linux](INSTALLING_ON_LINUX.md#wsl). Install the
+  [desktop libraries](INSTALLING_ON_LINUX.md#desktop-libraries) inside the
+  distro first, or `trig` fails with `Unable to load shared library
+  'libICE.so.6'`. WSL 1 can't show the Termrig window, so use the Windows
+  install there.

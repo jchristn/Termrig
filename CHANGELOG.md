@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Linux and WSL: the install, reinstall and run scripts (repository root, `scripts/linux/`, `scripts/wsl/`, `scripts/wsl2/`) now check for the X11 and fontconfig libraries Termrig's window loads (`libICE.so.6`, `libSM.so.6`, `libX11.so.6`, `libfontconfig.so.1` and others). Install and reinstall warn with the `apt`/`dnf` command for the missing ones, and `run` stops before building. When one is missing at startup, Termrig prints the same command and exits instead of crashing with `DllNotFoundException`. Documented in "Desktop libraries" in `INSTALLING_ON_LINUX.md`.
+
 - Added live profile-name filtering, including matches in collapsed folders, with Escape and a clear button to reset the filter.
 
 - Fixed copying wrapped terminal output inserting newlines inside long values and joining separate lines.

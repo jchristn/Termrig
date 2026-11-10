@@ -18,6 +18,13 @@ namespace Termrig.App
         internal const string DetachedChildArgument = "--termrig-detached-child";
         private const string ForegroundEnvironmentVariable = "TERMRIG_FOREGROUND";
 
+        // Keep in sync with GUI_LIBS in scripts/linux/*.sh, scripts/wsl*/_wsl-common.sh and
+        // packaging/linux/build-app.sh, and with "Desktop libraries" in INSTALLING_ON_LINUX.md.
+        private const string DebianDesktopPackages =
+            "libx11-6 libice6 libsm6 libxext6 libxrandr2 libxi6 libxcursor1 libxfixes3 libfontconfig1";
+        private const string FedoraDesktopPackages =
+            "libX11 libICE libSM libXext libXrandr libXi libXcursor libXfixes fontconfig";
+
         #endregion
 
         #region Public-Methods
@@ -117,8 +124,36 @@ namespace Termrig.App
             catch (Exception exception)
             {
                 ApplicationCrashLogWriter.TryWrite("Unhandled application exception.", exception.ToString());
+                DllNotFoundException? missingLibrary = FindMissingLibrary(exception);
+                if (OperatingSystem.IsLinux() && missingLibrary != null)
+                {
+                    // Avalonia's X11 backend and SkiaSharp load these at startup. WSL distros and
+                    // minimal images often lack them; say how to install them instead of a stack trace.
+                    Console.Error.WriteLine("Termrig could not open its window: " + missingLibrary.Message);
+                    Console.Error.WriteLine("Termrig needs the X11 and fontconfig libraries. Install them with:");
+                    Console.Error.WriteLine("  Debian/Ubuntu (and WSL): sudo apt install " + DebianDesktopPackages);
+                    Console.Error.WriteLine("  Fedora:                  sudo dnf install " + FedoraDesktopPackages);
+                    Console.Error.WriteLine("See \"Desktop libraries\" in INSTALLING_ON_LINUX.md.");
+                    Environment.Exit(1);
+                }
+
                 throw;
             }
+        }
+
+        private static DllNotFoundException? FindMissingLibrary(Exception? exception)
+        {
+            while (exception != null)
+            {
+                if (exception is DllNotFoundException missing)
+                {
+                    return missing;
+                }
+
+                exception = exception.InnerException;
+            }
+
+            return null;
         }
 
         #endregion

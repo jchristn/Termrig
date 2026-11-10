@@ -39,6 +39,7 @@ wsl_require_cmd pgrep "Install procps inside WSL (for example: sudo apt install 
 if [ -z "${DISPLAY:-}" ]; then
     die "DISPLAY is not set. WSL 1 has no WSLg, so Termrig needs an X server running on Windows (for example VcXsrv) and DISPLAY set (for example: export DISPLAY=:0). Or run scripts\\windows\\run.bat from Windows, or move this distro to WSL 2 (wsl --set-version ${WSL_DISTRO_NAME:-<distro>} 2) and use scripts/wsl2."
 fi
+wsl_check_gui_libs error
 
 PROJECT="$REPO_ROOT/src/Termrig.App/Termrig.App.csproj"
 VERSION="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$PROJECT" | head -n 1)"

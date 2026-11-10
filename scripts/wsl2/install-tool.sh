@@ -174,4 +174,5 @@ fi
 if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
     echo "Note: no display found. Opening Termrig in WSL 2 needs WSLg: from Windows run 'wsl --update' and 'wsl --shutdown', then reopen this distro." >&2
 fi
+wsl_check_gui_libs warning
 echo "Done. Start Termrig with 'trig' or with scripts/wsl2/run.sh."

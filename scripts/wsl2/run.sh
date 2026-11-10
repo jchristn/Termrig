@@ -39,6 +39,7 @@ wsl_require_cmd pgrep "Install procps inside WSL (for example: sudo apt install 
 if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
     die "No display found. Termrig is a desktop app and needs WSLg in WSL 2 (Windows 11, or Windows 10 with the Microsoft Store WSL). From Windows run 'wsl --update', then 'wsl --shutdown', and reopen this distro; or run scripts\\windows\\run.bat from Windows."
 fi
+wsl_check_gui_libs error
 
 PROJECT="$REPO_ROOT/src/Termrig.App/Termrig.App.csproj"
 VERSION="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$PROJECT" | head -n 1)"

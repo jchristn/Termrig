@@ -173,4 +173,5 @@ fi
 if [ -z "${DISPLAY:-}" ]; then
     echo "Note: DISPLAY is not set. WSL 1 has no WSLg, so opening Termrig needs an X server on Windows and DISPLAY set (for example: export DISPLAY=:0)." >&2
 fi
+wsl_check_gui_libs warning
 echo "Done. Start Termrig with 'trig' or with scripts/wsl/run.sh."
