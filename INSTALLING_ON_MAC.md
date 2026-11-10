@@ -93,10 +93,16 @@ you want to remove them.
 
 ### Source scripts
 
-`./go.sh` and `./scripts/macos/run.sh` rebuild the self-contained app, install it
-in `/Applications/Termrig.app` (falling back to `~/Applications`), remove any stale
-copy from the other location, register it with Finder, and launch the installed
-copy. `./scripts/macos/install-tool.sh` and `reinstall-tool.sh` delegate to the root
-tool scripts, which install both the `trig` command and the same Finder app.
-`./scripts/macos/remove-tool.sh` removes both.
-Signing must succeed before the existing installed app is replaced.
+`scripts/macos/` has the same scripts as every other `scripts/<os>/` folder.
+Each takes no arguments (`-h` shows help) and refuses to run while Termrig is
+running. The app goes in `/Applications/Termrig.app` (or `~/Applications` when
+`/Applications` isn't writable); a copy in the other location is removed, and
+signing must succeed before the installed app is replaced.
+
+| Script | What it does |
+| --- | --- |
+| `install-tool.sh` | Builds and installs the `trig` command and `Termrig.app`. Fails if either is already installed. |
+| `reinstall-tool.sh` | Rebuilds both, then replaces the installed copies. Works when nothing is installed. |
+| `remove-tool.sh` | Removes the `trig` command and `Termrig.app` from both locations. Succeeds when nothing is installed. |
+| `run.sh` | Rebuilds `Termrig.app` and opens it. `./go.sh` runs this on macOS. |
+| `kill-termrig.sh` | Stops every Termrig and `trig` process you are running. Tabs inside Termrig close with it. |

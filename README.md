@@ -98,11 +98,25 @@ chmod +x remove-tool.sh && ./remove-tool.sh
 
 ### Per-OS scripts
 
-`scripts/<os>/` holds `install-tool`, `reinstall-tool`, `remove-tool` and `run`
-entry points for `macos`, `linux`, `windows` (`.bat`), `wsl` (WSL 1) and `wsl2`
-(WSL 2). `run` rebuilds the installed app and opens it. Termrig is a desktop
-app, so under WSL 2 it needs WSLg for its window; WSL 1 has no GUI support, so
-use the Windows scripts there. See [Installing on Linux](INSTALLING_ON_LINUX.md#wsl).
+`scripts/<os>/` holds the same five scripts for `macos`, `linux`, `windows`
+(`.bat`), `wsl` (WSL 1) and `wsl2` (WSL 2). Each installs both the `trig`
+command and the desktop app for that platform, and refuses to run while
+Termrig is running:
+
+| Script | What it does |
+| --- | --- |
+| `install-tool` | Builds and installs `trig` and the app. Fails if already installed. |
+| `reinstall-tool` | Rebuilds and replaces both. Works when nothing is installed. |
+| `remove-tool` | Removes everything `install-tool` installed. Succeeds when nothing is installed. |
+| `run` | Rebuilds the installed app and opens it. |
+| `kill-termrig` | Stops every Termrig and `trig` process you are running. |
+
+Run them from another terminal, not from a Termrig tab: while Termrig is
+running they refuse, and `kill-termrig` would close the tab it runs in.
+
+Termrig is a desktop app, so under WSL 2 it needs WSLg for its window, and under
+WSL 1 it needs an X server with `DISPLAY` set. See
+[Installing on Linux](INSTALLING_ON_LINUX.md#wsl).
 
 ## Features
 

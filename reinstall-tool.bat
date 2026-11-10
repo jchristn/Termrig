@@ -12,7 +12,7 @@ echo Package source: %PACKAGE_DIR%
 echo.
 
 echo [1/6] Checking for running trig.exe processes...
-tasklist /FI "IMAGENAME eq trig.exe" 2>nul | find /I "trig.exe" >nul
+tasklist /FI "IMAGENAME eq trig.exe" /FI "USERNAME eq %USERDOMAIN%\%USERNAME%" 2>nul | find /I "trig.exe" >nul
 if %errorlevel% equ 0 (
     echo A running trig.exe process is locking the global tool install.
     echo Exit all Termrig ^(trig^) sessions and rerun reinstall-tool.bat.

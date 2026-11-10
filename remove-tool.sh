@@ -1,7 +1,13 @@
 #!/usr/bin/env sh
 set -eu
 
-if dotnet tool uninstall --global Termrig >/dev/null 2>&1; then
+# Check first, so a failed uninstall (for example while trig is running) is reported as a failure
+# instead of "not installed".
+if dotnet tool list --global | awk 'tolower($1) == "termrig" { found = 1 } END { exit !found }'; then
+    dotnet tool uninstall --global Termrig >/dev/null || {
+        echo "Failed to uninstall the Termrig global tool. Close any running Termrig/trig processes and rerun this script." >&2
+        exit 1
+    }
     echo "Removed Termrig global tool."
 else
     echo "Termrig global tool is not installed."

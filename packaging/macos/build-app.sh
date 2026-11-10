@@ -16,8 +16,8 @@ if [ "$(uname -s)" != "Darwin" ]; then
     exit 0
 fi
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
 PROJECT="$REPO_ROOT/src/Termrig.App/Termrig.App.csproj"
 ICON_SOURCE="$REPO_ROOT/packaging/icons/termrig-macos.png"
 SYSTEM_APPS="${TERMRIG_SYSTEM_APPLICATIONS:-/Applications}"
@@ -79,10 +79,10 @@ cp -R "$APP" "$INSTALL_DIR/Termrig.app"
 
 echo "Installed $INSTALL_DIR/Termrig.app"
 
-INSTALLED="$(CDPATH= cd -- "$INSTALL_DIR/Termrig.app" && pwd -P)"
+INSTALLED="$(CDPATH='' cd -- "$INSTALL_DIR/Termrig.app" && pwd -P)"
 for OTHER in "$SYSTEM_APPS/Termrig.app" "$USER_APPS/Termrig.app"; do
     [ -d "$OTHER" ] || continue
-    [ "$(CDPATH= cd -- "$OTHER" && pwd -P)" != "$INSTALLED" ] || continue
+    [ "$(CDPATH='' cd -- "$OTHER" && pwd -P)" != "$INSTALLED" ] || continue
     if rm -rf "$OTHER" 2>/dev/null; then
         "$LSREGISTER" -u "$OTHER" >/dev/null 2>&1 || true
         echo "Removed stale copy $OTHER"

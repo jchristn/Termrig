@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT="$SCRIPT_DIR/src/Termrig.App/Termrig.App.csproj"
 PACKAGE_DIR="$SCRIPT_DIR/artifacts/tools"
 NUGET_PACKAGE_DIR="$HOME/.nuget/packages/termrig/0.1.1"

@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT="$SCRIPT_DIR/src/Termrig.App/Termrig.App.csproj"
 PACKAGE_DIR="$SCRIPT_DIR/artifacts/tools"
 NUGET_PACKAGE_DIR="$HOME/.nuget/packages/termrig/0.1.1"
@@ -12,7 +12,14 @@ echo "Package source: $PACKAGE_DIR"
 echo
 
 echo "[1/6] Removing existing Termrig global tool if present..."
-dotnet tool uninstall --global Termrig 2>/dev/null || echo "Termrig is not installed; continuing..."
+if dotnet tool list --global | awk 'tolower($1) == "termrig" { found = 1 } END { exit !found }'; then
+    dotnet tool uninstall --global Termrig || {
+        echo "Failed to uninstall Termrig. Close any running Termrig/trig processes and rerun this script." >&2
+        exit 1
+    }
+else
+    echo "Termrig is not installed; continuing..."
+fi
 echo
 
 echo "[2/6] Preparing package directory..."

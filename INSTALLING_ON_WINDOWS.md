@@ -78,9 +78,16 @@ folder too if you want to remove them.
 - **Command-line launcher (optional):** `install-tool.bat` installs a `trig`
   command that starts Termrig from any terminal, and also installs the app as
   in step 3. `remove-tool.bat` removes both.
-- **Scripts folder:** `scripts\windows\install-tool.bat`, `reinstall-tool.bat`
-  and `remove-tool.bat` call the root scripts. `scripts\windows\run.bat`
-  rebuilds the app in `%LOCALAPPDATA%\Programs\Termrig` and starts it.
+- **Scripts folder:** `scripts\windows\` has the same scripts as every other
+  `scripts\<os>\` folder. Each takes no arguments (`-h` shows help) and
+  refuses to run while Termrig is running:
+  - `install-tool.bat` builds and installs the `trig` command and the app in
+    `%LOCALAPPDATA%\Programs\Termrig` with its Start menu shortcut. It fails
+    if either is already installed.
+  - `reinstall-tool.bat` rebuilds both, then replaces the installed copies.
+  - `remove-tool.bat` removes the `trig` command, the app and both shortcuts.
+  - `run.bat` rebuilds the app and starts it.
+  - `kill-termrig.bat` stops every Termrig and `trig` process you are running.
 - **WSL:** to install Termrig inside a WSL 2 distro instead, see
   [Installing on Linux](INSTALLING_ON_LINUX.md#wsl). WSL 1 can't show the
   Termrig window, so use the Windows install there.

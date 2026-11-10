@@ -87,23 +87,33 @@ you want to remove them.
 
 ### Source scripts
 
-`./scripts/linux/install-tool.sh`, `reinstall-tool.sh` and `remove-tool.sh`
-delegate to the root tool scripts. `./scripts/linux/run.sh` rebuilds the app in
-`~/.local/share/termrig/` and launches that copy.
+`scripts/linux/` has the same scripts as every other `scripts/<os>/` folder.
+Each takes no arguments (`-h` shows help) and refuses to run while Termrig is
+running:
+
+| Script | What it does |
+| --- | --- |
+| `install-tool.sh` | Builds and installs the `trig` command and the app (the three paths in step 3). Fails if either is already installed. |
+| `reinstall-tool.sh` | Rebuilds both, then replaces the installed copies. Works when nothing is installed. |
+| `remove-tool.sh` | Removes the `trig` command, the app, the launcher and the icon. Succeeds when nothing is installed. |
+| `run.sh` | Rebuilds the app in `~/.local/share/termrig/` and opens that copy. |
+| `kill-termrig.sh` | Stops every Termrig and `trig` process you are running. Tabs inside Termrig close with it. |
 
 ## WSL
 
 Use `scripts/wsl2/` on WSL 2 and `scripts/wsl/` on WSL 1, not `scripts/linux/`.
-They take the same names (`install-tool.sh`, `reinstall-tool.sh`,
-`remove-tool.sh`, `run.sh`) and fix the usual WSL problems first: Windows
-`dotnet` on the PATH, `~/.dotnet/tools` missing from the PATH, CRLF line
-endings, and missing executable bits on `/mnt/c` checkouts.
+They have the same scripts as `scripts/linux/` and install the same things
+inside the distro, but use the Linux `dotnet` inside WSL (never the Windows
+one), drop Windows entries from the PATH, add `~/.dotnet/tools`, and stop on
+CRLF checkouts. Each refuses to run under the other WSL version. They only
+install into the distro; use `scripts\windows\` for the Windows install.
 
 - **WSL 2:** the Termrig window needs WSLg (Windows 11, or Windows 10 with the
   Store version of WSL). If `run.sh` says no display was found, run
   `wsl --update` and `wsl --shutdown` from Windows, then reopen the distro.
-- **WSL 1:** there is no GUI support, so install and run fail with a clear
-  message. Run `scripts\windows\install-tool.bat` from Windows instead.
-  `scripts/wsl/remove-tool.sh` still works.
+- **WSL 1:** there is no WSLg. Installing works, but opening Termrig needs an
+  X server running on Windows (for example VcXsrv) and `DISPLAY` set; without
+  it `run.sh` stops with a clear message. Otherwise use
+  `scripts\windows\install-tool.bat` from Windows.
 - Clone into the Linux file system (for example `~/src`), not `/mnt/c`. Builds
   there are much faster.
