@@ -556,7 +556,9 @@ namespace Test.Publisher
             Fixture.Check(new FileInfo(Path.Combine(root, "usr", "bin", "dapp")).LinkTarget == "/opt/dapp/DesktopApp", "The alias must link to the desktop executable.");
             Fixture.Check(File.Exists(Path.Combine(root, "opt", "dapp", "Licenses", "Font-OFL.txt")), "Payload extras must ship in the install directory.");
             Fixture.Check(File.ReadAllText(Path.Combine(root, "usr", "share", "applications", "ai.latticetech.dapp.desktop")).Contains("Exec=env DESKTOP_FOREGROUND=1 /opt/dapp/DesktopApp\n", StringComparison.Ordinal), "The menu entry is missing or wrong.");
-            Fixture.Check(!Directory.Exists(Path.Combine(root, "etc", "xdg", "autostart")), "A desktop app does not autostart.");
+            Fixture.Check(!Directory.Exists(Path.Combine(root, "etc")), "A desktop app does not autostart, so nothing is staged under /etc.");
+            IReadOnlyList<string> fpm = LinuxPackageWriter.FpmArguments(context, target, "deb", root, "/out/dapp.deb");
+            Fixture.Check(fpm[^2] == "opt" && fpm[^1] == "usr", "fpm must package only the staged directories: " + string.Join(" ", fpm.TakeLast(3)));
         }
 }
 }

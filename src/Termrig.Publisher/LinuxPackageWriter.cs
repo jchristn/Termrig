@@ -2,6 +2,7 @@ namespace Termrig.Publisher
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Text;
 
@@ -103,7 +104,11 @@ namespace Termrig.Publisher
                 arguments.Add("-d");
                 arguments.Add(dependency);
             }
-            arguments.AddRange(new[] { "opt", "usr", "etc" });
+            // Name only the top-level directories that were staged: fpm fails on a missing path, and /etc exists only
+            // when a tray artifact installs an autostart entry.
+            IEnumerable<string> roots = new[] { "opt", "usr", "etc" };
+            if (Directory.Exists(stagingRoot)) roots = roots.Where(root => Directory.Exists(Path.Combine(stagingRoot, root)));
+            arguments.AddRange(roots);
             return arguments;
         }
 
