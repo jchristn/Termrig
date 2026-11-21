@@ -1,51 +1,16 @@
 # Termrig Packaging
 
-This directory contains the first-pass native desktop packaging assets for
-Termrig.
+Release installers (Windows `.exe`/`.zip`, macOS `.pkg`/`.dmg`/`.tar.gz`, Linux `.deb`/`.rpm`/AppImage/`.tar.gz`)
+are built by `src/Termrig.Publisher` from [`publisher.json`](../publisher.json), with `build-installers.sh` or
+`build-installers.bat` at the repository root and in CI by `.github/workflows/release.yml`. See
+[RELEASING.md](../RELEASING.md) and [INSTALL.md](../INSTALL.md).
 
-## Installing from source
+This directory holds the build-from-source install scripts and their assets:
 
-To build and install the desktop app on the current machine, use the per-platform
-script described in the install guides at the repository root:
-
-- macOS: `packaging/macos/build-app.sh` (INSTALLING_ON_MAC.md)
+- macOS: `packaging/macos/build-app.sh` and `Info.plist` (INSTALLING_ON_MAC.md)
 - Windows: `packaging/windows/build-app.ps1` (INSTALLING_ON_WINDOWS.md)
-- Linux: `packaging/linux/build-app.sh` (INSTALLING_ON_LINUX.md)
+- Linux: `packaging/linux/build-app.sh` and `com.jchristn.Termrig.desktop` (INSTALLING_ON_LINUX.md)
+- Icons: `packaging/icons/` (see its README)
 
-## Package Entry Point
-
-Run packaging tasks from the repository root:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File packaging/build-packages.ps1 -Target package-all
-```
-
-Supported targets:
-
-- `clean`
-- `restore`
-- `test`
-- `publish`
-- `package-windows`
-- `package-macos`
-- `package-ubuntu`
-- `package-all`
-
-The script writes published applications under `artifacts/publish/`, packages
-under `artifacts/packages/`, and logs under `artifacts/logs/`.
-
-## Host Tooling
-
-The script always requires the .NET SDK for the target framework in
-`src/Termrig.App/Termrig.App.csproj`.
-
-Platform packaging has extra host requirements:
-
-- Windows installer: Inno Setup `ISCC.exe` on `PATH`. A portable `.zip` is
-  produced even when Inno Setup is unavailable.
-- macOS app/DMG: macOS host with `hdiutil`. `iconutil` is needed to regenerate
-  `.icns` icons.
-- Ubuntu `.deb`: Linux host with `dpkg-deb`. `desktop-file-validate` is used
-  when available.
-
-Native desktop packages do not install the legacy `trig` developer command.
+Source installs use the application ID `com.jchristn.Termrig`; the release installers use `ai.latticetech.termrig`.
+Remove a source install with `remove-tool` before installing a release package, or you get two menu entries.

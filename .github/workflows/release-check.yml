@@ -1,0 +1,39 @@
+name: Release check
+
+# Packaging breaks from changes nobody thinks of as release changes. Build every installer, without publishing,
+# whenever the Publisher, its manifest, the artwork, the license, or the release workflows change.
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/Termrig.Publisher/**'
+      - 'src/Test.Publisher/**'
+      - 'publisher.json'
+      - 'assets/**'
+      - 'src/Termrig.App/Termrig.App.csproj'
+      - 'LICENSE.md'
+      - 'build-installers.*'
+      - '.github/release-install-notes.md'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-check.yml'
+  pull_request:
+    paths:
+      - 'src/Termrig.Publisher/**'
+      - 'src/Test.Publisher/**'
+      - 'publisher.json'
+      - 'assets/**'
+      - 'src/Termrig.App/Termrig.App.csproj'
+      - 'LICENSE.md'
+      - 'build-installers.*'
+      - '.github/release-install-notes.md'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package (dry run)
+    uses: ./.github/workflows/release.yml

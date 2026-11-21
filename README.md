@@ -14,9 +14,36 @@ Why did I build it and what problem am I trying to solve? I wanted a simple way 
 
 ## Install
 
-Termrig is not distributed as a signed download. Build and install it from
-source with the script for your platform in the [`packaging`](packaging/README.md)
-directory, then pin the installed app to your Dock or taskbar:
+Download the installer for your platform from the
+[latest release](https://github.com/jchristn/Termrig/releases/latest):
+
+| Platform | File |
+|----------|------|
+| Windows | `termrig-<version>-win-x64-setup.exe` (or `-win-arm64-setup.exe`) |
+| macOS | `termrig-<version>-osx-arm64.pkg` for Apple Silicon, `-osx-x64.pkg` for Intel (or the `.dmg`) |
+| Debian / Ubuntu | `termrig_<version>_amd64.deb` (or `_arm64.deb`) |
+| Fedora / RHEL | `termrig-<version>-1.x86_64.rpm` (or `.aarch64.rpm`) |
+| Any Linux | `termrig-<version>-x86_64.AppImage` (or `-aarch64.AppImage`) |
+
+The installers are self-contained (no .NET needed), add Termrig to the Start menu, Applications, or application menu
+so you can pin it, and put the `trig` command on `PATH`.
+
+> **Termrig is free, open-source software and is not code-signed** (signing certificates are an ongoing cost we
+> choose not to pass on). Your operating system may warn that the developer is unidentified. That warning doesn't
+> mean the download is damaged; to confirm a file is the one published, check it against `SHA256SUMS`.
+>
+> - **macOS** shows *"Termrig" Not Opened*: click **Done** (not Move to Trash), open **System Settings > Privacy &
+>   Security**, click **Open Anyway** next to *"Termrig" was blocked to protect your Mac*, and confirm with your
+>   password. Control-click > Open no longer works on macOS 15 and later.
+> - **Windows** shows *Windows protected your PC*: click **More info**, then **Run anyway**.
+> - **Linux** shows no prompt: `sudo apt install ./termrig_<version>_amd64.deb` (keep the `./`).
+
+[INSTALL.md](INSTALL.md) has every format, the full steps for each prompt, uninstalling, and checksum verification.
+
+### Install from source
+
+To build and install from source instead, use the script for your platform in the
+[`packaging`](packaging/README.md) directory, then pin the installed app to your Dock or taskbar:
 
 | Platform | Install script | Guide |
 |----------|----------------|-------|
@@ -25,7 +52,7 @@ directory, then pin the installed app to your Dock or taskbar:
 | Linux | `./packaging/linux/build-app.sh` | [Installing on Linux](INSTALLING_ON_LINUX.md) |
 
 The guides cover prerequisites, where the app is installed, pinning, updating
-and uninstalling.
+and uninstalling. Remove a source install with `remove-tool` before switching to a release installer.
 
 Your profiles and settings are stored in `~/.termrig/` (`%USERPROFILE%\.termrig\`
 on Windows) and are kept when you uninstall.
@@ -201,7 +228,10 @@ dotnet run --project src/Test.Automated/Test.Automated.csproj --framework net10.
 dotnet test src/Test.Xunit/Test.Xunit.csproj
 dotnet test src/Test.Nunit/Test.Nunit.csproj
 dotnet test src/Test.Terminal/Test.Terminal.csproj
+dotnet test src/Test.Publisher/Test.Publisher.csproj
 ```
+
+Release installers are built by `src/Termrig.Publisher` from `publisher.json`; see [RELEASING.md](RELEASING.md).
 
 Termrig targets .NET 10 and uses Avalonia 12.1 for the desktop UI, Porta.Pty 2.x for
 pseudo-terminal process hosting, and Wcwidth 4.x for Unicode cell-width calculation.

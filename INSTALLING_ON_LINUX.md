@@ -1,7 +1,8 @@
 # Installing Termrig on Linux
 
-Termrig is not distributed as a signed download. You build it from source,
-which takes a few minutes. The result is an app in your application menu that
+Most people should download an installer from the
+[latest release](https://github.com/jchristn/Termrig/releases/latest) instead; see [INSTALL.md](INSTALL.md).
+This guide builds Termrig from source, which takes a few minutes. The result is an app in your application menu that
 you can pin to the dock. These steps were written for Ubuntu and should work on
 most desktop Linux distributions.
 

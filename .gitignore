@@ -11,3 +11,4 @@ TestResults/
 *.log
 artifacts/
 publish/
+installers/

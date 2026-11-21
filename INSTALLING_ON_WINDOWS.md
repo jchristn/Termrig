@@ -1,6 +1,8 @@
 # Installing Termrig on Windows
 
-Termrig is not distributed as a signed download. You build it from source on
+Most people should download an installer from the
+[latest release](https://github.com/jchristn/Termrig/releases/latest) instead; see [INSTALL.md](INSTALL.md).
+This guide builds Termrig from source on
 your PC, which takes a few minutes. The result is a normal Windows app with a
 Start menu shortcut that you can pin to the taskbar.
 

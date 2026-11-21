@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
+
+## [0.1.1] - 2026-11-20
+
+- Added native installers on GitHub Releases for Windows, macOS, and Linux on x64 and arm64: Inno Setup `.exe` and a portable `.zip` for Windows, `.pkg`, `.dmg`, and `.tar.gz` for macOS, and `.deb`, `.rpm`, AppImage, and `.tar.gz` for Linux, with one `SHA256SUMS`. The installers add Termrig to the Start menu, Applications, or application menu and put the `trig` command on `PATH`. They are built by `src/Termrig.Publisher` from `publisher.json`, locally with `build-installers.sh` or `build-installers.bat` and in CI by `.github/workflows/release.yml` on a `v<version>` tag. See `INSTALL.md`.
+- The installers identify Termrig as `ai.latticetech.termrig` (macOS bundle and package, Linux menu entry and icons) and name Lattice AI, LLC as the publisher. The build-from-source scripts keep `com.jchristn.Termrig`, so remove a source install with `remove-tool` before installing a package.
 
 - Linux and WSL: the install, reinstall and run scripts (repository root, `scripts/linux/`, `scripts/wsl/`, `scripts/wsl2/`) now check for the X11 and fontconfig libraries Termrig's window loads (`libICE.so.6`, `libSM.so.6`, `libX11.so.6`, `libfontconfig.so.1` and others) before building, and install any that are missing with `sudo apt-get` or `sudo dnf` (`TERMRIG_NO_DEPS=1` only reports them). If they can't be installed, install and reinstall still finish and print the command to run, and `run` stops. When one is missing at startup, Termrig prints the same command and exits instead of crashing with `DllNotFoundException`. Documented in "Desktop libraries" in `INSTALLING_ON_LINUX.md`.
 
@@ -18,8 +23,6 @@
 - Preserve the existing Finder app if ad-hoc signing fails.
 - Added the application-wide “Update unfocused windows” preference in the Profiles window, enabled by default. Visible background terminals render at a reduced rate; minimized windows and hidden tabs remain paused.
 
-## 0.1.1
-
 - Updated NuGet dependencies:
   - Avalonia, Avalonia.Desktop, Avalonia.Themes.Fluent, Avalonia.Fonts.Inter, Avalonia.Controls.ColorPicker 12.0.2 -> 12.1.3
   - CommunityToolkit.Mvvm 8.2.1 -> 8.4.2
@@ -32,7 +35,7 @@
   - coverlet.collector 6.0.4 -> 10.1.0
 - Added dependency compatibility tests covering Unicode cell-width calculation and PTY process spawning.
 
-## 0.1.0
+## [0.1.0]
 
 - Initial Avalonia MVP.
 - Added profile persistence under `~/.termrig`.
